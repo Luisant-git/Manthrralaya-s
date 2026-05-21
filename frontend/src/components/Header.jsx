@@ -16,7 +16,7 @@ export default function Header({
       <div className="flex items-center space-x-3">
         <div>
           <span className="text-2xl font-extrabold tracking-tight text-slate-800 font-outfit">
-            Detox<span className="text-emerald-600">360</span>
+            Manthrralaya<span className="text-emerald-600">{"'s"}</span>
           </span>
         </div>
       </div>

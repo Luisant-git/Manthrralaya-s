@@ -282,7 +282,7 @@ export const initialWhatsappLogs = [
     patient_name: 'Sarah Jenkins',
     phone: '+91 98765 00123',
     type: 'Booking Confirmation',
-    message_text: 'Dear Sarah, your appointment with Dr. Evelyn Carter is confirmed for Today at 11:30 AM. Reply HELP for queries. - Detox360 Wellness',
+    message_text: 'Dear Sarah, your appointment with Dr. Evelyn Carter is confirmed for Today at 11:30 AM. Reply HELP for queries. - Manthrralaya\'s Wellness',
     sent_at: '2026-05-20 09:00 AM',
     status: 'Read',
     template_name: 'appointment_confirm'
@@ -293,7 +293,7 @@ export const initialWhatsappLogs = [
     patient_name: 'Sarah Jenkins',
     phone: '+91 98765 00123',
     type: 'PDF Delivery',
-    message_text: 'Dear Sarah, here is your customized Diet Chart and Prescription from Dr. Evelyn Carter: https://detox360.co/shared/docs/pdf_601. Please download and follow the instructions. - Detox360 Wellness',
+    message_text: 'Dear Sarah, here is your customized Diet Chart and Prescription from Dr. Evelyn Carter: https://manthrralayas.co/shared/docs/pdf_601. Please download and follow the instructions. - Manthrralaya\'s Wellness',
     sent_at: '2026-05-20 01:15 PM',
     status: 'Delivered',
     template_name: 'document_delivery_pdf'
@@ -304,7 +304,7 @@ export const initialWhatsappLogs = [
     patient_name: 'John Doe',
     phone: '+91 98765 43210',
     type: 'Session Reminder',
-    message_text: 'Hello John, your Deep Tissue Cell Detox session is scheduled for May 22 at 09:00 AM. Please begin your liquid fasting protocol tomorrow. - Detox360 Wellness',
+    message_text: 'Hello John, your Deep Tissue Cell Detox session is scheduled for May 22 at 09:00 AM. Please begin your liquid fasting protocol tomorrow. - Manthrralaya\'s Wellness',
     sent_at: '2026-05-20 02:00 PM',
     status: 'Sent',
     template_name: 'detox_prep_reminder'

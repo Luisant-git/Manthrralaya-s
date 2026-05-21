@@ -15,15 +15,17 @@ import {
 export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
   const navigationItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist'] },
-    { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'receptionist', 'doctor'] },
-    { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin', 'receptionist'] },
-    { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin', 'receptionist'] },
+    { id: 'receptionist-desk', name: 'Appointment Booking', icon: CalendarDays, roles: ['receptionist', 'admin'] },
+    { id: 'doctor-master', name: 'Doctor Master', icon: Stethoscope, roles: ['receptionist', 'admin'] },
+    { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist'] },
+    { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin'] },
+    { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin'] },
     { id: 'consultations', name: 'Consultations', icon: Stethoscope, roles: ['admin', 'doctor'] },
     { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor'] },
     { id: 'stay', name: 'One-Day Stay', icon: BedDouble, roles: ['admin', 'doctor'] },
     { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin'] },
     { id: 'reports', name: 'Reports & Analytics', icon: FileBarChart, roles: ['admin'] },
-    { id: 'reviews', name: 'Patient Feedback', icon: Star, roles: ['admin', 'receptionist'] }
+    { id: 'reviews', name: 'Patient Feedback', icon: Star, roles: ['admin'] }
   ];
 
   return (
@@ -64,7 +66,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
       </div>
 
       <div className="p-4 border-t border-slate-200 text-center text-xs text-slate-500 font-medium bg-slate-50">
-        <div>Detox360 v1.0</div>
+        <div>{"Manthrralaya's"} v1.0</div>
         <div className="mt-1">Logged in as: <span className="uppercase text-emerald-600 font-bold">{activeRole}</span></div>
       </div>
     </aside>

@@ -16,22 +16,22 @@ export default function WhatsAppHubView({
     {
       id: 'appointment_confirm',
       name: 'Booking Confirmation',
-      text: `Dear {{name}}, your appointment with Dr. Evelyn Carter is confirmed for Today at 11:30 AM. Reply HELP for queries. - Detox360 Wellness`
+      text: `Dear {{name}}, your appointment with Dr. Evelyn Carter is confirmed for Today at 11:30 AM. Reply HELP for queries. - Manthrralaya's Wellness`
     },
     {
       id: 'detox_prep_reminder',
       name: 'Session Reminder',
-      text: `Hello {{name}}, your Deep Tissue Cell Detox session is scheduled for Tomorrow. Please begin your liquid fasting protocol. - Detox360 Wellness`
+      text: `Hello {{name}}, your Deep Tissue Cell Detox session is scheduled for Tomorrow. Please begin your liquid fasting protocol. - Manthrralaya's Wellness`
     },
     {
       id: 'document_delivery_pdf',
       name: 'PDF Document Delivery',
-      text: `Dear {{name}}, here is your customized Diet Chart and Prescription from Dr. Evelyn Carter. Please download and follow the instructions. - Detox360 Wellness`
+      text: `Dear {{name}}, here is your customized Diet Chart and Prescription from Dr. Evelyn Carter. Please download and follow the instructions. - Manthrralaya's Wellness`
     },
     {
       id: 'feedback_review',
       name: 'Review Rating Request',
-      text: `Hello {{name}}, we hope you had a rejuvenating stay. How would you rate your experience? Please leave a review. - Detox360 Wellness`
+      text: `Hello {{name}}, we hope you had a rejuvenating stay. How would you rate your experience? Please leave a review. - Manthrralaya's Wellness`
     }
   ];
 

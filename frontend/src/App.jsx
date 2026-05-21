@@ -13,6 +13,8 @@ import ReviewsView from './components/ReviewsView';
 import PatientTimeline from './components/PatientTimeline';
 import DocumentPreview from './components/DocumentPreview';
 import LoginView from './components/LoginView';
+import ReceptionistView from './components/ReceptionistView';
+import DoctorMasterView from './components/DoctorMasterView';
 
 import {
   initialPatients,
@@ -40,6 +42,7 @@ export default function App() {
     setIsAuthenticated(true);
     // Route to appropriate starting tab
     if (role === 'doctor') setActiveTab('consultations');
+    else if (role === 'receptionist') setActiveTab('dashboard');
     else setActiveTab('dashboard');
   };
 
@@ -92,7 +95,7 @@ export default function App() {
 
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
-      type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment is confirmed for Today at 03:30 PM. Reply HELP for support. - Detox360 Wellness`,
+      type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment is confirmed for Today at 03:30 PM. Reply HELP for support. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'appointment_confirm'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -104,7 +107,7 @@ export default function App() {
     const docName = doctorObj ? doctorObj.name : 'our specialist';
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
-      type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${newAppt.date} at ${newAppt.time}. - Detox360 Wellness`,
+      type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${newAppt.date} at ${newAppt.time}. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'appointment_confirm'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -116,7 +119,7 @@ export default function App() {
     const pt = patients.find(p => p.id === appt.patient_id) || {};
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: pt.id, patient_name: pt.name, phone: pt.phone,
-      type: 'Clinic Alert', message_text: `Hello ${pt.name}, you have checked in at the clinic lobby. Please take a seat, Dr. Evelyn Carter will see you shortly. - Detox360 Wellness`,
+      type: 'Clinic Alert', message_text: `Hello ${pt.name}, you have checked in at the clinic lobby. Please take a seat, Dr. Evelyn Carter will see you shortly. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Read', template_name: 'checkin_alert'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -137,7 +140,7 @@ export default function App() {
       setDetoxSessions(prev => [...prev, newDtx]);
       const waLog = {
         id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-        type: 'Session Reminder', message_text: `Hello ${ptObj.name}, your recommended ${newCons.detox_type} is scheduled for Tomorrow. Please begin fasting. - Detox360 Wellness`,
+        type: 'Session Reminder', message_text: `Hello ${ptObj.name}, your recommended ${newCons.detox_type} is scheduled for Tomorrow. Please begin fasting. - Manthrralaya's Wellness`,
         sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Sent', template_name: 'detox_prep_reminder'
       };
       setWhatsappLogs(prev => [...prev, waLog]);
@@ -149,7 +152,7 @@ export default function App() {
     const ptObj = patients.find(p => p.id === newPresc.patient_id) || {};
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-      type: 'PDF Delivery', message_text: `Dear ${ptObj.name}, here is your customized prescription PDF: https://detox360.co/shared/docs/presc_${newPresc.id}. Please download. - Detox360 Wellness`,
+      type: 'PDF Delivery', message_text: `Dear ${ptObj.name}, here is your customized prescription PDF: https://manthrralayas.co/shared/docs/presc_${newPresc.id}. Please download. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'document_delivery_pdf'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -161,7 +164,7 @@ export default function App() {
     setDetoxSessions(prev => [...prev, newSession]);
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
-      type: 'Session Reminder', message_text: `Hello ${patientObj.name}, your ${newSession.type} session is scheduled for ${newSession.scheduled_date}. Technician: ${newSession.technician}. - Detox360 Wellness`,
+      type: 'Session Reminder', message_text: `Hello ${patientObj.name}, your ${newSession.type} session is scheduled for ${newSession.scheduled_date}. Technician: ${newSession.technician}. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Sent', template_name: 'detox_prep_reminder'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -198,7 +201,7 @@ export default function App() {
 
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-      type: 'Review Request', message_text: `Hello ${ptObj.name}, we hope you had a rejuvenating stay with us. Please share your rating feedback: https://detox360.co/leave-review - Detox360 Wellness`,
+      type: 'Review Request', message_text: `Hello ${ptObj.name}, we hope you had a rejuvenating stay with us. Please share your rating feedback: https://manthrralayas.co/leave-review - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'feedback_review'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -246,6 +249,20 @@ export default function App() {
         return <ReviewsView reviews={reviews} />;
       case 'documents':
         return <DocumentPreview prescriptions={prescriptions} dietCharts={dietCharts} patients={patients} onClose={() => setActiveTab('dashboard')} />;
+      case 'receptionist-desk':
+        return (
+          <ReceptionistView
+            appointments={appointments}
+            setAppointments={setAppointments}
+            patients={patients}
+            setPatients={setPatients}
+            doctors={doctors}
+            whatsappLogs={whatsappLogs}
+            setWhatsappLogs={setWhatsappLogs}
+          />
+        );
+      case 'doctor-master':
+        return <DoctorMasterView doctors={doctors} setDoctors={setDoctors} />;
       default:
         return <div className="text-center py-12 text-slate-500">Access Denied or Feature in Development.</div>;
     }

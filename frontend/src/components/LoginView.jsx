@@ -27,7 +27,7 @@ export default function LoginView({ onLogin }) {
           <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-emerald-500 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
           
           <div className="relative z-10">
-            <h1 className="text-4xl font-extrabold tracking-tight font-outfit mb-3 mt-8">Detox360</h1>
+            <h1 className="text-4xl font-extrabold tracking-tight font-outfit mb-3 mt-8">{"Manthrralaya's"}</h1>
             <p className="text-emerald-50 text-lg font-medium leading-relaxed max-w-sm">
               Advanced Clinical Management, Patient CRM, & Detox Lifecycle Engine.
             </p>
@@ -35,7 +35,7 @@ export default function LoginView({ onLogin }) {
 
           <div className="relative z-10 text-emerald-100 text-sm font-medium">
             <p>Secure Staff Portal. Authorized personnel only.</p>
-            <p className="mt-1 opacity-70">© 2026 Detox360 Wellness</p>
+            <p className="mt-1 opacity-70">© 2026 {"Manthrralaya's"} Wellness</p>
           </div>
         </div>
 
