@@ -5,8 +5,9 @@ export default function ConsultationsView({ appointments, patients, doctors, onA
   const [selectedApptId, setSelectedApptId] = useState('');
   
   // Forms states
-  const [vitals, setVitals] = useState({ bp: '120/80', weight: '70', pulse: '72' });
-  const [diagnosis, setDiagnosis] = useState('');
+  const [consultationNotes, setConsultationNotes] = useState('');
+  const [medicalHistory, setMedicalHistory] = useState('');
+  const [detoxProcedure, setDetoxProcedure] = useState('');
   
   // Prescription sub-form
   const [meds, setMeds] = useState([{ name: '', dosage: '', frequency: '', duration: '' }]);
@@ -43,8 +44,9 @@ export default function ConsultationsView({ appointments, patients, doctors, onA
       patient_id: activePt.id,
       doctor_name: doctorName,
       date: new Date().toISOString().split('T')[0],
-      vitals,
-      diagnosis,
+      consultation_notes: consultationNotes,
+      medical_history: medicalHistory,
+      detox_procedure: detoxProcedure,
       detox_recommended: detoxRecommended,
       detox_type: detoxRecommended ? detoxType : null
     };
@@ -57,8 +59,7 @@ export default function ConsultationsView({ appointments, patients, doctors, onA
         doctor_name: doctorName,
         date: new Date().toISOString().split('T')[0],
         medicines: meds.filter(m => m.name !== ''),
-        home_care: homeCare,
-        weight: vitals.weight + ' kg'
+        home_care: homeCare
       };
       onAddPrescription(newPresc);
     }
@@ -79,8 +80,9 @@ export default function ConsultationsView({ appointments, patients, doctors, onA
     setSelectedApptId('');
     
     // Reset forms
-    setVitals({ bp: '120/80', weight: '70', pulse: '72' });
-    setDiagnosis('');
+    setConsultationNotes('');
+    setMedicalHistory('');
+    setDetoxProcedure('');
     setMeds([{ name: '', dosage: '', frequency: '', duration: '' }]);
     setHomeCare('');
     setDiet({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
@@ -149,28 +151,22 @@ export default function ConsultationsView({ appointments, patients, doctors, onA
                 </div>
               </div>
 
-              {/* 1. Vitals & Diagnosis */}
+              {/* 1. Clinical Consultation Notes */}
               <div className="p-5 space-y-4">
                 <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-600" /> 1. Vitals & Diagnosis
+                  <Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes
                 </h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Blood Pressure</label>
-                    <input type="text" value={vitals.bp} onChange={e => setVitals({...vitals, bp: e.target.value})} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Weight (kg)</label>
-                    <input type="text" value={vitals.weight} onChange={e => setVitals({...vitals, weight: e.target.value})} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Pulse (bpm)</label>
-                    <input type="text" value={vitals.pulse} onChange={e => setVitals({...vitals, pulse: e.target.value})} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes</label>
+                  <textarea rows="3" value={consultationNotes} onChange={e => setConsultationNotes(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none" placeholder="Document chief complaint, exam findings, and clinical plan..."></textarea>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Clinical Diagnosis</label>
-                  <textarea rows="2" value={diagnosis} onChange={e => setDiagnosis(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"></textarea>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label>
+                  <textarea rows="3" value={medicalHistory} onChange={e => setMedicalHistory(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none" placeholder="Summarize past history, medications, allergies, and chronic conditions..."></textarea>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Logging</label>
+                  <textarea rows="3" value={detoxProcedure} onChange={e => setDetoxProcedure(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-3 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none" placeholder="Record selected detox procedure details, steps, and patient response..."></textarea>
                 </div>
               </div>
 

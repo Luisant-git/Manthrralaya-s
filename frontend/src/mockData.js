@@ -105,6 +105,7 @@ export const initialAppointments = [
     time: '02:00 PM',
     source: 'Phone Call',
     status: 'Checked-in',
+    appointmentType: 'Initial consultation',
     notes: 'First time consultation for liver detox.'
   },
   {
@@ -114,6 +115,7 @@ export const initialAppointments = [
     time: '11:30 AM',
     source: 'WhatsApp Link',
     status: 'Completed',
+    appointmentType: 'Review',
     notes: 'Follow-up on previous cleanse recommendations.'
   },
   {
@@ -123,6 +125,7 @@ export const initialAppointments = [
     time: '04:30 PM',
     source: 'Phone Call',
     status: 'Scheduled',
+    appointmentType: 'Review',
     notes: 'Review after completing 3-day colon cleanse.'
   },
   {
@@ -132,6 +135,7 @@ export const initialAppointments = [
     time: '10:00 AM',
     source: 'Meta App',
     status: 'Scheduled',
+    appointmentType: 'Detox',
     notes: 'Severe bloating issues, seeking Ayurvedic detox.'
   }
 ];

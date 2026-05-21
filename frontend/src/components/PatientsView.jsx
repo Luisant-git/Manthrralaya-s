@@ -1,10 +1,32 @@
 import React, { useState } from 'react';
 import { Search, Plus, UserPlus, Activity, FileText } from 'lucide-react';
 
-export default function PatientsView({ patients, onAddPatient, onSelectPatient }) {
+export default function PatientsView({ patients, appointments = [], onAddPatient, onSelectPatient }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTab, setSelectedTab] = useState('all');
   
+  const appointmentTabs = [
+    { id: 'all', label: 'All' },
+    { id: 'consultation', label: 'Consultation', type: 'Initial consultation' },
+    { id: 'detox', label: 'Detox', type: 'Detox' },
+    { id: 'followup', label: 'Follow-up', type: 'Review' }
+  ];
+
+  const getLatestAppointmentType = (patientId) => {
+    const sorted = appointments
+      .filter(a => a.patient_id === patientId && a.appointmentType)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    return sorted[0]?.appointmentType || 'No appointment type';
+  };
+
+  const matchesTypeFilter = (patient) => {
+    if (selectedTab === 'all') return true;
+    const tab = appointmentTabs.find(t => t.id === selectedTab);
+    if (!tab) return true;
+    return appointments.some(appt => appt.patient_id === patient.id && appt.appointmentType === tab.type);
+  };
+
   // New Patient Form State
   const [formData, setFormData] = useState({
     name: '',
@@ -66,9 +88,10 @@ export default function PatientsView({ patients, onAddPatient, onSelectPatient }
   };
 
   const filteredPatients = patients.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.phone.includes(searchTerm) ||
-    p.id.toLowerCase().includes(searchTerm.toLowerCase())
+    p.id.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    matchesTypeFilter(p)
   );
 
   return (
@@ -230,6 +253,21 @@ export default function PatientsView({ patients, onAddPatient, onSelectPatient }
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full">
+          <div className="px-4 pt-4 pb-2 bg-slate-50 border-b border-slate-200">
+            <div className="flex flex-wrap gap-2">
+              {appointmentTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedTab(tab.id)}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition ${selectedTab === tab.id ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Search Bar */}
           <div className="p-4 border-b border-slate-200 bg-slate-50">
             <div className="relative max-w-md">
@@ -253,6 +291,7 @@ export default function PatientsView({ patients, onAddPatient, onSelectPatient }
                   <th className="py-3 px-4">Name</th>
                   <th className="py-3 px-4">Phone No</th>
                   <th className="py-3 px-4">WhatsApp</th>
+                  <th className="py-3 px-4">Type</th>
                   <th className="py-3 px-4">Age</th>
                   <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4">Address</th>
@@ -266,6 +305,9 @@ export default function PatientsView({ patients, onAddPatient, onSelectPatient }
                     <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.whatsapp || pt.phone}</td>
+                    <td className="py-3 px-4 text-slate-600 font-medium">
+                      {getLatestAppointmentType(pt.id)}
+                    </td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium max-w-[150px] truncate" title={pt.address}>{pt.address || 'n/a'}</td>
@@ -281,7 +323,7 @@ export default function PatientsView({ patients, onAddPatient, onSelectPatient }
                 ))}
                 {filteredPatients.length === 0 && (
                   <tr>
-                    <td colSpan="8" className="py-12 text-center text-slate-500">
+                    <td colSpan="9" className="py-12 text-center text-slate-500">
                       No patients found matching your search.
                     </td>
                   </tr>

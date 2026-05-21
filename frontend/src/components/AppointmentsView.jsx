@@ -7,6 +7,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
   const [formData, setFormData] = useState({
     patient_id: '',
     doctor_id: '',
+    appointmentType: 'Initial consultation',
     date: new Date().toISOString().split('T')[0],
     time: '10:00 AM',
     notes: ''
@@ -23,6 +24,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
       id: `A-${200 + appointments.length + 1}`,
       patient_id: formData.patient_id,
       doctor_id: formData.doctor_id,
+      appointmentType: formData.appointmentType,
       doctor_name: doctorObj.name,
       date: formData.date,
       time: formData.time,
@@ -33,7 +35,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
 
     onAddAppointment(newAppt, patientObj, doctorObj);
     setIsBooking(false);
-    setFormData({ patient_id: '', doctor_id: '', date: new Date().toISOString().split('T')[0], time: '10:00 AM', notes: '' });
+    setFormData({ patient_id: '', doctor_id: '', appointmentType: 'Initial consultation', date: new Date().toISOString().split('T')[0], time: '10:00 AM', notes: '' });
   };
 
   const getStatusColor = (status) => {
@@ -106,7 +108,20 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Type</label>
+                <select
+                  required
+                  value={formData.appointmentType}
+                  onChange={e => setFormData({ ...formData, appointmentType: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value="Initial consultation">Initial Consultation</option>
+                  <option value="Detox">Detox</option>
+                  <option value="Review">Follow-up</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date</label>
                 <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
@@ -145,6 +160,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 <tr className="bg-white border-b border-slate-200 text-slate-500 font-semibold uppercase text-xs tracking-wider">
                   <th className="py-3 px-4">Time & Date</th>
                   <th className="py-3 px-4">Patient Profile</th>
+                  <th className="py-3 px-4">Appointment Type</th>
                   <th className="py-3 px-4">Assigned Doctor</th>
                   <th className="py-3 px-4">Intake Notes</th>
                   <th className="py-3 px-4">Status</th>
@@ -163,6 +179,11 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                       <td className="py-3 px-4">
                         <span className="font-bold text-slate-800 block">{pt.name}</span>
                         <span className="text-slate-500">{pt.phone}</span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${appt.appointmentType === 'Detox' ? 'border-teal-200 bg-teal-50 text-teal-700' : appt.appointmentType === 'Review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-purple-200 bg-purple-50 text-purple-700'}`}>
+                          {appt.appointmentType || 'General'}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-semibold text-slate-700 block">{appt.doctor_name || 'Dr. Evelyn Carter'}</span>

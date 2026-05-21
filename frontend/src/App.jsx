@@ -231,7 +231,7 @@ export default function App() {
       case 'dashboard':
         return <DashboardView patients={patients} appointments={appointments} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} />;
       case 'patients':
-        return <PatientsView patients={patients} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
+        return <PatientsView appointments={appointments} patients={patients} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':

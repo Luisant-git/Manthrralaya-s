@@ -12,7 +12,9 @@ import {
   FileText,
   AlertCircle,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  Search,
+  Filter
 } from 'lucide-react';
 
 export default function ReceptionistView({
@@ -34,17 +36,23 @@ export default function ReceptionistView({
     whatsapp: '',
     doctor_id: '',
     date: new Date().toISOString().split('T')[0],
-    time: '10:00 AM',
+    appointmentType: 'Initial consultation',
+    session: 'FN',
     notes: ''
   });
 
-  const [bookingModalPatient, setBookingModalPatient] = useState(null); // Patient for the Waiting list quick-book modal
+  const [bookingModalPatient, setBookingModalPatient] = useState(null);
   const [modalBookingData, setModalBookingData] = useState({
     doctor_id: '',
     date: new Date().toISOString().split('T')[0],
-    time: '10:00 AM',
+    appointmentType: 'Initial consultation',
+    session: 'FN',
     notes: ''
   });
+
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('all');
 
   const handlePhoneChange = (e) => {
     const val = e.target.value;
@@ -64,7 +72,6 @@ export default function ReceptionistView({
     }));
   };
 
-  // Helper to register/find patient
   const getOrCreatePatient = (data) => {
     let patient = patients.find(p => p.phone === data.phone);
     if (!patient) {
@@ -87,7 +94,6 @@ export default function ReceptionistView({
     return patient;
   };
 
-  // Form submission handler
   const handleAction = (type) => {
     if (!formData.name.trim()) return alert('Patient Name is required.');
     if (!formData.age.trim()) return alert('Patient Age is required.');
@@ -98,7 +104,6 @@ export default function ReceptionistView({
 
     if (type === 'book') {
       if (!formData.doctor_id) return alert('Please assign a doctor to book an appointment.');
-      if (!formData.time) return alert('Please specify an appointment time.');
 
       const doctorObj = doctors.find(d => d.id === formData.doctor_id);
       const newAppt = {
@@ -107,7 +112,8 @@ export default function ReceptionistView({
         doctor_id: formData.doctor_id,
         doctor_name: doctorObj ? doctorObj.name : 'Chief Clinical Consultant',
         date: formData.date,
-        time: formData.time,
+        appointmentType: formData.appointmentType,
+        session: formData.session,
         source: 'Phone Lead / On-Call',
         status: 'Scheduled',
         notes: formData.notes
@@ -115,7 +121,6 @@ export default function ReceptionistView({
 
       setAppointments(prev => [...prev, newAppt]);
 
-      // Trigger simulated WhatsApp message
       const docName = doctorObj ? doctorObj.name : 'our specialist';
       const waLog = {
         id: `WA-${900 + (whatsappLogs ? whatsappLogs.length : 0) + 1}`,
@@ -123,7 +128,7 @@ export default function ReceptionistView({
         patient_name: patientObj.name,
         phone: patientObj.phone,
         type: 'Booking Confirmation',
-        message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${newAppt.date} at ${newAppt.time}. - Manthrralaya's Wellness`,
+        message_text: `Dear ${patientObj.name}, your ${formData.appointmentType} appointment (${formData.session} session) with ${docName} is confirmed for ${newAppt.date}. - Manthrralaya's Wellness`,
         sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
         status: 'Delivered',
         template_name: 'appointment_confirm'
@@ -132,14 +137,14 @@ export default function ReceptionistView({
 
       alert(`Appointment confirmed for ${patientObj.name}!\nWhatsApp notification dispatched.`);
     } else if (type === 'waiting') {
-      // Save as Waiting List
       const newWaitingAppt = {
         id: `A-${200 + appointments.length + 1}`,
         patient_id: patientObj.id,
         doctor_id: formData.doctor_id || '',
         doctor_name: formData.doctor_id ? (doctors.find(d => d.id === formData.doctor_id)?.name || '') : '',
         date: formData.date,
-        time: 'Awaiting Time',
+        appointmentType: formData.appointmentType,
+        session: formData.session,
         source: 'Phone Inquiry / Tentative',
         status: 'Waiting',
         notes: formData.notes || 'Patient asked for appointment details / callback'
@@ -148,7 +153,6 @@ export default function ReceptionistView({
       alert(`Patient ${patientObj.name} added to the Waiting Registry.`);
     }
 
-    // Reset Form
     setFormData({
       name: '',
       age: '',
@@ -159,21 +163,20 @@ export default function ReceptionistView({
       whatsapp: '',
       doctor_id: '',
       date: new Date().toISOString().split('T')[0],
-      time: '10:00 AM',
+      appointmentType: 'Initial consultation',
+      session: 'FN',
       notes: ''
     });
   };
 
-  // waiting list scheduler confirm booking
   const handleModalBookConfirm = (e) => {
     e.preventDefault();
     if (!modalBookingData.doctor_id) return alert('Please assign a doctor.');
-    if (!modalBookingData.time) return alert('Please specify a time.');
+    if (!modalBookingData.appointmentType) return alert('Please select appointment type.');
 
     const patientObj = bookingModalPatient;
     const doctorObj = doctors.find(d => d.id === modalBookingData.doctor_id);
 
-    // Update appointment from Waiting -> Scheduled
     setAppointments(prev => prev.map(appt => {
       if (appt.patient_id === patientObj.id && appt.status === 'Waiting') {
         return {
@@ -181,7 +184,8 @@ export default function ReceptionistView({
           doctor_id: modalBookingData.doctor_id,
           doctor_name: doctorObj ? doctorObj.name : 'Chief Clinical Consultant',
           date: modalBookingData.date,
-          time: modalBookingData.time,
+          appointmentType: modalBookingData.appointmentType,
+          session: modalBookingData.session,
           status: 'Scheduled',
           notes: modalBookingData.notes || appt.notes
         };
@@ -189,7 +193,6 @@ export default function ReceptionistView({
       return appt;
     }));
 
-    // Trigger simulated WhatsApp message
     const docName = doctorObj ? doctorObj.name : 'our specialist';
     const waLog = {
       id: `WA-${900 + (whatsappLogs ? whatsappLogs.length : 0) + 1}`,
@@ -197,7 +200,7 @@ export default function ReceptionistView({
       patient_name: patientObj.name,
       phone: patientObj.phone,
       type: 'Booking Confirmation',
-      message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${modalBookingData.date} at ${modalBookingData.time}. - Manthrralaya's Wellness`,
+      message_text: `Dear ${patientObj.name}, your ${modalBookingData.appointmentType} appointment (${modalBookingData.session} session) with ${docName} is confirmed for ${modalBookingData.date}. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
       status: 'Delivered',
       template_name: 'appointment_confirm'
@@ -209,7 +212,8 @@ export default function ReceptionistView({
     setModalBookingData({
       doctor_id: '',
       date: new Date().toISOString().split('T')[0],
-      time: '10:00 AM',
+      appointmentType: 'Initial consultation',
+      session: 'FN',
       notes: ''
     });
   };
@@ -246,6 +250,19 @@ export default function ReceptionistView({
   const activeBookings = appointments.filter(a => a.status !== 'Waiting');
   const waitingList = appointments.filter(a => a.status === 'Waiting');
 
+  // Filter and search active bookings
+  const filteredActiveBookings = activeBookings.filter(appt => {
+    const pt = patients.find(p => p.id === appt.patient_id) || {};
+    const matchesSearch = 
+      pt.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      pt.phone?.includes(searchQuery) ||
+      appt.doctor_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
+    
+    return matchesSearch && matchesFilter;
+  });
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'Scheduled':
@@ -266,6 +283,15 @@ export default function ReceptionistView({
     if (pt.age) parts.push(`${pt.age} yrs`);
     if (pt.location && pt.location !== 'n/a') parts.push(pt.location);
     return parts.length > 0 ? `(${parts.join(' • ')})` : '';
+  };
+
+  const getAppointmentTypeBadge = (type) => {
+    const colors = {
+      'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
+      'Detox': 'bg-teal-50 text-teal-600 border-teal-200',
+      'Review': 'bg-amber-50 text-amber-600 border-amber-200'
+    };
+    return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || colors['Initial consultation']}`;
   };
 
   return (
@@ -423,7 +449,7 @@ export default function ReceptionistView({
               </select>
             </div>
 
-            {/* Appointment Time / Date */}
+            {/* Appointment Date and Type */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Date</label>
@@ -435,14 +461,43 @@ export default function ReceptionistView({
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Time</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 11:30 AM"
-                  value={formData.time}
-                  onChange={e => setFormData({ ...formData, time: e.target.value })}
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
+                <select
+                  value={formData.appointmentType}
+                  onChange={e => setFormData({ ...formData, appointmentType: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-                />
+                >
+                  <option value="Initial consultation">Initial Consultation</option>
+                  <option value="Detox">Detox</option>
+                  <option value="Review">Review</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Session (FN/AN) */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Session Time</label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value="FN"
+                    checked={formData.session === 'FN'}
+                    onChange={e => setFormData({ ...formData, session: e.target.value })}
+                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">Forenoon (FN)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    value="AN"
+                    checked={formData.session === 'AN'}
+                    onChange={e => setFormData({ ...formData, session: e.target.value })}
+                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">Afternoon (AN)</span>
+                </label>
               </div>
             </div>
 
@@ -482,7 +537,7 @@ export default function ReceptionistView({
         {/* Right Column: Registry Tables */}
         <div className="lg:col-span-7 space-y-6">
           
-          {/* Waiting List Card (Top priority for callback / time confirmation) */}
+          {/* Waiting List Card */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden text-left">
             <div className="p-4 border-b border-slate-200 bg-amber-50/50 flex items-center justify-between">
               <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
@@ -503,7 +558,7 @@ export default function ReceptionistView({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
                       <th className="py-2.5 px-4">Patient Profile</th>
-                      <th className="py-2.5 px-4">Location</th>
+                      <th className="py-2.5 px-4">Type/Session</th>
                       <th className="py-2.5 px-4">Notes</th>
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
@@ -517,8 +572,15 @@ export default function ReceptionistView({
                             <span className="font-bold text-slate-800 block text-sm">{pt.name}</span>
                             <span className="text-slate-500">{pt.phone} {renderPatientMeta(pt)}</span>
                           </td>
-                          <td className="py-2.5 px-4 font-medium text-slate-600">
-                            {pt.location || 'n/a'}
+                          <td className="py-2.5 px-4">
+                            <div className="space-y-1">
+                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>
+                                {appt.appointmentType}
+                              </span>
+                              <div className="text-xs font-medium text-slate-500">
+                                Session: {appt.session}
+                              </div>
+                            </div>
                           </td>
                           <td className="py-2.5 px-4 text-slate-500 max-w-[150px] truncate" title={appt.notes}>
                             {appt.notes}
@@ -529,12 +591,14 @@ export default function ReceptionistView({
                                 setBookingModalPatient(pt);
                                 setModalBookingData(prev => ({
                                   ...prev,
-                                  notes: appt.notes
+                                  notes: appt.notes,
+                                  appointmentType: appt.appointmentType,
+                                  session: appt.session
                                 }));
                               }}
                               className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors"
                             >
-                              Confirm Time & Book
+                              Confirm & Book
                             </button>
                             <button
                               onClick={() => handleDeleteWaiting(appt.id)}
@@ -553,50 +617,85 @@ export default function ReceptionistView({
             </div>
           </div>
 
-          {/* Active Appointments Log */}
+          {/* Active Appointments Log with Search and Filter */}
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden text-left">
-            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
-                <Calendar className="w-4.5 h-4.5 text-emerald-600" /> Active Schedule & Clinic Arrivals
-              </h3>
-              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                {activeBookings.length} Total
-              </span>
+            <div className="p-4 border-b border-slate-200 bg-slate-50">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm">
+                  <Calendar className="w-4.5 h-4.5 text-emerald-600" /> Active Schedule & Clinic Arrivals
+                </h3>
+                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {filteredActiveBookings.length} / {activeBookings.length} Total
+                </span>
+              </div>
+              
+              {/* Search and Filter Bar */}
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by patient name, phone, or doctor..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                  />
+                </div>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="Initial consultation">Initial Consultation</option>
+                    <option value="Detox">Detox</option>
+                    <option value="Review">Review</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
-              {activeBookings.length === 0 ? (
+              {filteredActiveBookings.length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-xs italic">
-                  No active schedules found.
+                  No active schedules found matching your criteria.
                 </div>
               ) : (
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full min-w-[720px] text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0">
-                      <th className="py-2.5 px-4">Time & Date</th>
+                      <th className="py-2.5 px-4">Date & Session</th>
                       <th className="py-2.5 px-4">Patient Details</th>
+                      <th className="py-2.5 px-4">Appointment Type</th>
                       <th className="py-2.5 px-4">Assigned Doctor</th>
                       <th className="py-2.5 px-4">Status</th>
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {activeBookings.slice().reverse().map(appt => {
+                    {filteredActiveBookings.slice().reverse().map(appt => {
                       const pt = patients.find(p => p.id === appt.patient_id) || {};
                       return (
-                        <tr key={appt.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-3 px-4">
-                            <strong className="text-slate-850 block">{appt.time}</strong>
-                            <span className="text-slate-400 block">{appt.date}</span>
+                        <tr key={appt.id} className="hover:bg-slate-50 transition-colors align-top">
+                          <td className="py-3 px-4 align-top whitespace-nowrap">
+                            <strong className="text-slate-800 block">{appt.date}</strong>
+                            <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'N/A'}</span>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="font-bold text-slate-800 block text-sm">{pt.name}</span>
-                            <span className="text-slate-500 font-medium">{pt.phone} {renderPatientMeta(pt)}</span>
+                          <td className="py-3 px-4 align-top min-w-0">
+                            <span className="font-bold text-slate-800 block text-sm truncate">{pt.name || 'Unknown Patient'}</span>
+                            <span className="text-slate-500 font-medium block truncate">{pt.phone || 'No phone'} {renderPatientMeta(pt)}</span>
                           </td>
-                          <td className="py-3 px-4">
-                            <span className="font-semibold text-slate-700 block">{appt.doctor_name || 'Dr. Evelyn Carter'}</span>
+                          <td className="py-3 px-4 align-top whitespace-nowrap">
+                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>
+                              {appt.appointmentType || 'General'}
+                            </span>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="py-3 px-4 align-top min-w-0 whitespace-nowrap">
+                            <span className="font-semibold text-slate-700 block truncate">{appt.doctor_name || 'Dr. Evelyn Carter'}</span>
+                          </td>
+                          <td className="py-3 px-4 align-top whitespace-nowrap">
                             {getStatusBadge(appt.status)}
                           </td>
                           <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
@@ -676,7 +775,7 @@ export default function ReceptionistView({
                 </select>
               </div>
 
-              {/* Date & Time */}
+              {/* Date & Type */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Date</label>
@@ -689,15 +788,44 @@ export default function ReceptionistView({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Time</label>
-                  <input
-                    type="text"
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
+                  <select
                     required
-                    placeholder="e.g. 11:30 AM"
-                    value={modalBookingData.time}
-                    onChange={e => setModalBookingData({ ...modalBookingData, time: e.target.value })}
+                    value={modalBookingData.appointmentType}
+                    onChange={e => setModalBookingData({ ...modalBookingData, appointmentType: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
-                  />
+                  >
+                    <option value="Initial consultation">Initial Consultation</option>
+                    <option value="Detox">Detox</option>
+                    <option value="Review">Review</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Session (FN/AN) */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Session Time</label>
+                <div className="flex gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="FN"
+                      checked={modalBookingData.session === 'FN'}
+                      onChange={e => setModalBookingData({ ...modalBookingData, session: e.target.value })}
+                      className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Forenoon (FN)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      value="AN"
+                      checked={modalBookingData.session === 'AN'}
+                      onChange={e => setModalBookingData({ ...modalBookingData, session: e.target.value })}
+                      className="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Afternoon (AN)</span>
+                  </label>
                 </div>
               </div>
 
