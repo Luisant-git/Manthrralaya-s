@@ -237,7 +237,7 @@ export default function App() {
       case 'appointments':
         return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment} />;
       case 'consultations':
-        return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} onAddConsultation={handleAddConsultation} onAddPrescription={handleAddPrescription} onAddDietChart={handleAddDietChart} activeRole={activeRole} />;
+        return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} />;
       case 'detox':
       case 'stay':
         return <DetoxStayView detoxSessions={detoxSessions} stayManagement={stayManagement} patients={patients} onScheduleDetox={handleScheduleDetox} onUpdateDetoxStatus={handleUpdateDetoxStatus} onAdmitPatient={handleAdmitPatient} onUpdateNursingChecklist={handleUpdateNursingChecklist} onDischargePatient={handleDischargePatient} />;
