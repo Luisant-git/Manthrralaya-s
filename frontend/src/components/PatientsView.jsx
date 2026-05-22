@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Search, Plus, UserPlus, Activity, FileText } from 'lucide-react';
+import { Search, Plus, UserPlus, Activity, FileText, Eye, X } from 'lucide-react';
 
 export default function PatientsView({ patients, appointments = [], followups = [], onAddPatient, onSelectPatient }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
+  const [viewingPatient, setViewingPatient] = useState(null);
   
   const appointmentTabs = [
     { id: 'all', label: 'All' },
@@ -303,7 +304,6 @@ export default function PatientsView({ patients, appointments = [], followups = 
                   <th className="py-3 px-4">Type</th>
                   <th className="py-3 px-4">Age</th>
                   <th className="py-3 px-4">Location</th>
-                  <th className="py-3 px-4">Address</th>
                   <th className="py-3 px-4">Next Follow-up Date</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
@@ -320,17 +320,24 @@ export default function PatientsView({ patients, appointments = [], followups = 
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium max-w-[150px] truncate" title={pt.address}>{pt.address || 'n/a'}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium max-w-[200px] truncate">
                       {getNextFollowup(pt.id)?.scheduled_date || 'No follow-up'}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button 
-                        onClick={() => onSelectPatient(pt)}
-                        className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
-                      >
-                        <Activity className="w-4 h-4" /> Timeline
-                      </button>
+                      <div className="flex justify-end items-center gap-2">
+                        <button 
+                          onClick={() => setViewingPatient(pt)}
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-blue-200"
+                        >
+                          <Eye className="w-4 h-4" /> View
+                        </button>
+                        <button 
+                          onClick={() => onSelectPatient(pt)}
+                          className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
+                        >
+                          <Activity className="w-4 h-4" /> Timeline
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -343,6 +350,88 @@ export default function PatientsView({ patients, appointments = [], followups = 
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* View Patient Details Modal */}
+      {viewingPatient && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 z-[100] animate-fadeIn">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden text-left animate-scaleIn">
+            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-lg">
+                  {viewingPatient.name.charAt(0)}
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">{viewingPatient.name}</h2>
+                  <p className="text-slate-500 text-sm font-medium">{viewingPatient.id} • Registered {viewingPatient.registered_at || 'N/A'}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setViewingPatient(null)}
+                className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-5">
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2 pb-1 border-b border-slate-100">Personal Information</h3>
+              <ul className="mb-4">
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Age</span>
+                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.age || 'N/A'} yrs</span>
+                </li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Gender</span>
+                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.gender || 'N/A'}</span>
+                </li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Phone Number</span>
+                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.phone || 'N/A'}</span>
+                </li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">WhatsApp</span>
+                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.whatsapp || viewingPatient.phone || 'N/A'}</span>
+                </li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Location</span>
+                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.location || 'N/A'}</span>
+                </li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-start sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Address</span>
+                  <span className="font-medium text-slate-800 text-sm sm:text-right sm:max-w-[70%]">{viewingPatient.address || 'N/A'}</span>
+                </li>
+              </ul>
+
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2 pb-1 border-b border-slate-100">Clinical Details</h3>
+              <ul className="mb-4">
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Appointment Type</span>
+                  <span className="font-medium text-slate-800 text-sm">{getLatestAppointmentType(viewingPatient.id)}</span>
+                </li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
+                  <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Next Follow-up Date</span>
+                  <span className="font-medium text-slate-800 text-sm">{getNextFollowup(viewingPatient.id)?.scheduled_date || 'No follow-up'}</span>
+                </li>
+              </ul>
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <span className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Primary Medical Conditions / Notes</span>
+                <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                  {viewingPatient.medical_conditions || 'No specific medical conditions recorded.'}
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setViewingPatient(null)}
+                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
+              >
+                Close Details
+              </button>
+            </div>
           </div>
         </div>
       )}

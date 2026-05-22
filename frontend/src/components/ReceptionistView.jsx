@@ -31,6 +31,7 @@ export default function ReceptionistView({
   const [formData, setFormData] = useState({
     name: '',
     age: '',
+    gender: '',
     location: '',
     address: '',
     phone: '',
@@ -84,6 +85,7 @@ export default function ReceptionistView({
           ...prev,
           name: existingPatient.name,
           age: existingPatient.age.toString(),
+          gender: existingPatient.gender || '',
           location: existingPatient.location || '',
           address: existingPatient.address || '',
           whatsapp: existingPatient.whatsapp || existingPatient.phone,
@@ -150,7 +152,7 @@ export default function ReceptionistView({
         id: `P-${100 + patients.length + 1}`,
         name: data.name,
         age: parseInt(data.age) || 30,
-        gender: 'Other',
+        gender: data.gender || 'Other',
         blood_group: 'O+',
         phone: data.phone,
         whatsapp: data.phoneAsWhatsapp ? data.phone : data.whatsapp,
@@ -172,6 +174,10 @@ export default function ReceptionistView({
       }
       if (data.age && parseInt(data.age) !== patient.age) {
         updatedPatient.age = parseInt(data.age);
+        needsUpdate = true;
+      }
+      if (data.gender && data.gender !== patient.gender) {
+        updatedPatient.gender = data.gender;
         needsUpdate = true;
       }
       if (data.location && data.location !== patient.location) {
@@ -196,6 +202,7 @@ export default function ReceptionistView({
   const handleAction = (type) => {
     if (!formData.name.trim()) return alert('Patient Name is required.');
     if (!formData.age.trim()) return alert('Patient Age is required.');
+    if (!formData.gender) return alert('Patient Gender is required.');
     if (!formData.location.trim()) return alert('Patient Location is required.');
     if (!formData.phone.trim()) return alert('Patient Phone is required.');
 
@@ -397,6 +404,7 @@ export default function ReceptionistView({
     setFormData({
       name: '',
       age: '',
+      gender: '',
       location: '',
       address: '',
       phone: '',
@@ -480,7 +488,6 @@ export default function ReceptionistView({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Jessica Smith"
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className={`w-full bg-slate-50 border rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-1 transition-all font-medium ${
@@ -495,7 +502,7 @@ export default function ReceptionistView({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               {/* Age */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
@@ -504,11 +511,28 @@ export default function ReceptionistView({
                 <input
                   type="number"
                   required
-                  placeholder="e.g. 29"
                   value={formData.age}
                   onChange={e => setFormData({ ...formData, age: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                 />
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                  Gender <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.gender}
+                  onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                >
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
 
               {/* Location */}
@@ -519,7 +543,6 @@ export default function ReceptionistView({
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Indiranagar"
                   value={formData.location}
                   onChange={e => setFormData({ ...formData, location: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
@@ -532,7 +555,6 @@ export default function ReceptionistView({
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Address</label>
               <input
                 type="text"
-                placeholder="Full residential address (optional)"
                 value={formData.address}
                 onChange={e => setFormData({ ...formData, address: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
@@ -684,7 +706,6 @@ export default function ReceptionistView({
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Call Notes / Reason</label>
               <textarea
                 rows="2"
-                placeholder="Patient symptoms, specific requests, or details..."
                 value={formData.notes}
                 onChange={e => setFormData({ ...formData, notes: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none transition-all font-medium"
@@ -736,7 +757,7 @@ export default function ReceptionistView({
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
                       <th className="py-2.5 px-4">Patient Profile</th>
-                      <th className="py-2.5 px-4">Type/Session</th>
+                      <th className="py-2.5 px-4">Type</th>
                       <th className="py-2.5 px-4">Notes</th>
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
@@ -748,17 +769,12 @@ export default function ReceptionistView({
                         <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors">
                           <td className="py-2.5 px-4">
                             <span className="font-bold text-slate-800 block text-sm">{pt.name}</span>
-                            <span className="text-slate-500">{pt.phone} {renderPatientMeta(pt)}</span>
+                            <span className="text-slate-500 text-xs">{pt.phone}</span>
                           </td>
                           <td className="py-2.5 px-4">
-                            <div className="space-y-1">
-                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>
-                                {appt.appointmentType}
-                              </span>
-                              <div className="text-xs font-medium text-slate-500">
-                                Session: {appt.session}
-                              </div>
-                            </div>
+                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>
+                              {appt.appointmentType}
+                            </span>
                           </td>
                           <td className="py-2.5 px-4 text-slate-500 max-w-[150px] truncate" title={appt.notes}>
                             {appt.notes}

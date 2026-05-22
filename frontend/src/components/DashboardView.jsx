@@ -21,7 +21,7 @@ export default function DashboardView({
   const activeStays = stayManagement.filter(s => s.status === 'Admitted').length;
   const pendingFollowups = followups.filter(f => f.status === 'Pending').length;
 
-  const todayAppointments = appointments.filter(a => a.date === todayDate).slice(0, 3);
+  const todayAppointments = appointments.filter(a => a.date === todayDate);
   const todayPatientDetails = todayAppointments.map((appt) => {
     const patient = patients.find(p => p.id === appt.patient_id) || {};
     const historyCount = consultations.filter(c => c.patient_id === appt.patient_id).length;
@@ -131,13 +131,15 @@ export default function DashboardView({
         </div>
       </div>
 
-      {/* Today's Patients Summary */}
+      {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-3 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+        
+        {/* Left Column: Today's Patients */}
+        <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Today’s Patient List</h2>
-              <p className="text-sm text-slate-500">Showing the first three patients scheduled for today with active history counts.</p>
+              <p className="text-sm text-slate-500">Showing all patients scheduled for today with active history counts.</p>
             </div>
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{todayPatientDetails.length} patients</span>
           </div>
@@ -156,17 +158,17 @@ export default function DashboardView({
                     <div className="text-2xl font-bold text-slate-900">{item.historyCount}</div>
                   </div>
                 </div>
-                <div className="mt-4 text-sm text-slate-700">
-                  Latest note: <span className="font-medium text-slate-900">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 120)}{item.latestNote.length > 120 ? '…' : ''}</span>
+                <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-700">
+                  <span className="text-xs text-slate-500 block mb-1">Latest note:</span>
+                  <span className="font-medium text-slate-900">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 80)}{item.latestNote.length > 80 ? '…' : ''}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Middle Row: Charts & Arrival Queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Right Column: Queues */}
+        <div className="lg:col-span-1 flex flex-col gap-6">
         
         {/* Growth Chart */}
         {/* <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
@@ -205,14 +207,14 @@ export default function DashboardView({
         {/* Checked-in Patients */}
         {checkedInArrivals.length > 0 && (
           <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
               <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-500" /> Checked-in Patients
+                <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" /> Checked-in Patients
               </h3>
               <button
                 type="button"
                 onClick={() => onNavigateToTab('consultations')}
-                className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600 hover:text-emerald-800"
+                className="text-xs font-semibold uppercase tracking-widest text-emerald-600 hover:text-emerald-800 whitespace-nowrap"
               >
                 Go to Consultations
               </button>
@@ -286,8 +288,8 @@ export default function DashboardView({
             )}
           </div>
         </div>
+        </div>
       </div>
-
     </div>
   );
 }
