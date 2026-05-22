@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList } from 'lucide-react';
+import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon } from 'lucide-react';
 
 export default function MyPatientRecords({
   patients = [],
@@ -13,206 +13,536 @@ export default function MyPatientRecords({
   reviews = []
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [expandedPatient, setExpandedPatient] = useState(null);
+  const [selectedTab, setSelectedTab] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyItemsPerPage = 1;
+
+  const appointmentTabs = [
+    { id: 'all', label: 'All' },
+    { id: 'initial', label: 'Initial', type: 'Initial consultation' },
+    { id: 'detox', label: 'Detox', type: 'Detox' },
+    { id: 'review', label: 'Review', type: 'Review' },
+    { id: 'followup', label: 'Follow-up' }
+  ];
+
+  const getLatestAppointmentType = (patientId) => {
+    const sorted = appointments
+      .filter(a => a.patient_id === patientId && a.appointmentType)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    return sorted[0]?.appointmentType || 'No appointment type';
+  };
+
+  const getNextFollowup = (patientId) => {
+    return followups
+      .filter(f => f.patient_id === patientId && f.status === 'Pending')
+      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0] || null;
+  };
+
+  const matchesTypeFilter = (patient) => {
+    if (selectedTab === 'all') return true;
+    const tab = appointmentTabs.find(t => t.id === selectedTab);
+    if (!tab) return true;
+    if (tab.id === 'followup') {
+      return followups.some(f => f.patient_id === patient.id && f.status === 'Pending');
+    }
+    return appointments.some(a => a.patient_id === patient.id && a.appointmentType === tab.type);
+  };
 
   const filteredPatients = patients.filter(pt => {
     const normalized = searchTerm.trim().toLowerCase();
-    if (!normalized) return true;
-    return (
+    const matchesSearch = !normalized ||
       pt.name.toLowerCase().includes(normalized) ||
       pt.id.toLowerCase().includes(normalized) ||
       (pt.phone || '').includes(normalized) ||
-      (pt.email || '').toLowerCase().includes(normalized)
-    );
+      (pt.email || '').toLowerCase().includes(normalized);
+    return matchesSearch && matchesTypeFilter(pt);
   });
 
-  const getPatientRecords = (patientId) => ({
-    appointments: appointments.filter(a => a.patient_id === patientId).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    consultations: consultations.filter(c => c.patient_id === patientId).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    detoxSessions: detoxSessions.filter(d => d.patient_id === patientId).sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date)),
-    stayManagement: stayManagement.filter(s => s.patient_id === patientId).sort((a, b) => new Date(b.check_in_time) - new Date(a.check_in_time)),
-    prescriptions: prescriptions.filter(pr => pr.patient_id === patientId).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    dietCharts: dietCharts.filter(d => d.patient_id === patientId).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    followups: followups.filter(f => f.patient_id === patientId).sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date)),
-    reviews: reviews.filter(r => r.patient_id === patientId).sort((a, b) => new Date(b.date) - new Date(a.date))
-  });
+  const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedPatients = filteredPatients.slice(startIndex, startIndex + itemsPerPage);
+
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const openModal = (patient) => {
+    setSelectedPatient(patient);
+    setHistoryPage(1);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setSelectedPatient(null);
+    setHistoryPage(1);
+  };
+
+  const patientConsultations = selectedPatient 
+    ? consultations
+        .filter(c => c.patient_id === selectedPatient.id)
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+    : [];
+  
+  const totalHistoryPages = Math.ceil(patientConsultations.length / historyItemsPerPage);
+  const historyStartIndex = (historyPage - 1) * historyItemsPerPage;
+  const currentConsultation = patientConsultations[historyStartIndex];
+
+  const goToHistoryPage = (page) => {
+    if (page >= 1 && page <= totalHistoryPages) {
+      setHistoryPage(page);
+    }
+  };
 
   return (
     <div className="space-y-6">
+      <style>{`
+        .consultation-notes-content {
+          font-size: 0.9375rem;
+          line-height: 1.6;
+        }
+        .consultation-notes-content ul,
+        .consultation-notes-content ol {
+          margin-top: 0.75rem;
+          margin-bottom: 0.75rem;
+          padding-left: 1.75rem;
+        }
+        .consultation-notes-content ul { list-style-type: disc; }
+        .consultation-notes-content ol { list-style-type: decimal; }
+        .consultation-notes-content li { 
+          margin-bottom: 0.375rem;
+          line-height: 1.5;
+        }
+        .consultation-notes-content p { 
+          margin-bottom: 0.875rem;
+          line-height: 1.5;
+        }
+        .consultation-notes-content h1 {
+          font-size: 1.25rem;
+          font-weight: 700;
+          margin-top: 1rem;
+          margin-bottom: 0.75rem;
+        }
+        .consultation-notes-content h2 {
+          font-size: 1.125rem;
+          font-weight: 700;
+          margin-top: 0.875rem;
+          margin-bottom: 0.625rem;
+        }
+        .consultation-notes-content strong { font-weight: 700; color: #1e293b; }
+        .consultation-notes-content em { font-style: italic; }
+        
+        @keyframes modalSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-20px) scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        .modal-animate {
+          animation: modalSlideIn 0.2s ease-out;
+        }
+        
+        .modal-content-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .modal-content-scroll::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 10px;
+        }
+        .modal-content-scroll::-webkit-scrollbar-thumb {
+          background: #c1c1c1;
+          border-radius: 10px;
+        }
+        .modal-content-scroll::-webkit-scrollbar-thumb:hover {
+          background: #a8a8a8;
+        }
+      `}</style>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">My Patient Records</h1>
-          <p className="text-slate-500 text-sm mt-1">Browse all patient files and review their complete clinic history.</p>
+          <p className="text-slate-500 text-sm mt-1">Browse patients and click View to see consultation history.</p>
         </div>
       </div>
 
-      <div className="bg-white border border-slate-200 p-4 rounded-3xl shadow-sm">
-        <div className="relative max-w-xl">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search patients by name, ID, phone or email..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-5">
-        {filteredPatients.map(pt => {
-          const records = getPatientRecords(pt.id);
-          const isExpanded = expandedPatient === pt.id;
-          return (
-            <div key={pt.id} className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto] mb-4">
+          <div className="relative max-w-xl">
+            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search patients by name, ID, phone or email..."
+              value={searchTerm}
+              onChange={e => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {appointmentTabs.map(tab => (
               <button
+                key={tab.id}
                 type="button"
-                onClick={() => setExpandedPatient(isExpanded ? null : pt.id)}
-                className="w-full text-left p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                onClick={() => {
+                  setSelectedTab(tab.id);
+                  setCurrentPage(1);
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition ${selectedTab === tab.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
               >
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 text-slate-500 text-xs font-semibold uppercase tracking-[0.18em] mb-2">
-                    <span>{pt.id}</span>
-                    <span className="text-slate-300">•</span>
-                    <span>{pt.registered_at ? `Registered ${pt.registered_at}` : 'Registration unknown'}</span>
-                  </div>
-                  <h2 className="text-lg font-bold text-slate-900">{pt.name}</h2>
-                  <p className="text-sm text-slate-600 mt-1">{pt.phone} • {pt.email || 'No email'} • {pt.location || pt.address || 'No location'}</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 text-slate-600 text-sm">
-                  <span className="px-3 py-2 rounded-full bg-white border border-slate-200">Appointments: {records.appointments.length}</span>
-                  <span className="px-3 py-2 rounded-full bg-white border border-slate-200">Consultations: {records.consultations.length}</span>
-                  <span className="px-3 py-2 rounded-full bg-white border border-slate-200">Follow-ups: {records.followups.length}</span>
-                </div>
+                {tab.label}
               </button>
+            ))}
+          </div>
+        </div>
 
-              {isExpanded && (
-                <div className="p-5 space-y-5">
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold mb-3"><Stethoscope className="w-4 h-4" /> Consultation Summary</div>
-                      {records.consultations.length > 0 ? (
-                        <ul className="space-y-3 text-sm text-slate-600">
-                          {records.consultations.map(c => (
-                            <li key={c.id} className="rounded-2xl bg-white border border-slate-200 p-3">
-                              <div className="flex justify-between items-start gap-2 mb-2">
-                                <div className="font-semibold text-slate-800">{c.doctor_name || 'Doctor'}</div>
-                                <span className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{c.date}</span>
-                              </div>
-                              <p className="text-slate-600"><strong className="text-slate-700">Diagnosis:</strong> {c.diagnosis || 'No diagnosis entered'}</p>
-                              {c.detox_recommended && (
-                                <p className="text-slate-600 mt-1"><strong className="text-slate-700">Detox:</strong> {c.detox_type}</p>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] tracking-wider">
+                <th className="py-3 px-4">Patient</th>
+                <th className="py-3 px-4">Latest Appointment</th>
+                <th className="py-3 px-4">Contact</th>
+                <th className="py-3 px-4">Follow-up</th>
+                <th className="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedPatients.map(pt => {
+                const latestType = getLatestAppointmentType(pt.id);
+                const nextFollowup = getNextFollowup(pt.id);
+                return (
+                  <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
+                    <td className="py-4 px-4 align-top">
+                      <div className="font-semibold text-slate-900">{pt.name}</div>
+                      <div className="text-xs text-slate-500 mt-1">{pt.id}</div>
+                    </td>
+                    <td className="py-4 px-4 align-top">
+                      <span className="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">{latestType}</span>
+                    </td>
+                    <td className="py-4 px-4 align-top">
+                      <div className="text-slate-600">{pt.phone || 'No phone'}</div>
+                      <div className="text-xs text-slate-500 mt-1">{pt.email || 'No email'}</div>
+                    </td>
+                    <td className="py-4 px-4 align-top">
+                      {nextFollowup ? (
+                        <div className="text-slate-600">{nextFollowup.scheduled_date}</div>
                       ) : (
-                        <p className="text-slate-500 italic">No consultation history found.</p>
+                        <span className="text-xs text-slate-400">None</span>
                       )}
-                    </div>
+                    </td>
+                    <td className="py-4 px-4 align-top text-right">
+                      <button
+                        type="button"
+                        onClick={() => openModal(pt)}
+                        className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-emerald-600 text-white hover:bg-emerald-700"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-                    <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold mb-3"><Calendar className="w-4 h-4" /> Appointment Activity</div>
-                      {records.appointments.length > 0 ? (
-                        <ul className="space-y-3 text-sm text-slate-600">
-                          {records.appointments.map(a => (
-                            <li key={a.id} className="rounded-2xl bg-white border border-slate-200 p-3">
-                              <div className="flex justify-between items-start gap-2 mb-2">
-                                <div className="font-semibold text-slate-800">{a.appointmentType || 'Appointment'}</div>
-                                <span className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{a.date} • {a.time}</span>
-                              </div>
-                              <p className="text-slate-600"><strong className="text-slate-700">Status:</strong> {a.status || 'Unknown'}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-slate-500 italic">No appointment history found.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="grid gap-4 lg:grid-cols-3">
-                    <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold mb-3"><Activity className="w-4 h-4" /> Detox History</div>
-                      {records.detoxSessions.length > 0 ? (
-                        <ul className="space-y-2 text-sm text-slate-600">
-                          {records.detoxSessions.map(d => (
-                            <li key={d.id} className="rounded-2xl bg-white border border-slate-200 p-3">
-                              <div className="font-semibold text-slate-800">{d.type}</div>
-                              <p className="text-slate-500 text-xs">{d.scheduled_date} • {d.status}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-slate-500 italic">No detox sessions recorded.</p>
-                      )}
-                    </div>
-
-                    <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold mb-3"><Bed className="w-4 h-4" /> Stay Log</div>
-                      {records.stayManagement.length > 0 ? (
-                        <ul className="space-y-2 text-sm text-slate-600">
-                          {records.stayManagement.map(s => (
-                            <li key={s.id} className="rounded-2xl bg-white border border-slate-200 p-3">
-                              <div className="font-semibold text-slate-800">{s.room_name}</div>
-                              <p className="text-slate-500 text-xs">{s.check_in_time}{s.check_out_time ? ` • ${s.check_out_time}` : ''}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-slate-500 italic">No stay history recorded.</p>
-                      )}
-                    </div>
-
-                    <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
-                      <div className="flex items-center gap-2 text-slate-700 font-bold mb-3"><RefreshCw className="w-4 h-4" /> Follow-up Tasks</div>
-                      {records.followups.length > 0 ? (
-                        <ul className="space-y-2 text-sm text-slate-600">
-                          {records.followups.map(f => (
-                            <li key={f.id} className="rounded-2xl bg-white border border-slate-200 p-3">
-                              <div className="font-semibold text-slate-800">{f.status}</div>
-                              <p className="text-slate-500 text-xs">{f.scheduled_date}</p>
-                              <p className="text-slate-600 mt-1">{f.notes}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-slate-500 italic">No follow-ups created.</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-3xl bg-slate-50 border border-slate-200 p-4">
-                    <div className="flex items-center gap-2 text-slate-700 font-bold mb-3"><ClipboardList className="w-4 h-4" /> Record Details</div>
-                    <div className="grid gap-3 md:grid-cols-2 text-sm text-slate-600">
-                      <div className="rounded-2xl bg-white border border-slate-200 p-3">
-                        <div className="font-semibold text-slate-800">Prescriptions</div>
-                        <p className="text-slate-500 mt-1">{records.prescriptions.length} items</p>
-                      </div>
-                      <div className="rounded-2xl bg-white border border-slate-200 p-3">
-                        <div className="font-semibold text-slate-800">Diet Charts</div>
-                        <p className="text-slate-500 mt-1">{records.dietCharts.length} charts</p>
-                      </div>
-                      <div className="rounded-2xl bg-white border border-slate-200 p-3">
-                        <div className="font-semibold text-slate-800">Reviews</div>
-                        <p className="text-slate-500 mt-1">{records.reviews.length} feedback entries</p>
-                      </div>
-                      <div className="rounded-2xl bg-white border border-slate-200 p-3">
-                        <div className="font-semibold text-slate-800">Clinic Notes</div>
-                        <p className="text-slate-500 mt-1">Total records: {records.consultations.length + records.appointments.length + records.detoxSessions.length + records.followups.length}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {filteredPatients.length === 0 && (
+        {filteredPatients.length === 0 ? (
           <div className="py-12 text-center text-slate-500">No patient records match your search.</div>
+        ) : (
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
+            <p className="text-sm text-slate-500">
+              Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredPatients.length)}</span> of <span className="font-semibold text-slate-800">{filteredPatients.length}</span> patients
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="flex items-center">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${currentPage === pageNum ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
         )}
       </div>
+
+      {/* Modal with larger fonts and neat look */}
+      {isModalOpen && selectedPatient && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" onClick={closeModal}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={closeModal}></div>
+          
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div 
+              className="relative bg-white rounded-2xl shadow-xl max-w-3xl w-full modal-animate overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Fixed Header - Larger */}
+              <div className="sticky top-0 z-10">
+                <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                      <User className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-white">{selectedPatient.name}</h2>
+                      <p className="text-xs text-emerald-100">{selectedPatient.id}</p>
+                    </div>
+                  </div>
+                  <button onClick={closeModal} className="p-2 rounded-full hover:bg-white/10 transition text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Patient Quick Info - Larger */}
+                <div className="bg-emerald-50 px-6 py-3 border-b border-emerald-100">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-emerald-600" />
+                        <span className="text-slate-700">{selectedPatient.phone || 'No phone'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-emerald-600" />
+                        <span className="text-slate-700 truncate max-w-[200px]">{selectedPatient.email || 'No email'}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CalendarIcon className="w-4 h-4 text-emerald-600" />
+                      <span className="text-slate-700">{selectedPatient.age || '--'} yrs, {selectedPatient.gender || '--'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="modal-content-scroll overflow-y-auto" style={{ maxHeight: 'calc(85vh - 160px)' }}>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-emerald-600" />
+                      <h3 className="text-base font-bold text-slate-800">Consultation Notes</h3>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                      {patientConsultations.length} total
+                    </div>
+                  </div>
+
+                  {currentConsultation ? (
+                    <div className="space-y-5">
+                      {/* Doctor & Date - Larger */}
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <Stethoscope className="w-5 h-5 text-emerald-600" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-slate-800">{currentConsultation.doctor_name || 'Assigned Doctor'}</div>
+                            <div className="text-xs text-emerald-600 font-medium">Clinical Consultant</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                            {currentConsultation.date}
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-1">Visit Date</div>
+                        </div>
+                      </div>
+
+                      {/* Consultation Notes */}
+                      {currentConsultation.consultation_notes && currentConsultation.consultation_notes !== '<br>' && (
+                        <div>
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <Activity className="w-3.5 h-3.5" /> Consultation Notes
+                          </div>
+                          <div 
+                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                            dangerouslySetInnerHTML={{ __html: currentConsultation.consultation_notes }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Medical History */}
+                      {currentConsultation.medical_history && currentConsultation.medical_history !== '<br>' && (
+                        <div>
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <ClipboardList className="w-3.5 h-3.5" /> Medical History
+                          </div>
+                          <div 
+                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                            dangerouslySetInnerHTML={{ __html: currentConsultation.medical_history }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Diet Plan Note */}
+                      {currentConsultation.diet_plan_note && currentConsultation.diet_plan_note !== '<br>' && (
+                        <div>
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <ClipboardList className="w-3.5 h-3.5" /> Diet Plan
+                          </div>
+                          <div 
+                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                            dangerouslySetInnerHTML={{ __html: currentConsultation.diet_plan_note }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Detox Procedure */}
+                      {currentConsultation.detox_procedure && currentConsultation.detox_procedure !== '<br>' && (
+                        <div>
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <RefreshCw className="w-3.5 h-3.5" /> Detox Procedure
+                          </div>
+                          <div 
+                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                            dangerouslySetInnerHTML={{ __html: currentConsultation.detox_procedure }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Home Care */}
+                      {currentConsultation.home_care && (
+                        <div>
+                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                            <Bed className="w-3.5 h-3.5" /> Home Care Guidelines
+                          </div>
+                          <div className="text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
+                            {currentConsultation.home_care}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Detox Recommendation */}
+                      {currentConsultation.detox_recommended && (
+                        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Star className="w-4 h-4 text-emerald-600" />
+                            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
+                          </div>
+                          <div className="space-y-2 text-sm text-slate-700">
+                            <div><span className="font-semibold text-slate-800">Type:</span> {currentConsultation.detox_type}</div>
+                            <div><span className="font-semibold text-slate-800">Doctor:</span> {currentConsultation.detox_doctor_name || 'Not assigned'}</div>
+                            {currentConsultation.followup_date && (
+                              <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {currentConsultation.followup_date}</div>
+                            )}
+                            {currentConsultation.followup_remarks && (
+                              <div><span className="font-semibold text-slate-800">Remarks:</span> {currentConsultation.followup_remarks}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Linked Diet Chart */}
+                      {(() => {
+                        const linkedDiet = dietCharts.find(d => d.consultation_id === currentConsultation.id);
+                        return linkedDiet && (
+                          <div className="bg-white border border-slate-200 rounded-xl p-4">
+                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                              <ClipboardList className="w-3.5 h-3.5" /> Diet Chart Details
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                              <div><span className="font-semibold text-slate-800">Morning:</span> <span className="text-slate-600">{linkedDiet.meals.morning || '—'}</span></div>
+                              <div><span className="font-semibold text-slate-800">Breakfast:</span> <span className="text-slate-600">{linkedDiet.meals.breakfast || '—'}</span></div>
+                              <div><span className="font-semibold text-slate-800">Lunch:</span> <span className="text-slate-600">{linkedDiet.meals.lunch || '—'}</span></div>
+                              <div><span className="font-semibold text-slate-800">Evening:</span> <span className="text-slate-600">{linkedDiet.meals.evening || '—'}</span></div>
+                              <div><span className="font-semibold text-slate-800">Dinner:</span> <span className="text-slate-600">{linkedDiet.meals.dinner || '—'}</span></div>
+                              {linkedDiet.remarks && (
+                                <div className="col-span-2"><span className="font-semibold text-slate-800">Remarks:</span> <span className="text-slate-600">{linkedDiet.remarks}</span></div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="py-12 text-center">
+                      <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-slate-500">No consultation records found</p>
+                      <p className="text-xs text-slate-400 mt-1">Complete a consultation to see notes here</p>
+                    </div>
+                  )}
+
+                  {/* Pagination */}
+                  {totalHistoryPages > 1 && (
+                    <div className="mt-6 pt-4 border-t border-slate-100">
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="text-sm text-slate-600">
+                          Consultation <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalHistoryPages}</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => goToHistoryPage(historyPage - 1)}
+                            disabled={historyPage === 1}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+                          >
+                            <ChevronLeft className="w-4 h-4" /> Previous
+                          </button>
+                          
+                          <button
+                            onClick={() => goToHistoryPage(historyPage + 1)}
+                            disabled={historyPage === totalHistoryPages}
+                            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+                          >
+                            Next <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
