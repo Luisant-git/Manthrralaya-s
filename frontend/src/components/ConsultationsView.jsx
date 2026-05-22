@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Stethoscope, Activity, ClipboardList, Save, CheckCircle } from 'lucide-react';
 
 export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole }) {
   const [selectedApptId, setSelectedApptId] = useState('');
   const [selectedTab, setSelectedTab] = useState('consultation');
+  const [historyPage, setHistoryPage] = useState(1);
   
   // Forms states
   const [consultationNotes, setConsultationNotes] = useState('');
@@ -77,11 +78,37 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [detoxRecommended, setDetoxRecommended] = useState(false);
   const [detoxType, setDetoxType] = useState('Deep Tissue Cell Detox');
   const [detoxDoctorId, setDetoxDoctorId] = useState(doctors[0]?.id || '');
+  const [detoxFollowupDate, setDetoxFollowupDate] = useState(new Date().toISOString().split('T')[0]);
+  const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('Call patient later to confirm detox preparation and next steps.');
+  const todayDate = new Date().toISOString().split('T')[0];
 
-  // Only show "Checked-in" appointments for doctor to consult
-  const pendingConsults = appointments.filter(a => a.status === 'Checked-in');
+  // Only show today's "Checked-in" appointments for doctor to consult
+  const pendingConsults = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate);
   const activeAppt = pendingConsults.find(a => a.id === selectedApptId);
   const activePt = activeAppt ? patients.find(p => p.id === activeAppt.patient_id) : null;
+  const patientHistory = activePt ? consultations.filter(c => c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+
+  useEffect(() => {
+    if (!selectedApptId && pendingConsults.length > 0) {
+      setSelectedApptId(pendingConsults[0].id);
+    }
+  }, [pendingConsults, selectedApptId]);
+  const latestHistory = patientHistory[0] || null;
+  const historyPageSize = 1;
+  const historyRecords = consultations.filter(c => !activePt || c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const totalHistoryPages = Math.max(1, Math.ceil(historyRecords.length / historyPageSize));
+  const pagedHistory = historyRecords.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [activePt?.id, selectedTab]);
+
+  const appendLatestHistoryToCurrent = () => {
+    if (!latestHistory) return;
+    setConsultationNotes(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.consultation_notes || ''}`);
+    setMedicalHistory(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.medical_history || ''}`);
+    setDietPlanNote(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.diet_plan_note || ''}`);
+  };
 
   const handleCompleteConsultation = () => {
     if (!activeAppt) return;
@@ -102,7 +129,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       detox_recommended: detoxRecommended,
       detox_type: detoxRecommended ? detoxType : null,
       detox_doctor_id: detoxRecommended ? detoxDoctorId : null,
-      detox_doctor_name: detoxRecommended ? detoxDoctor?.name : null
+      detox_doctor_name: detoxRecommended ? detoxDoctor?.name : null,
+      followup_date: detoxRecommended ? detoxFollowupDate : null,
+      followup_remarks: detoxRecommended ? detoxFollowupRemarks : null
     };
 
     if (diet.breakfast !== '') {
@@ -130,6 +159,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     setDetoxRecommended(false);
     setDetoxType('Deep Tissue Cell Detox');
     setDetoxDoctorId(doctors[0]?.id || '');
+    setDetoxFollowupDate(new Date().toISOString().split('T')[0]);
+    setDetoxFollowupRemarks('Call patient later to confirm detox preparation and next steps.');
   };
 
   const fontSizeOptions = [
@@ -332,8 +363,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           {/* Left Column: Waiting Queue */}
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm h-fit">
             <h3 className="font-bold text-slate-800 text-base mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-              <CheckCircle className="w-5 h-5 text-emerald-600" /> Waiting Room Queue
+             <CheckCircle className="w-5 h-5 text-emerald-600" /> Waiting Room Queue
             </h3>
+            <p className="text-sm text-slate-500 mb-4">These patients are checked in and ready for consultation.</p>
             <div className="space-y-3">
               {pendingConsults.map(appt => {
                 const pt = patients.find(p => p.id === appt.patient_id) || {};
@@ -347,9 +379,14 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         : 'bg-white border-slate-200 hover:border-emerald-200 hover:bg-slate-50'
                     }`}
                   >
-                    <div className="font-bold text-slate-800 text-sm">{pt.name}</div>
-                    <div className="text-xs text-slate-500 mt-1">{appt.time} • {pt.age} yrs, {pt.gender}</div>
-                    <div className="text-[10px] text-emerald-600 font-bold mt-1 uppercase tracking-wider">Assigned to: {appt.doctor_name || 'Dr. Evelyn Carter'}</div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-bold text-slate-800 text-sm">{pt.name}</div>
+                        <div className="text-xs text-slate-500 mt-1">{appt.time} • {pt.age} yrs, {pt.gender}</div>
+                      </div>
+                    
+                    </div>
+                    <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">Assigned to: {appt.doctor_name || 'Dr. Evelyn Carter'}</div>
                   </button>
                 );
               })}
@@ -402,7 +439,17 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         <Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes
                       </h3>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes</label>
+                        <div className="flex items-center justify-between gap-3 mb-2">
+                          <label className="block text-xs font-semibold text-slate-600">Consultation Notes</label>
+                          <button
+                            type="button"
+                            onClick={appendLatestHistoryToCurrent}
+                            disabled={!latestHistory}
+                            className="text-xs font-semibold text-emerald-600 disabled:text-slate-400 hover:text-emerald-700"
+                          >
+                            {latestHistory ? 'Add latest history notes' : 'No previous history available'}
+                          </button>
+                        </div>
                         <RichTextEditor 
                           editorRef={consultationEditorRef}
                           content={consultationNotes}
@@ -410,6 +457,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                           placeholder="Enter consultation notes here..."
                         />
                       </div>
+
+
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label>
                         <RichTextEditor 
@@ -459,15 +508,35 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       {detoxRecommended && (
                         <div className="mt-3 ml-8 space-y-3">
                           
-                          <div className="space-y-2">
-                          
-                            <select value={detoxDoctorId} onChange={e => setDetoxDoctorId(e.target.value)} className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                              {doctors.map(doc => (
-                                <option key={doc.id} value={doc.id}>{doc.name} — {doc.designation}</option>
-                              ))}
-                            </select>
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600">Choose Follow-up Date</label>
+                              <input
+                                type="date"
+                                value={detoxFollowupDate}
+                                onChange={e => setDetoxFollowupDate(e.target.value)}
+                                className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600">Detox Doctor</label>
+                              <select value={detoxDoctorId} onChange={e => setDetoxDoctorId(e.target.value)} className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                {doctors.map(doc => (
+                                  <option key={doc.id} value={doc.id}>{doc.name} — {doc.designation}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
-                          <p className="text-xs text-emerald-700 mt-1.5 font-medium">This will save the recommended detox provider and add it to your consultation history.</p>
+                          <div className="mt-3">
+                            <label className="block text-xs font-semibold text-slate-600">Remarks for Receptionist</label>
+                            <textarea
+                              value={detoxFollowupRemarks}
+                              onChange={e => setDetoxFollowupRemarks(e.target.value)}
+                              rows={3}
+                              className="w-full max-w-2xl bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                            />
+                          </div>
+                          <p className="text-xs text-emerald-700 mt-1.5 font-medium">These follow-up details will be sent to reception so they can call the patient later.</p>
                         </div>
                       )}
                     </div>
@@ -487,7 +556,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     <h3 className="text-lg font-bold text-slate-800">Patient Consultation History</h3>
                     <p className="text-sm text-slate-500">{activePt ? `Showing history for ${activePt.name}.` : 'Showing all completed consultations.'}</p>
                     <div className="space-y-4">
-                      {consultations.filter(c => !activePt || c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date)).map(record => {
+                      {pagedHistory.map(record => {
                         const pt = patients.find(p => p.id === record.patient_id) || {};
                         const detoxDoc = doctors.find(d => d.id === record.detox_doctor_id);
                         const linkedDiet = dietCharts.find(d => d.consultation_id === record.id);
@@ -561,12 +630,39 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                           </div>
                         );
                       })}
-                      {consultations.filter(c => !activePt || c.patient_id === activePt.id).length === 0 && (
+                      {historyRecords.length === 0 && (
                         <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
                           No consultation history found yet. Complete a consultation to see it here.
                         </div>
                       )}
                     </div>
+
+                    {historyRecords.length > 0 && (
+                      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div className="text-sm text-slate-500">
+                          Showing {Math.min(historyRecords.length, historyPageSize)} of {historyRecords.length} records
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                            disabled={historyPage <= 1}
+                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage <= 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            ← Previous
+                          </button>
+                          <span className="text-sm font-medium text-slate-600">Page {historyPage} of {totalHistoryPages}</span>
+                          <button
+                            type="button"
+                            onClick={() => setHistoryPage(prev => Math.min(totalHistoryPages, prev + 1))}
+                            disabled={historyPage >= totalHistoryPages}
+                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage >= totalHistoryPages ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
+                          >
+                            Next →
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

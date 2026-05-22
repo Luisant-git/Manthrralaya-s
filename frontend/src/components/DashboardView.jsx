@@ -5,6 +5,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 export default function DashboardView({ 
   patients, 
   appointments, 
+  consultations,
   detoxSessions,
   followups,
   stayManagement,
@@ -12,11 +13,30 @@ export default function DashboardView({
   onNavigateToTab
 }) {
   
+  const todayDate = new Date().toISOString().split('T')[0];
+
   // Calculate quick metrics
   const totalPatients = patients.length;
-  const todaysAppts = appointments.filter(a => a.date === new Date().toISOString().split('T')[0]).length;
+  const todaysAppts = appointments.filter(a => a.date === todayDate).length;
   const activeStays = stayManagement.filter(s => s.status === 'Admitted').length;
   const pendingFollowups = followups.filter(f => f.status === 'Pending').length;
+
+  const todayAppointments = appointments.filter(a => a.date === todayDate).slice(0, 3);
+  const todayPatientDetails = todayAppointments.map((appt) => {
+    const patient = patients.find(p => p.id === appt.patient_id) || {};
+    const historyCount = consultations.filter(c => c.patient_id === appt.patient_id).length;
+    const historyRecords = consultations
+      .filter(c => c.patient_id === appt.patient_id)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    const latestNote = historyRecords[0]?.consultation_notes || appt.notes || 'No consultation notes yet.';
+
+    return {
+      ...appt,
+      patient,
+      historyCount,
+      latestNote
+    };
+  });
 
   // Chart data
   const revenueData = [
@@ -35,7 +55,8 @@ export default function DashboardView({
   ];
 
   // Quick Action Queue (Today's arrivals)
-  const arrivals = appointments.filter(a => a.status === 'Scheduled').slice(0, 5);
+  const arrivals = appointments.filter(a => a.status === 'Scheduled' && a.date === todayDate).slice(0, 5);
+  const checkedInArrivals = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate).slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -110,11 +131,45 @@ export default function DashboardView({
         </div>
       </div>
 
+      {/* Today's Patients Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-3 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Today’s Patient List</h2>
+              <p className="text-sm text-slate-500">Showing the first three patients scheduled for today with active history counts.</p>
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{todayPatientDetails.length} patients</span>
+          </div>
+
+          <div className="space-y-4">
+            {todayPatientDetails.map((item) => (
+              <div key={item.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{item.patient.name || 'Unknown Patient'}</div>
+                    <div className="text-xs text-slate-500">{item.patient.medical_conditions || item.appointmentType}</div>
+                    <div className="text-xs text-slate-500 mt-1">{item.time} • {item.source}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">History</div>
+                    <div className="text-2xl font-bold text-slate-900">{item.historyCount}</div>
+                  </div>
+                </div>
+                <div className="mt-4 text-sm text-slate-700">
+                  Latest note: <span className="font-medium text-slate-900">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 120)}{item.latestNote.length > 120 ? '…' : ''}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Middle Row: Charts & Arrival Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Growth Chart */}
-        <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+        {/* <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-bold text-slate-800 text-lg">Patient Growth & Detox Uptake</h3>
             <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">2026 YTD</span>
@@ -145,7 +200,49 @@ export default function DashboardView({
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </div> */}
+
+        {/* Checked-in Patients */}
+        {checkedInArrivals.length > 0 && (
+          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" /> Checked-in Patients
+              </h3>
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('consultations')}
+                className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600 hover:text-emerald-800"
+              >
+                Go to Consultations
+              </button>
+            </div>
+            <div className="space-y-4 overflow-y-auto">
+              {checkedInArrivals.map((appt) => {
+                const pt = patients.find(p => p.id === appt.patient_id) || {};
+                return (
+                  <div key={appt.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3 transition-colors hover:border-emerald-200">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="font-bold text-slate-800 text-sm block">{pt.name}</span>
+                        <span className="text-xs text-slate-500 font-medium">{appt.time} • {appt.source}</span>
+                      </div>
+                      <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md font-semibold">
+                        {appt.status}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => onNavigateToTab('consultations')}
+                      className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition-colors"
+                    >
+                      Open Consultation
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Action Queue */}
         <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col">
@@ -170,10 +267,13 @@ export default function DashboardView({
                     </span>
                   </div>
                   <button
-                    onClick={() => onCheckIn(appt.id)}
+                    onClick={() => {
+                      onCheckIn(appt.id);
+                      onNavigateToTab('consultations');
+                    }}
                     className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"
                   >
-                    <CheckCircle className="w-4 h-4" /> Check-in Patient
+                    <CheckCircle className="w-4 h-4" /> Check-in & Open Consultation
                   </button>
                 </div>
               );

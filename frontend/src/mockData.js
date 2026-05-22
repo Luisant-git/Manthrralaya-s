@@ -137,6 +137,26 @@ export const initialAppointments = [
     status: 'Scheduled',
     appointmentType: 'Detox',
     notes: 'Severe bloating issues, seeking Ayurvedic detox.'
+  },
+  {
+    id: 'A-205',
+    patient_id: 'P-101',
+    date: '2026-05-21',
+    time: '11:30 AM',
+    source: 'Phone Call',
+    status: 'Scheduled',
+    appointmentType: 'Review',
+    notes: 'Patient returned for follow-up on liver support plan.'
+  },
+  {
+    id: 'A-206',
+    patient_id: 'P-102',
+    date: '2026-05-21',
+    time: '02:00 PM',
+    source: 'WhatsApp Link',
+    status: 'Scheduled',
+    appointmentType: 'Review',
+    notes: 'Second review after starting detox diet.'
   }
 ];
 
@@ -150,9 +170,104 @@ export const initialConsultations = [
     vitals: { bp: '120/80', weight: '64 kg', pulse: '76 bpm' },
     symptoms: 'Mild abdominal discomfort, acid reflux, insomnia.',
     diagnosis: 'Gut microbiome imbalance with heavy metal exposure symptoms.',
-    notes: 'Patient responded well to initial gut rest. Needs structured colon hydrotherapy and liver flush.',
+    consultation_notes: '<p>Initial consultation completed. Recommended gentle colon hydrotherapy and liver flush protocol.</p><ul><li>Stop dairy for 7 days</li><li>Increase water intake</li><li>Start herbal detox tea</li></ul>',
+    medical_history: '<p>Longstanding IBS, irregular sleep, occasional bloating after heavy meals.</p>',
+    diet_plan_note: '<p>Start day with warm lemon water and ginger. Light vegetable broth for dinner.</p>',
+    home_care: 'Drink 2.5L warm water, avoid processed foods, and rest well.',
     detox_recommended: true,
-    detox_type: 'Colon Hydrotherapy + Liver Flush Combo'
+    detox_type: 'Colon Hydrotherapy + Liver Flush Combo',
+    detox_doctor_id: 'DOC-03',
+    detox_doctor_name: 'Dr. Priya Sharma'
+  },
+  {
+    id: 'CON-302',
+    appointment_id: 'A-201',
+    patient_id: 'P-101',
+    doctor_name: 'Dr. Julian Bashir',
+    date: '2026-05-18',
+    vitals: { bp: '118/76', weight: '72 kg', pulse: '74 bpm' },
+    symptoms: 'Fatigue, poor digestion, dry skin.',
+    diagnosis: 'Mild liver congestion and adrenal stress.',
+    consultation_notes: '<p>Reviewed patient symptoms and suggested a 10-day liver support plan.</p><ol><li>Daily morning detox water</li><li>Evening relaxation techniques</li></ol>',
+    medical_history: '<p>History of mild fatty liver and stress-related insomnia.</p>',
+    diet_plan_note: '<p>Increase green vegetables, use coconut oil, and avoid red meat for two weeks.</p>',
+    home_care: 'Follow a structured sleep schedule and avoid screen time after 9PM.',
+    detox_recommended: false,
+    detox_type: null,
+    detox_doctor_id: null,
+    detox_doctor_name: null
+  },
+  {
+    id: 'CON-303',
+    appointment_id: 'A-205',
+    patient_id: 'P-101',
+    doctor_name: 'Dr. Evelyn Carter',
+    date: '2026-05-21',
+    vitals: { bp: '119/78', weight: '71.5 kg', pulse: '72 bpm' },
+    symptoms: 'Slight nausea and intermittent headaches.',
+    diagnosis: 'Residual liver stress with early hydration imbalance.',
+    consultation_notes: '<p>Follow-up notes: patient shows improved digestion. Continue detox tea and add evening magnesium.</p>',
+    medical_history: '<p>Ongoing fatty liver management and sleep irregularity after late meals.</p>',
+    diet_plan_note: '<p>Keep meal portions light and include cucumber salad with coriander.</p>',
+    home_care: 'Continue warm water in mornings and avoid late-night meals.',
+    detox_recommended: false,
+    detox_type: null,
+    detox_doctor_id: null,
+    detox_doctor_name: null
+  },
+  {
+    id: 'CON-304',
+    appointment_id: 'A-206',
+    patient_id: 'P-102',
+    doctor_name: 'Dr. Evelyn Carter',
+    date: '2026-05-21',
+    vitals: { bp: '121/79', weight: '63 kg', pulse: '75 bpm' },
+    symptoms: 'Mild fatigue after starting detox and slight cravings.',
+    diagnosis: 'Supportive gut reset progress with mild energy dips.',
+    consultation_notes: '<p>Reviewed daily detox routine. Progress is steady. Add sliced pear for fibre.</p>',
+    medical_history: '<p>Previous IBS, acid reflux, and poor sleep consistency.</p>',
+    diet_plan_note: '<p>Add stewed pear mid-morning to support calmer digestion.</p>',
+    home_care: 'Rest early and keep hydration consistent throughout the day.',
+    detox_recommended: false,
+    detox_type: null,
+    detox_doctor_id: null,
+    detox_doctor_name: null
+  },
+  {
+    id: 'CON-305',
+    appointment_id: 'A-202',
+    patient_id: 'P-102',
+    doctor_name: 'Dr. Julian Bashir',
+    date: '2026-05-19',
+    vitals: { bp: '122/80', weight: '63.5 kg', pulse: '76 bpm' },
+    symptoms: 'Less bloating and improved appetite.',
+    diagnosis: 'Gut reset is stabilizing; continue liver flush support.',
+    consultation_notes: '<p>Patient is tolerating the protocol. Maintain herbal bitters and lemon water.</p>',
+    medical_history: '<p>Continued history of digestive sensitivity and occasional constipation.</p>',
+    diet_plan_note: '<p>Keep meals simple with steamed greens and light proteins.</p>',
+    home_care: 'Check-in on fluid intake every 3 hours.',
+    detox_recommended: false,
+    detox_type: null,
+    detox_doctor_id: null,
+    detox_doctor_name: null
+  },
+  {
+    id: 'CON-306',
+    appointment_id: 'A-203',
+    patient_id: 'P-102',
+    doctor_name: 'Dr. Priya Sharma',
+    date: '2026-05-17',
+    vitals: { bp: '123/81', weight: '64.2 kg', pulse: '77 bpm' },
+    symptoms: 'Moderate bloating and fatigue after weekend meals.',
+    diagnosis: 'Early signs of gut flora imbalance with mild toxin build-up.',
+    consultation_notes: '<p>Started detox protocol. Advised vegetable broth, herbal tea, and rest.</p>',
+    medical_history: '<p>History of IBS and sensitivity to heavy spices.</p>',
+    diet_plan_note: '<p>Begin with gentle cleansing broth and avoid processed snacks.</p>',
+    home_care: 'Monitor symptoms and avoid cold drinks during meals.',
+    detox_recommended: true,
+    detox_type: 'Gut Microbiome Reset',
+    detox_doctor_id: 'DOC-03',
+    detox_doctor_name: 'Dr. Priya Sharma'
   }
 ];
 
@@ -249,6 +364,21 @@ export const initialDietCharts = [
       dinner: 'Clear vegetable broth with boiled lentils and fresh coriander seeds'
     },
     remarks: 'Maintain a 14-hour intermittent fasting window (Dinner at 7:00 PM, Breakfast at 9:00 AM).'
+  },
+  {
+    id: 'DIET-702',
+    consultation_id: 'CON-302',
+    patient_id: 'P-101',
+    date: '2026-05-18',
+    doctor_name: 'Dr. Julian Bashir',
+    meals: {
+      morning: 'Warm water with lemon and honey',
+      breakfast: 'Oats porridge with flax seeds and almonds',
+      lunch: 'Steamed bottle gourd with quinoa',
+      evening: 'Herbal mint tea',
+      dinner: 'Light vegetable stew with cilantro'
+    },
+    remarks: 'Focus on hydration and gentle digestion. Avoid caffeine and spicy food for 7 days.'
   }
 ];
 
