@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Plus, UserPlus, Activity, FileText } from 'lucide-react';
 
-export default function PatientsView({ patients, appointments = [], onAddPatient, onSelectPatient }) {
+export default function PatientsView({ patients, appointments = [], followups = [], onAddPatient, onSelectPatient }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
@@ -10,7 +10,7 @@ export default function PatientsView({ patients, appointments = [], onAddPatient
     { id: 'all', label: 'All' },
     { id: 'consultation', label: 'Consultation', type: 'Initial consultation' },
     { id: 'detox', label: 'Detox', type: 'Detox' },
-    { id: 'followup', label: 'Follow-up', type: 'Review' }
+    { id: 'followup', label: 'Follow-up', type: 'Followup' }
   ];
 
   const getLatestAppointmentType = (patientId) => {
@@ -20,10 +20,19 @@ export default function PatientsView({ patients, appointments = [], onAddPatient
     return sorted[0]?.appointmentType || 'No appointment type';
   };
 
+  const getNextFollowup = (patientId) => {
+    return followups
+      .filter(f => f.patient_id === patientId && f.status === 'Pending')
+      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0] || null;
+  };
+
   const matchesTypeFilter = (patient) => {
     if (selectedTab === 'all') return true;
     const tab = appointmentTabs.find(t => t.id === selectedTab);
     if (!tab) return true;
+    if (tab.id === 'followup') {
+      return followups.some(f => f.patient_id === patient.id && f.status === 'Pending');
+    }
     return appointments.some(appt => appt.patient_id === patient.id && appt.appointmentType === tab.type);
   };
 
@@ -295,6 +304,7 @@ export default function PatientsView({ patients, appointments = [], onAddPatient
                   <th className="py-3 px-4">Age</th>
                   <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4">Address</th>
+                  <th className="py-3 px-4">Next Follow-up Date</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -311,6 +321,9 @@ export default function PatientsView({ patients, appointments = [], onAddPatient
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium max-w-[150px] truncate" title={pt.address}>{pt.address || 'n/a'}</td>
+                    <td className="py-3 px-4 text-slate-600 font-medium max-w-[200px] truncate">
+                      {getNextFollowup(pt.id)?.scheduled_date || 'No follow-up'}
+                    </td>
                     <td className="py-3 px-4 text-right">
                       <button 
                         onClick={() => onSelectPatient(pt)}

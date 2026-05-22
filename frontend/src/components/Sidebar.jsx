@@ -9,7 +9,8 @@ import {
   MessageSquareCode,
   FileBarChart,
   Users,
-  Star
+  Star,
+  ClipboardList
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
@@ -21,6 +22,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
     { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin'] },
     { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin'] },
     { id: 'consultations', name: 'Consultations', icon: Stethoscope, roles: ['admin', 'doctor'] },
+    { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin'] },
     { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor'] },
     { id: 'stay', name: 'One-Day Stay', icon: BedDouble, roles: ['admin', 'doctor'] },
     { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin'] },

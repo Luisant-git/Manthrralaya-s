@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   UserPlus, 
   Clock, 
@@ -14,7 +14,9 @@ import {
   MessageSquare,
   Sparkles,
   Search,
-  Filter
+  Filter,
+  User,
+  RefreshCw
 } from 'lucide-react';
 
 export default function ReceptionistView({
@@ -53,6 +55,72 @@ export default function ReceptionistView({
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
+  
+  // New states for patient auto-fetch
+  const [isFetchingPatient, setIsFetchingPatient] = useState(false);
+  const [foundPatient, setFoundPatient] = useState(null);
+  const [showPatientFoundAlert, setShowPatientFoundAlert] = useState(false);
+  const [phoneDebounce, setPhoneDebounce] = useState(null);
+
+  // Function to fetch patient by phone number
+  const fetchPatientByPhone = (phoneNumber) => {
+    if (!phoneNumber || phoneNumber.trim() === '') {
+      setFoundPatient(null);
+      return;
+    }
+
+    setIsFetchingPatient(true);
+    
+    // Simulate API call delay (in real scenario, this would be an API call)
+    setTimeout(() => {
+      const existingPatient = patients.find(p => p.phone === phoneNumber);
+      
+      if (existingPatient) {
+        setFoundPatient(existingPatient);
+        setShowPatientFoundAlert(true);
+        
+        // Auto-fill the form with patient data
+        setFormData(prev => ({
+          ...prev,
+          name: existingPatient.name,
+          age: existingPatient.age.toString(),
+          location: existingPatient.location || '',
+          address: existingPatient.address || '',
+          whatsapp: existingPatient.whatsapp || existingPatient.phone,
+          phoneAsWhatsapp: !existingPatient.whatsapp || existingPatient.whatsapp === existingPatient.phone
+        }));
+        
+        // Hide alert after 5 seconds
+        setTimeout(() => {
+          setShowPatientFoundAlert(false);
+        }, 5000);
+      } else {
+        setFoundPatient(null);
+      }
+      setIsFetchingPatient(false);
+    }, 500);
+  };
+
+  // Debounced phone number search
+  useEffect(() => {
+    if (phoneDebounce) {
+      clearTimeout(phoneDebounce);
+    }
+    
+    const timer = setTimeout(() => {
+      if (formData.phone && formData.phone.trim().length >= 10) {
+        fetchPatientByPhone(formData.phone);
+      } else {
+        setFoundPatient(null);
+      }
+    }, 800);
+    
+    setPhoneDebounce(timer);
+    
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [formData.phone]);
 
   const handlePhoneChange = (e) => {
     const val = e.target.value;
@@ -73,8 +141,11 @@ export default function ReceptionistView({
   };
 
   const getOrCreatePatient = (data) => {
+    // First check if patient already exists
     let patient = patients.find(p => p.phone === data.phone);
+    
     if (!patient) {
+      // Create new patient only if not exists
       patient = {
         id: `P-${100 + patients.length + 1}`,
         name: data.name,
@@ -90,6 +161,34 @@ export default function ReceptionistView({
         registered_at: new Date().toISOString().split('T')[0]
       };
       setPatients(prev => [...prev, patient]);
+    } else {
+      // Update existing patient info if needed
+      const updatedPatient = { ...patient };
+      let needsUpdate = false;
+      
+      if (data.name && data.name !== patient.name) {
+        updatedPatient.name = data.name;
+        needsUpdate = true;
+      }
+      if (data.age && parseInt(data.age) !== patient.age) {
+        updatedPatient.age = parseInt(data.age);
+        needsUpdate = true;
+      }
+      if (data.location && data.location !== patient.location) {
+        updatedPatient.location = data.location;
+        needsUpdate = true;
+      }
+      if (data.address && data.address !== patient.address) {
+        updatedPatient.address = data.address;
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
+        setPatients(prev => prev.map(p => 
+          p.id === patient.id ? updatedPatient : p
+        ));
+        patient = updatedPatient;
+      }
     }
     return patient;
   };
@@ -167,6 +266,7 @@ export default function ReceptionistView({
       session: 'FN',
       notes: ''
     });
+    setFoundPatient(null);
   };
 
   const handleModalBookConfirm = (e) => {
@@ -250,7 +350,6 @@ export default function ReceptionistView({
   const activeBookings = appointments.filter(a => a.status !== 'Waiting');
   const waitingList = appointments.filter(a => a.status === 'Waiting');
 
-  // Filter and search active bookings
   const filteredActiveBookings = activeBookings.filter(appt => {
     const pt = patients.find(p => p.id === appt.patient_id) || {};
     const matchesSearch = 
@@ -294,6 +393,24 @@ export default function ReceptionistView({
     return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || colors['Initial consultation']}`;
   };
 
+  const clearForm = () => {
+    setFormData({
+      name: '',
+      age: '',
+      location: '',
+      address: '',
+      phone: '',
+      phoneAsWhatsapp: true,
+      whatsapp: '',
+      doctor_id: '',
+      date: new Date().toISOString().split('T')[0],
+      appointmentType: 'Initial consultation',
+      session: 'FN',
+      notes: ''
+    });
+    setFoundPatient(null);
+  };
+
   return (
     <div className="space-y-6 text-left">
       
@@ -314,26 +431,68 @@ export default function ReceptionistView({
         
         {/* Left Column: Interactive Intake Form */}
         <div className="lg:col-span-5 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit space-y-6">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <UserPlus className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-lg font-extrabold text-slate-800 font-outfit">Patient Intake & Booking</h2>
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-emerald-600" />
+              <h2 className="text-lg font-extrabold text-slate-800 font-outfit">Patient Intake & Booking</h2>
+            </div>
+            <button
+              onClick={clearForm}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+              title="Clear Form"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
           </div>
+
+          {/* Alert for existing patient */}
+          {showPatientFoundAlert && foundPatient && (
+            <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-lg animate-fadeIn">
+              <div className="flex items-start gap-3">
+                <User className="w-5 h-5 text-emerald-600 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-emerald-800 mb-1">
+                    Returning Patient Found!
+                  </p>
+                  <p className="text-xs text-emerald-700">
+                    Patient records for <strong>{foundPatient.name}</strong> have been auto-filled. 
+                    You can update any information if needed.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowPatientFoundAlert(false)}
+                  className="text-emerald-600 hover:text-emerald-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-4 text-left">
             
-            {/* Patient Name */}
+            {/* Patient Name with loading indicator */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                 Patient Name <span className="text-rose-500">*</span>
               </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Jessica Smith"
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Jessica Smith"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  className={`w-full bg-slate-50 border rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-1 transition-all font-medium ${
+                    foundPatient ? 'border-emerald-400 focus:border-emerald-500 focus:ring-emerald-500' : 'border-slate-200 focus:border-emerald-500 focus:ring-emerald-500'
+                  }`}
+                />
+                {foundPatient && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <Check className="w-4 h-4 text-emerald-500" />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -380,7 +539,7 @@ export default function ReceptionistView({
               />
             </div>
 
-            {/* Phone No */}
+            {/* Phone No with search indicator */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                 Phone Number <span className="text-rose-500">*</span>
@@ -393,9 +552,28 @@ export default function ReceptionistView({
                   placeholder="+91 XXXXX XXXXX"
                   value={formData.phone}
                   onChange={handlePhoneChange}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                  className={`w-full bg-slate-50 border rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-1 transition-all font-medium ${
+                    isFetchingPatient ? 'border-amber-400 focus:border-amber-500' : 
+                    foundPatient ? 'border-emerald-400 focus:border-emerald-500' : 'border-slate-200 focus:border-emerald-500'
+                  }`}
                 />
+                {isFetchingPatient && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-500 border-t-transparent"></div>
+                  </div>
+                )}
+                {!isFetchingPatient && foundPatient && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <Check className="w-4 h-4 text-emerald-500" />
+                  </div>
+                )}
               </div>
+              {foundPatient && (
+                <p className="text-xs text-emerald-600 mt-1 flex items-center gap-1">
+                  <UserCheck className="w-3 h-3" />
+                  Existing patient record loaded
+                </p>
+              )}
             </div>
 
             {/* Checkbox: click phone as whatsapp */}
@@ -866,6 +1044,23 @@ export default function ReceptionistView({
         </div>
       )}
 
+      {/* Add animation styles */}
+      <style jsx>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fadeIn {
+          animation: fadeIn 0.3s ease-out;
+        }
+        .animate-scaleIn {
+          animation: scaleIn 0.2s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

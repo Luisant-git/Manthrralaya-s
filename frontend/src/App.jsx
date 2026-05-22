@@ -10,6 +10,7 @@ import DetoxStayView from './components/DetoxStayView';
 import WhatsAppHubView from './components/WhatsAppHubView';
 import ReportsView from './components/ReportsView';
 import ReviewsView from './components/ReviewsView';
+import MyPatientRecords from './components/MyPatientRecords';
 import PatientTimeline from './components/PatientTimeline';
 import DocumentPreview from './components/DocumentPreview';
 import LoginView from './components/LoginView';
@@ -133,14 +134,27 @@ export default function App() {
 
     if (newCons.detox_recommended) {
       const ptObj = patients.find(p => p.id === newCons.patient_id) || {};
+      const followupDateString = newCons.followup_date || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
       const newDtx = {
         id: `DTX-${400 + detoxSessions.length + 1}`, patient_id: newCons.patient_id, consultation_id: newCons.id,
-        scheduled_date: '2026-05-21', type: newCons.detox_type, status: 'Scheduled', cost: 7500, technician: 'Nolan Ross', notes: 'Recommended during consultation ' + newCons.id
+        scheduled_date: followupDateString, type: newCons.detox_type, status: 'Scheduled', cost: 7500, technician: 'Nolan Ross', notes: newCons.detox_procedure || `Recommended during consultation ${newCons.id}`
       };
       setDetoxSessions(prev => [...prev, newDtx]);
+
+      const newFollowup = {
+        id: `FUP-${800 + followups.length + 1}`,
+        patient_id: ptObj.id,
+        scheduled_date: followupDateString,
+        notes: newCons.followup_remarks || `Follow up with receptionist to confirm detox session with ${newCons.detox_doctor_name || 'the assigned doctor'} and prepare the patient for ${newCons.detox_type}.`,
+        status: 'Pending',
+        created_at: new Date().toISOString().split('T')[0]
+      };
+      setFollowups(prev => [...prev, newFollowup]);
+
       const waLog = {
         id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-        type: 'Session Reminder', message_text: `Hello ${ptObj.name}, your recommended ${newCons.detox_type} is scheduled for Tomorrow. Please begin fasting. - Manthrralaya's Wellness`,
+        type: 'Session Reminder', message_text: `Hello ${ptObj.name}, your recommended ${newCons.detox_type} is scheduled for ${followupDateString}. Please begin fasting. - Manthrralaya's Wellness`,
         sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Sent', template_name: 'detox_prep_reminder'
       };
       setWhatsappLogs(prev => [...prev, waLog]);
@@ -229,15 +243,17 @@ export default function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView patients={patients} appointments={appointments} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} />;
+        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} />;
       case 'patients':
-        return <PatientsView appointments={appointments} patients={patients} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
+        return <PatientsView appointments={appointments} patients={patients} followups={followups} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':
         return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment} />;
       case 'consultations':
         return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} />;
+      case 'my-patient-records':
+        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} />;
       case 'detox':
       case 'stay':
         return <DetoxStayView detoxSessions={detoxSessions} stayManagement={stayManagement} patients={patients} onScheduleDetox={handleScheduleDetox} onUpdateDetoxStatus={handleUpdateDetoxStatus} onAdmitPatient={handleAdmitPatient} onUpdateNursingChecklist={handleUpdateNursingChecklist} onDischargePatient={handleDischargePatient} />;

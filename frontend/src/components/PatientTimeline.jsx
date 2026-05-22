@@ -33,16 +33,22 @@ export default function PatientTimeline({
   });
 
   consultations.filter(c => c.patient_id === patient.id).forEach(c => {
+    const detoxDetail = c.detox_recommended
+      ? `${c.detox_type || 'Detox recommended'} with ${c.detox_doctor_name || 'assigned doctor'}`
+      : 'No detox recommended';
+
     timelineEvents.push({
-      date: c.date, time: 'Consult Time', type: 'consultation', title: 'Doctor Consultation & Vitals',
-      icon: Stethoscope, color: 'bg-indigo-500', description: `BP: ${c.vitals?.bp} | Weight: ${c.vitals?.weight}. Diagnosis: ${c.diagnosis}. Recommended Detox: ${c.detox_recommended ? c.detox_type : 'No'}`
+      date: c.date, time: 'Consult Time', type: 'consultation', title: 'Doctor Consultation',
+      icon: Stethoscope, color: 'bg-indigo-500',
+      description: `Diagnosis: ${c.diagnosis || 'Not yet entered'}. ${detoxDetail}`
     });
   });
 
   detoxSessions.filter(d => d.patient_id === patient.id).forEach(d => {
     timelineEvents.push({
       date: d.scheduled_date, time: 'Session Date', type: 'detox', title: `Detox Procedure scheduled`,
-      icon: Activity, color: 'bg-cyan-500', description: `Therapy Type: ${d.type}. Technician: ${d.technician}. Status: ${d.status}`
+      icon: Activity, color: 'bg-cyan-500',
+      description: `Scheduled on ${d.scheduled_date}. Therapy: ${d.type}. Technician: ${d.technician}. Status: ${d.status}. Notes: ${d.notes || 'No additional notes.'}`
     });
   });
 
