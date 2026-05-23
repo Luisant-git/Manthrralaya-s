@@ -36,10 +36,12 @@ export default function App() {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeRole, setActiveRole] = useState(''); // 'receptionist', 'doctor', 'admin'
+  const [currentUser, setCurrentUser] = useState('');
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const handleLogin = (role) => {
+  const handleLogin = ({ role, username }) => {
     setActiveRole(role);
+    setCurrentUser(username);
     setIsAuthenticated(true);
     // Route to appropriate starting tab
     if (role === 'doctor') setActiveTab('consultations');
@@ -50,6 +52,7 @@ export default function App() {
   const handleLogout = () => {
     setIsAuthenticated(false);
     setActiveRole('');
+    setCurrentUser('');
     setActiveTab('dashboard');
   };
 
@@ -114,16 +117,34 @@ export default function App() {
     setWhatsappLogs(prev => [...prev, waLog]);
   };
 
-  const handleCheckIn = (apptId) => {
-    setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Checked-in' } : a)));
+  const isDetoxAppointment = (appt) => {
+    return String(appt?.appointmentType || '').toLowerCase().includes('detox');
+  };
+
+  const handleCheckIn = (apptId, navigate = false, doctorInitiated = false) => {
     const appt = appointments.find(a => a.id === apptId);
+    if (!appt) return;
+
+    if (doctorInitiated) {
+      setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Checked-in' } : a)));
+    } else {
+      setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Arrived' } : a)));
+    }
+
     const pt = patients.find(p => p.id === appt.patient_id) || {};
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: pt.id, patient_name: pt.name, phone: pt.phone,
-      type: 'Clinic Alert', message_text: `Hello ${pt.name}, you have checked in at the clinic lobby. Please take a seat, Dr. Evelyn Carter will see you shortly. - Manthrralaya's Wellness`,
-      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Read', template_name: 'checkin_alert'
+      type: doctorInitiated ? 'Doctor Alert' : 'Clinic Alert',
+      message_text: doctorInitiated
+        ? `Hello ${pt.name}, your consultation has been started by the doctor. Please proceed to the consultation room.`
+        : `Hello ${pt.name}, you have checked in at the clinic lobby. Please take a seat while the doctor prepares to see you.`,
+      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Read', template_name: doctorInitiated ? 'doctor_checkin' : 'checkin_alert'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
+
+    if (navigate && doctorInitiated) {
+      setActiveTab(isDetoxAppointment(appt) ? 'detox' : 'consultations');
+    }
   };
 
   const handleCancelAppointment = (apptId) => setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Cancelled' } : a)));
@@ -185,6 +206,10 @@ export default function App() {
   };
 
   const handleUpdateDetoxStatus = (sessionId, newStatus) => setDetoxSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, status: newStatus } : s)));
+
+  const handleUpdateDetoxSession = (sessionId, updates) => {
+    setDetoxSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, ...updates } : s)));
+  };
 
   const handleAdmitPatient = (newStay, roomId) => {
     setStayManagement(prev => [...prev, newStay]);
@@ -256,7 +281,22 @@ export default function App() {
         return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} />;
       case 'detox':
       case 'stay':
-        return <DetoxStayView detoxSessions={detoxSessions} stayManagement={stayManagement} patients={patients} onScheduleDetox={handleScheduleDetox} onUpdateDetoxStatus={handleUpdateDetoxStatus} onAdmitPatient={handleAdmitPatient} onUpdateNursingChecklist={handleUpdateNursingChecklist} onDischargePatient={handleDischargePatient} />;
+        return <DetoxStayView
+          appointments={appointments}
+          patients={patients}
+          doctors={doctors}
+          consultations={consultations}
+          detoxSessions={detoxSessions}
+          stayManagement={stayManagement}
+          onAddConsultation={handleAddConsultation}
+          onScheduleDetox={handleScheduleDetox}
+          onUpdateDetoxStatus={handleUpdateDetoxStatus}
+          onUpdateDetoxSession={handleUpdateDetoxSession}
+          onAdmitPatient={handleAdmitPatient}
+          onUpdateNursingChecklist={handleUpdateNursingChecklist}
+          onDischargePatient={handleDischargePatient}
+          activeRole={activeRole}
+        />;
       case 'whatsapp-hub':
         return <WhatsAppHubView whatsappLogs={whatsappLogs} patients={patients} onSendCustomMessage={handleSendCustomMessage} />;
       case 'reports':
@@ -275,6 +315,7 @@ export default function App() {
             doctors={doctors}
             whatsappLogs={whatsappLogs}
             setWhatsappLogs={setWhatsappLogs}
+            onCheckIn={handleCheckIn}
           />
         );
       case 'doctor-master':

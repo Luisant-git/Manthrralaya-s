@@ -46,12 +46,7 @@ export default function Header({
       {/* Right Controls */}
       <div className="flex items-center space-x-6">
         {/* API Connected Status Badge */}
-        <div className="hidden lg:flex items-center space-x-2 bg-slate-50 border border-slate-200 rounded-full px-4 py-1.5">
-          <span className={`w-2 h-2 rounded-full ${whatsappApiConnected ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-          <span className="text-xs text-slate-600 font-medium flex items-center gap-1.5">
-            <MessageSquare className="w-4 h-4 text-emerald-600" /> WhatsApp API
-          </span>
-        </div>
+       
 
         {/* Notifications Icon */}
         <button className="relative text-slate-500 hover:text-emerald-600 transition-colors">

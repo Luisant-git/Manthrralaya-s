@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon } from 'lucide-react';
+import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus } from 'lucide-react';
 
-export default function MyPatientRecords({
+export default function UnifiedPatientRecords({
   patients = [],
   appointments = [],
   consultations = [],
@@ -10,7 +10,8 @@ export default function MyPatientRecords({
   prescriptions = [],
   dietCharts = [],
   followups = [],
-  reviews = []
+  reviews = [],
+  onAddPatient
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
@@ -21,6 +22,19 @@ export default function MyPatientRecords({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   const historyItemsPerPage = 1;
+
+  // New Patient Form State
+  const [isAdding, setIsAdding] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    age: '',
+    location: '',
+    address: '',
+    phone: '',
+    phoneAsWhatsapp: true,
+    whatsapp: '',
+    medical_conditions: ''
+  });
 
   const appointmentTabs = [
     { id: 'all', label: 'All' },
@@ -90,6 +104,12 @@ export default function MyPatientRecords({
         .filter(c => c.patient_id === selectedPatient.id)
         .sort((a, b) => new Date(b.date) - new Date(a.date))
     : [];
+
+  const patientDetoxSessions = selectedPatient
+    ? detoxSessions
+        .filter(d => d.patient_id === selectedPatient.id)
+        .sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))
+    : [];
   
   const totalHistoryPages = Math.ceil(patientConsultations.length / historyItemsPerPage);
   const historyStartIndex = (historyPage - 1) * historyItemsPerPage;
@@ -99,6 +119,54 @@ export default function MyPatientRecords({
     if (page >= 1 && page <= totalHistoryPages) {
       setHistoryPage(page);
     }
+  };
+
+  const handlePhoneChange = (e) => {
+    const val = e.target.value;
+    setFormData(prev => ({
+      ...prev,
+      phone: val,
+      whatsapp: prev.phoneAsWhatsapp ? val : prev.whatsapp
+    }));
+  };
+
+  const handleCheckboxChange = (e) => {
+    const checked = e.target.checked;
+    setFormData(prev => ({
+      ...prev,
+      phoneAsWhatsapp: checked,
+      whatsapp: checked ? prev.phone : ''
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const newPt = {
+      id: `P-${100 + patients.length + 1}`,
+      name: formData.name,
+      age: parseInt(formData.age) || 30,
+      gender: 'Other',
+      blood_group: 'O+',
+      phone: formData.phone,
+      whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
+      location: formData.location,
+      address: formData.address || 'n/a',
+      medical_conditions: formData.medical_conditions || 'Registered via Intake form',
+      email: 'n/a',
+      registered_at: new Date().toISOString().split('T')[0]
+    };
+    if (onAddPatient) onAddPatient(newPt);
+    setIsAdding(false);
+    setFormData({
+      name: '',
+      age: '',
+      location: '',
+      address: '',
+      phone: '',
+      phoneAsWhatsapp: true,
+      whatsapp: '',
+      medical_conditions: ''
+    });
   };
 
   return (
@@ -169,151 +237,285 @@ export default function MyPatientRecords({
         }
       `}</style>
 
+      {/* Header - Directory Style */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">My Patient Records</h1>
-          <p className="text-slate-500 text-sm mt-1">Browse patients and click View to see consultation history.</p>
+          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Records</h1>
+          <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation histor.</p>
         </div>
+       
       </div>
 
-      <div className="bg-white border border-slate-200 p-5 rounded-3xl shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto] mb-4">
-          <div className="relative max-w-xl">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search patients by name, ID, phone or email..."
-              value={searchTerm}
-              onChange={e => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-            />
+      {isAdding ? (
+        <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm text-left max-w-2xl mx-auto">
+          <div className="flex items-center space-x-2 border-b border-slate-100 pb-4 mb-6">
+            <UserPlus className="w-5 h-5 text-emerald-600" />
+            <h2 className="text-lg font-bold text-slate-800">New Patient Registration</h2>
           </div>
-          <div className="flex flex-wrap gap-2 items-center">
-            {appointmentTabs.map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setSelectedTab(tab.id);
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-2 rounded-full text-sm font-semibold transition ${selectedTab === tab.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                Patient Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Jessica Smith"
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+              />
+            </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] tracking-wider">
-                <th className="py-3 px-4">Patient</th>
-                <th className="py-3 px-4">Latest Appointment</th>
-                <th className="py-3 px-4">Contact</th>
-                <th className="py-3 px-4">Follow-up</th>
-                <th className="py-3 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {paginatedPatients.map(pt => {
-                const latestType = getLatestAppointmentType(pt.id);
-                const nextFollowup = getNextFollowup(pt.id);
-                return (
-                  <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
-                    <td className="py-4 px-4 align-top">
-                      <div className="font-semibold text-slate-900">{pt.name}</div>
-                      <div className="text-xs text-slate-500 mt-1">{pt.id}</div>
-                    </td>
-                    <td className="py-4 px-4 align-top">
-                      <span className="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">{latestType}</span>
-                    </td>
-                    <td className="py-4 px-4 align-top">
-                      <div className="text-slate-600">{pt.phone || 'No phone'}</div>
-                      <div className="text-xs text-slate-500 mt-1">{pt.email || 'No email'}</div>
-                    </td>
-                    <td className="py-4 px-4 align-top">
-                      {nextFollowup ? (
-                        <div className="text-slate-600">{nextFollowup.scheduled_date}</div>
-                      ) : (
-                        <span className="text-xs text-slate-400">None</span>
-                      )}
-                    </td>
-                    <td className="py-4 px-4 align-top text-right">
-                      <button
-                        type="button"
-                        onClick={() => openModal(pt)}
-                        className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-emerald-600 text-white hover:bg-emerald-700"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {filteredPatients.length === 0 ? (
-          <div className="py-12 text-center text-slate-500">No patient records match your search.</div>
-        ) : (
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
-            <p className="text-sm text-slate-500">
-              Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredPatients.length)}</span> of <span className="font-semibold text-slate-800">{filteredPatients.length}</span> patients
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              
-              <div className="flex items-center">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => goToPage(pageNum)}
-                      className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${currentPage === pageNum ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                  Age <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  required
+                  placeholder="e.g. 29"
+                  value={formData.age}
+                  onChange={e => setFormData({ ...formData, age: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                  Location <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Indiranagar"
+                  value={formData.location}
+                  onChange={e => setFormData({ ...formData, location: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                />
+              </div>
+            </div>
 
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Address</label>
+              <input
+                type="text"
+                placeholder="Full residential address (optional)"
+                value={formData.address}
+                onChange={e => setFormData({ ...formData, address: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                Phone Number <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="tel"
+                required
+                placeholder="+91 XXXXX XXXXX"
+                value={formData.phone}
+                onChange={handlePhoneChange}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2.5 py-1">
+              <input
+                id="phoneAsWhatsappIntake"
+                type="checkbox"
+                checked={formData.phoneAsWhatsapp}
+                onChange={handleCheckboxChange}
+                className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+              />
+              <label htmlFor="phoneAsWhatsappIntake" className="text-xs text-slate-600 font-bold select-none cursor-pointer">
+                Use Phone number as WhatsApp number
+              </label>
+            </div>
+
+            {!formData.phoneAsWhatsapp && (
+              <div className="animate-fadeIn">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                  WhatsApp Number <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required={!formData.phoneAsWhatsapp}
+                  placeholder="WhatsApp No with country code"
+                  value={formData.whatsapp}
+                  onChange={e => setFormData({ ...formData, whatsapp: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Primary Medical Conditions</label>
+              <textarea
+                rows="2"
+                placeholder="Patient symptoms, specific requests, or details..."
+                value={formData.medical_conditions}
+                onChange={e => setFormData({ ...formData, medical_conditions: e.target.value })}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none transition-all font-medium"
+              ></textarea>
+            </div>
+
+            <div className="flex justify-end pt-2">
               <button
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                type="submit"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition-colors shadow-sm"
               >
-                <ChevronRight className="w-5 h-5" />
+                Register Intake Record
               </button>
             </div>
+          </form>
+        </div>
+      ) : (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full">
+          <div className="px-4 pt-4 pb-2 bg-slate-50 border-b border-slate-200">
+            <div className="flex flex-wrap gap-2">
+              {appointmentTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedTab(tab.id);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition ${selectedTab === tab.id ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Modal with larger fonts and neat look */}
+          {/* Search Bar - Directory Style */}
+          <div className="p-4 border-b border-slate-200 bg-slate-50">
+            <div className="relative max-w-md">
+              <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search patients by name, ID, phone or email..."
+                value={searchTerm}
+                onChange={e => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          {/* Table - Directory Style */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] tracking-wider">
+                  <th className="py-3 px-4">Patient</th>
+                  <th className="py-3 px-4">Latest Appointment</th>
+                  <th className="py-3 px-4">Contact</th>
+                  <th className="py-3 px-4">Follow-up</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedPatients.map(pt => {
+                  const latestType = getLatestAppointmentType(pt.id);
+                  const nextFollowup = getNextFollowup(pt.id);
+                  return (
+                    <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
+                      <td className="py-4 px-4 align-top">
+                        <div className="font-semibold text-slate-900">{pt.name}</div>
+                        <div className="text-xs text-slate-500 mt-1">{pt.id}</div>
+                      </td>
+                      <td className="py-4 px-4 align-top">
+                        <span className="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">{latestType}</span>
+                      </td>
+                      <td className="py-4 px-4 align-top">
+                        <div className="text-slate-600">{pt.phone || 'No phone'}</div>
+                        <div className="text-xs text-slate-500 mt-1">{pt.email || 'No email'}</div>
+                      </td>
+                      <td className="py-4 px-4 align-top">
+                        {nextFollowup ? (
+                          <div className="text-slate-600">{nextFollowup.scheduled_date}</div>
+                        ) : (
+                          <span className="text-xs text-slate-400">None</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 align-top text-right">
+                        <button
+                          type="button"
+                          onClick={() => openModal(pt)}
+                          className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-emerald-600 text-white hover:bg-emerald-700"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {filteredPatients.length === 0 ? (
+            <div className="py-12 text-center text-slate-500">No patient records match your search.</div>
+          ) : (
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
+              <p className="text-sm text-slate-500">
+                Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredPatients.length)}</span> of <span className="font-semibold text-slate-800">{filteredPatients.length}</span> patients
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                
+                <div className="flex items-center">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => goToPage(pageNum)}
+                        className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${currentPage === pageNum ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal - Consultation History */}
       {isModalOpen && selectedPatient && (
         <div className="fixed inset-0 z-50 overflow-y-auto" onClick={closeModal}>
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={closeModal}></div>
@@ -323,7 +525,7 @@ export default function MyPatientRecords({
               className="relative bg-white rounded-2xl shadow-xl max-w-3xl w-full modal-animate overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Fixed Header - Larger */}
+              {/* Fixed Header */}
               <div className="sticky top-0 z-10">
                 <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -340,7 +542,7 @@ export default function MyPatientRecords({
                   </button>
                 </div>
 
-                {/* Patient Quick Info - Larger */}
+                {/* Patient Quick Info */}
                 <div className="bg-emerald-50 px-6 py-3 border-b border-emerald-100">
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-6">
@@ -376,7 +578,6 @@ export default function MyPatientRecords({
 
                   {currentConsultation ? (
                     <div className="space-y-5">
-                      {/* Doctor & Date - Larger */}
                       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -395,7 +596,6 @@ export default function MyPatientRecords({
                         </div>
                       </div>
 
-                      {/* Consultation Notes */}
                       {currentConsultation.consultation_notes && currentConsultation.consultation_notes !== '<br>' && (
                         <div>
                           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -408,7 +608,6 @@ export default function MyPatientRecords({
                         </div>
                       )}
 
-                      {/* Medical History */}
                       {currentConsultation.medical_history && currentConsultation.medical_history !== '<br>' && (
                         <div>
                           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -421,7 +620,6 @@ export default function MyPatientRecords({
                         </div>
                       )}
 
-                      {/* Diet Plan Note */}
                       {currentConsultation.diet_plan_note && currentConsultation.diet_plan_note !== '<br>' && (
                         <div>
                           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -434,7 +632,6 @@ export default function MyPatientRecords({
                         </div>
                       )}
 
-                      {/* Detox Procedure */}
                       {currentConsultation.detox_procedure && currentConsultation.detox_procedure !== '<br>' && (
                         <div>
                           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -447,7 +644,6 @@ export default function MyPatientRecords({
                         </div>
                       )}
 
-                      {/* Home Care */}
                       {currentConsultation.home_care && (
                         <div>
                           <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
@@ -459,7 +655,6 @@ export default function MyPatientRecords({
                         </div>
                       )}
 
-                      {/* Detox Recommendation */}
                       {currentConsultation.detox_recommended && (
                         <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
                           <div className="flex items-center gap-2 mb-3">
@@ -467,7 +662,6 @@ export default function MyPatientRecords({
                             <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
                           </div>
                           <div className="space-y-2 text-sm text-slate-700">
-                            <div><span className="font-semibold text-slate-800">Type:</span> {currentConsultation.detox_type}</div>
                             <div><span className="font-semibold text-slate-800">Doctor:</span> {currentConsultation.detox_doctor_name || 'Not assigned'}</div>
                             {currentConsultation.followup_date && (
                               <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {currentConsultation.followup_date}</div>
@@ -479,7 +673,36 @@ export default function MyPatientRecords({
                         </div>
                       )}
 
-                      {/* Linked Diet Chart */}
+                      {patientDetoxSessions.length > 0 && (
+                        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <div>
+                              <h4 className="text-sm font-bold text-slate-800">Detox Session History</h4>
+                              <p className="text-xs text-slate-500">Previous detox session notes for this patient.</p>
+                            </div>
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{patientDetoxSessions.length} sessions</span>
+                          </div>
+                          <div className="space-y-3">
+                            {patientDetoxSessions.map(session => (
+                              <div key={session.id} className="rounded-2xl bg-white border border-slate-200 p-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="font-semibold text-slate-800">{session.type}</div>
+                                    <div className="text-xs text-slate-500 mt-1">{session.scheduled_date}</div>
+                                  </div>
+                                  <span className={`text-[10px] uppercase tracking-[0.18em] font-semibold px-2 py-1 rounded-full ${session.status === 'Completed' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : session.status === 'In-Progress' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                                    {session.status}
+                                  </span>
+                                </div>
+                                {session.notes && (
+                                  <p className="mt-3 text-sm text-slate-600 line-clamp-3">{session.notes}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {(() => {
                         const linkedDiet = dietCharts.find(d => d.consultation_id === currentConsultation.id);
                         return linkedDiet && (
@@ -509,7 +732,6 @@ export default function MyPatientRecords({
                     </div>
                   )}
 
-                  {/* Pagination */}
                   {totalHistoryPages > 1 && (
                     <div className="mt-6 pt-4 border-t border-slate-100">
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">

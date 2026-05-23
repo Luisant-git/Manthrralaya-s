@@ -1,3 +1,5 @@
+// mockData.js
+
 export const roomsList = [
   { id: '101', name: 'Premium Suite 101', type: 'Suite', status: 'Available', charge: 5000 },
   { id: '102', name: 'Deluxe Room 102', type: 'Deluxe', status: 'Occupied', charge: 3500 },
@@ -7,6 +9,8 @@ export const roomsList = [
   { id: '203', name: 'Standard Room 203', type: 'Standard', status: 'Available', charge: 2000 }
 ];
 
+const todayDate = new Date().toISOString().split('T')[0];
+
 export const initialPatients = [
   {
     id: 'P-101',
@@ -14,10 +18,11 @@ export const initialPatients = [
     phone: '+91 98765 43210',
     age: 42,
     gender: 'Male',
-    blood_group: 'O+ ',
+    blood_group: 'O+',
     medical_conditions: 'Chronic Fatigue, Mild Fatty Liver',
     email: 'john.doe@example.com',
-    address: '123, Green Avenue, Cityville',
+    location: 'Salem',
+    address: '123, Green Avenue, Salem',
     registered_at: '2026-05-10'
   },
   {
@@ -29,7 +34,8 @@ export const initialPatients = [
     blood_group: 'A+',
     medical_conditions: 'Metabolic Dysfunction, Anxiety, IBS',
     email: 'sarah.j@example.com',
-    address: '45B, Skyline Towers, Metro City',
+    location: 'Erode',
+    address: '45B, Skyline Towers, Erode',
     registered_at: '2026-05-12'
   },
   {
@@ -41,7 +47,8 @@ export const initialPatients = [
     blood_group: 'B+',
     medical_conditions: 'PCOS, Migraine, Gut Dysbiosis',
     email: 'priya.sharma@example.com',
-    address: 'Flat 402, Lotus Residency, Bangalore',
+    location: 'Coimbatore',
+    address: 'Flat 402, Lotus Residency, Coimbatore',
     registered_at: '2026-05-15'
   },
   {
@@ -53,8 +60,49 @@ export const initialPatients = [
     blood_group: 'AB+',
     medical_conditions: 'Hypertension, Chronic Constipation, Toxemia',
     email: 'raj.patel@example.com',
-    address: '78, Orchid Gardens, Ahmedabad',
+    location: 'Trichy',
+    address: '78, Orchid Gardens, Trichy',
     registered_at: '2026-05-18'
+  },
+  // New patients added for today's detox appointments
+  {
+    id: 'P-105',
+    name: 'Michael Chen',
+    phone: '+91 99887 66554',
+    age: 48,
+    gender: 'Male',
+    blood_group: 'A+',
+    medical_conditions: 'Chronic fatigue, liver congestion, high cholesterol',
+    email: 'michael.chen@example.com',
+    location: 'Chennai',
+    address: '15, Green Meadows, Chennai',
+    registered_at: todayDate
+  },
+  {
+    id: 'P-106',
+    name: 'Deepa Nair',
+    phone: '+91 97654 32109',
+    age: 52,
+    gender: 'Female',
+    blood_group: 'O+',
+    medical_conditions: 'Toxin overload, bloating, skin issues',
+    email: 'deepa.nair@example.com',
+    location: 'Bangalore',
+    address: '8/2, Brigade Road, Bangalore',
+    registered_at: todayDate
+  },
+  {
+    id: 'P-107',
+    name: 'Ramesh Iyer',
+    phone: '+91 96543 21098',
+    age: 61,
+    gender: 'Male',
+    blood_group: 'B+',
+    medical_conditions: 'Arthritis, digestive issues, hypertension',
+    email: 'ramesh.iyer@example.com',
+    location: 'Hyderabad',
+    address: '22, Jubilee Hills, Hyderabad',
+    registered_at: todayDate
   }
 ];
 
@@ -69,7 +117,7 @@ export const initialPhoneCalls = [
     id: 'C-01',
     patient_name: 'John Doe',
     phone: '+91 98765 43210',
-    date: '2026-05-20',
+    date: todayDate,
     time: '09:15 AM',
     notes: 'Inquired about liver detox program. Booked appointment for afternoon.',
     status: 'Booked',
@@ -79,7 +127,7 @@ export const initialPhoneCalls = [
     id: 'C-02',
     patient_name: 'David Miller',
     phone: '+91 98123 45678',
-    date: '2026-05-20',
+    date: todayDate,
     time: '10:30 AM',
     notes: 'Called to check one-day stay availability for next week. Will call back.',
     status: 'Inquiry Only',
@@ -89,10 +137,40 @@ export const initialPhoneCalls = [
     id: 'C-03',
     patient_name: 'Priya Sharma',
     phone: '+91 91234 56789',
-    date: '2026-05-20',
+    date: todayDate,
     time: '11:00 AM',
     notes: 'Requested rescheduling of her review. Rebooked for today.',
     status: 'Rescheduled',
+    assigned_to: 'Sarah (Receptionist)'
+  },
+  {
+    id: 'C-04',
+    patient_name: 'Michael Chen',
+    phone: '+91 99887 66554',
+    date: todayDate,
+    time: '08:30 AM',
+    notes: 'Called to inquire about full body detox program. Booked appointment for today 9AM.',
+    status: 'Booked',
+    assigned_to: 'Sarah (Receptionist)'
+  },
+  {
+    id: 'C-05',
+    patient_name: 'Deepa Nair',
+    phone: '+91 97654 32109',
+    date: todayDate,
+    time: '10:15 AM',
+    notes: 'WhatsApp inquiry about colon hydrotherapy. Booked session for 1PM today.',
+    status: 'Booked',
+    assigned_to: 'Sarah (Receptionist)'
+  },
+  {
+    id: 'C-06',
+    patient_name: 'Ramesh Iyer',
+    phone: '+91 96543 21098',
+    date: todayDate,
+    time: '12:00 PM',
+    notes: 'Called for liver detox consultation. Booked for 3:30 PM today.',
+    status: 'Booked',
     assigned_to: 'Sarah (Receptionist)'
   }
 ];
@@ -101,18 +179,18 @@ export const initialAppointments = [
   {
     id: 'A-201',
     patient_id: 'P-101',
-    date: '2026-05-20',
-    time: '02:00 PM',
+    date: todayDate,
+    session: 'AN',
     source: 'Phone Call',
-    status: 'Checked-in',
+    status: 'Scheduled',
     appointmentType: 'Initial consultation',
     notes: 'First time consultation for liver detox.'
   },
   {
     id: 'A-202',
     patient_id: 'P-102',
-    date: '2026-05-20',
-    time: '11:30 AM',
+    date: todayDate,
+    session: 'FN',
     source: 'WhatsApp Link',
     status: 'Completed',
     appointmentType: 'Review',
@@ -121,8 +199,8 @@ export const initialAppointments = [
   {
     id: 'A-203',
     patient_id: 'P-103',
-    date: '2026-05-20',
-    time: '04:30 PM',
+    date: todayDate,
+    session: 'AN',
     source: 'Phone Call',
     status: 'Scheduled',
     appointmentType: 'Review',
@@ -132,7 +210,7 @@ export const initialAppointments = [
     id: 'A-204',
     patient_id: 'P-104',
     date: '2026-05-21',
-    time: '10:00 AM',
+    session: 'FN',
     source: 'Meta App',
     status: 'Scheduled',
     appointmentType: 'Detox',
@@ -142,7 +220,7 @@ export const initialAppointments = [
     id: 'A-205',
     patient_id: 'P-101',
     date: '2026-05-21',
-    time: '11:30 AM',
+    session: 'FN',
     source: 'Phone Call',
     status: 'Scheduled',
     appointmentType: 'Review',
@@ -152,11 +230,42 @@ export const initialAppointments = [
     id: 'A-206',
     patient_id: 'P-102',
     date: '2026-05-21',
-    time: '02:00 PM',
+    session: 'AN',
     source: 'WhatsApp Link',
     status: 'Scheduled',
     appointmentType: 'Review',
     notes: 'Second review after starting detox diet.'
+  },
+  // New detox appointments for today
+  {
+    id: 'A-207',
+    patient_id: 'P-105',
+    date: todayDate,
+    session: 'FN',
+    source: 'Phone Call',
+    status: 'Scheduled',
+    appointmentType: 'Detox',
+    notes: 'Full body detox - 3 day program'
+  },
+  {
+    id: 'A-208',
+    patient_id: 'P-106',
+    date: todayDate,
+    session: 'AN',
+    source: 'WhatsApp Link',
+    status: 'Scheduled',
+    appointmentType: 'Detox',
+    notes: 'Colon hydrotherapy session'
+  },
+  {
+    id: 'A-209',
+    patient_id: 'P-107',
+    date: todayDate,
+    session: 'AN',
+    source: 'Phone Call',
+    status: 'Scheduled',
+    appointmentType: 'Detox',
+    notes: 'First time detox patient'
   }
 ];
 
@@ -277,7 +386,7 @@ export const initialDetoxSessions = [
     patient_id: 'P-102',
     consultation_id: 'CON-301',
     scheduled_date: '2026-05-20',
-    type: 'Colon Hydrotherapy + Liver Flush Combo',
+    type: 'Colon Hydrotherapy',
     status: 'In-Progress',
     cost: 7500,
     technician: 'Nolan Ross',
@@ -288,11 +397,45 @@ export const initialDetoxSessions = [
     patient_id: 'P-101',
     consultation_id: '',
     scheduled_date: '2026-05-22',
-    type: 'Deep Tissue Cell Detox & Liver Flush',
+    type: 'Deep Tissue Cell Detox',
     status: 'Scheduled',
     cost: 8500,
     technician: 'Nolan Ross',
     notes: 'Pre-session fasting protocol initiated.'
+  },
+  // New detox sessions for today
+  {
+    id: 'DTX-403',
+    patient_id: 'P-105',
+    consultation_id: '',
+    scheduled_date: todayDate,
+    type: 'Full Body Detox',
+    status: 'Scheduled',
+    cost: 12500,
+    technician: 'Nolan Ross',
+    notes: '3-day detox program starting today. Pre-fasting instructions sent.'
+  },
+  {
+    id: 'DTX-404',
+    patient_id: 'P-106',
+    consultation_id: '',
+    scheduled_date: todayDate,
+    type: 'Colon Hydrotherapy',
+    status: 'Scheduled',
+    cost: 7500,
+    technician: 'Nolan Ross',
+    notes: 'First session scheduled for 1:00 PM'
+  },
+  {
+    id: 'DTX-405',
+    patient_id: 'P-107',
+    consultation_id: '',
+    scheduled_date: todayDate,
+    type: 'Liver Flush Detox',
+    status: 'Scheduled',
+    cost: 8500,
+    technician: 'Nolan Ross',
+    notes: 'New patient initial detox session'
   }
 ];
 
@@ -406,6 +549,31 @@ export const initialFollowups = [
     notes: 'Confirm check-in time for review.',
     status: 'Completed',
     created_at: '2026-05-18'
+  },
+  // New followups for today's detox patients
+  {
+    id: 'FUP-804',
+    patient_id: 'P-105',
+    scheduled_date: '2026-05-24',
+    notes: 'Follow-up on Day 3 of Full Body Detox program. Check symptoms and compliance.',
+    status: 'Pending',
+    created_at: todayDate
+  },
+  {
+    id: 'FUP-805',
+    patient_id: 'P-106',
+    scheduled_date: '2026-05-24',
+    notes: 'Post-colon hydrotherapy follow-up. Check recovery and any adverse reactions.',
+    status: 'Pending',
+    created_at: todayDate
+  },
+  {
+    id: 'FUP-806',
+    patient_id: 'P-107',
+    scheduled_date: '2026-05-25',
+    notes: 'First review after liver detox. Check progress and schedule next session if needed.',
+    status: 'Pending',
+    created_at: todayDate
   }
 ];
 
@@ -442,6 +610,40 @@ export const initialWhatsappLogs = [
     sent_at: '2026-05-20 02:00 PM',
     status: 'Sent',
     template_name: 'detox_prep_reminder'
+  },
+  // New WhatsApp logs for today's detox patients
+  {
+    id: 'WA-904',
+    patient_id: 'P-105',
+    patient_name: 'Michael Chen',
+    phone: '+91 99887 66554',
+    type: 'Booking Confirmation',
+    message_text: `Dear Michael, your Full Body Detox appointment is confirmed for Today at 09:00 AM. Please arrive 15 minutes early. - Manthrralaya's Wellness`,
+    sent_at: `${todayDate} 08:00 AM`,
+    status: 'Delivered',
+    template_name: 'appointment_confirm'
+  },
+  {
+    id: 'WA-905',
+    patient_id: 'P-106',
+    patient_name: 'Deepa Nair',
+    phone: '+91 97654 32109',
+    type: 'Session Reminder',
+    message_text: `Hello Deepa, your Colon Hydrotherapy session is scheduled for Today at 1:00 PM. Please begin fasting 3 hours before the session. - Manthrralaya's Wellness`,
+    sent_at: `${todayDate} 10:30 AM`,
+    status: 'Delivered',
+    template_name: 'detox_prep_reminder'
+  },
+  {
+    id: 'WA-906',
+    patient_id: 'P-107',
+    patient_name: 'Ramesh Iyer',
+    phone: '+91 96543 21098',
+    type: 'Booking Confirmation',
+    message_text: `Dear Ramesh, your Liver Detox consultation with Dr. Julian Bashir is confirmed for Today at 3:30 PM. - Manthrralaya's Wellness`,
+    sent_at: `${todayDate} 12:15 PM`,
+    status: 'Sent',
+    template_name: 'appointment_confirm'
   }
 ];
 

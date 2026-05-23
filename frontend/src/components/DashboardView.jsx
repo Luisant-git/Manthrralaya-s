@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList } from 'lucide-react';
 
 export default function DashboardView({ 
   patients, 
@@ -23,58 +22,156 @@ export default function DashboardView({
   const pendingFollowups = followups.filter(f => f.status === 'Pending').length;
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [appointmentFilter, setAppointmentFilter] = useState('all');
+  const [filterType, setFilterType] = useState('all');
+  
+  // Get today's appointments
   const todayAppointments = appointments.filter(a => a.date === todayDate);
-  const reviewCount = todayAppointments.filter(a => a.appointmentType === 'Review').length;
-  const detoxCount = todayAppointments.filter(a => a.appointmentType === 'Detox').length;
-  const initialCount = todayAppointments.filter(a => a.appointmentType === 'Initial consultation').length;
-  const todayPatientDetails = todayAppointments.map((appt) => {
-    const patient = patients.find(p => p.id === appt.patient_id) || {};
-    const historyCount = consultations.filter(c => c.patient_id === appt.patient_id).length;
-    const historyRecords = consultations
-      .filter(c => c.patient_id === appt.patient_id)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-    const latestNote = historyRecords[0]?.consultation_notes || appt.notes || 'No consultation notes yet.';
+  const totalAppointmentsToday = todayAppointments.length;
+  
+  // IMPORTANT: Track which appointments have been completed (not just patients)
+  // An appointment is completed when its status is 'Completed'
+  const completedAppointmentIds = appointments
+    .filter(a => a.status === 'Completed' && a.date === todayDate)
+    .map(a => a.id);
+  
+  // For counting unique completed patients (for the metric)
+  const completedPatientsToday = appointments
+    .filter(a => a.status === 'Completed' && a.date === todayDate)
+    .map(a => a.patient_id);
+  const completedTodayCount = new Set(completedPatientsToday).size;
+  
+  // Get patients who have been received by the receptionist and are waiting for the doctor
+  // Don't filter by completed consultations - use appointment status instead
+  const arrivedPatients = appointments.filter(a => a.status === 'Arrived' && a.date === todayDate);
+  const checkedInPatients = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate);
+  
+  // Doctor queue: only show appointments that are NOT completed
+  const doctorQueue = appointments.filter(a =>
+    (a.status === 'Arrived' || a.status === 'Checked-in') &&
+    a.date === todayDate
+  );
+  
+  const pendingArrivals = appointments.filter(a => 
+    a.status === 'Scheduled' && 
+    a.date === todayDate
+  );
+  
+  const getAppointmentTypeKey = (appt) => String(appt?.appointmentType || '').toLowerCase();
 
-    return {
-      ...appt,
-      patient,
-      historyCount,
-      latestNote
+  const handleStartAppointment = (appt) => {
+    if (appt.status !== 'Checked-in') {
+      return;
+    }
+    const typeKey = getAppointmentTypeKey(appt);
+    if (typeKey.includes('detox')) {
+      onNavigateToTab('detox');
+    } else {
+      onNavigateToTab('consultations');
+    }
+  };
+
+  const handleDoctorCheckIn = (appointmentId) => {
+    onCheckIn(appointmentId, false, true);
+  };
+
+  // Get today's patient list for doctor with all details
+  const todayPatientList = doctorQueue
+    .map((appt) => {
+      const patient = patients.find(p => p.id === appt.patient_id) || {};
+      // Count previous consultations for this patient (all time, not just today)
+      const patientConsultations = consultations.filter(c => c.patient_id === appt.patient_id);
+      const historyCount = patientConsultations.length;
+      const historyRecords = patientConsultations.sort((a, b) => new Date(b.date) - new Date(a.date));
+      const latestNote = historyRecords[0]?.consultation_notes || appt.notes || 'No consultation notes yet.';
+      const isCheckedIn = appt.status === 'Checked-in';
+      
+      // Check if this specific appointment already has a completed consultation
+      const hasCompletedConsultation = consultations.some(c => 
+        c.appointment_id === appt.id || 
+        (c.patient_id === appt.patient_id && c.date === todayDate && c.appointment_id === appt.id)
+      );
+
+      return {
+        ...appt,
+        patient,
+        historyCount,
+        latestNote,
+        isCheckedIn,
+        hasCompletedConsultation
+      };
+    })
+    // Only show appointments that don't have a completed consultation yet
+    .filter(item => !item.hasCompletedConsultation);
+  
+  // Get completed appointments list for display (by appointment, not just patient)
+  const completedAppointmentsList = todayAppointments
+    .filter(a => a.status === 'Completed')
+    .map((appt) => {
+      const patient = patients.find(p => p.id === appt.patient_id) || {};
+      // Find the consultation associated with this appointment
+      const completedConsultation = consultations.find(c => 
+        c.appointment_id === appt.id || 
+        (c.patient_id === appt.patient_id && c.date === todayDate)
+      );
+      
+      return {
+        ...appt,
+        patient,
+        completedConsultation
+      };
+    });
+
+  // Meta function for rendering patient info
+  const renderPatientMeta = (pt) => {
+    const parts = [];
+    if (pt.age) parts.push(`${pt.age} yrs`);
+    if (pt.location && pt.location !== 'n/a') parts.push(pt.location);
+    return parts.length > 0 ? `(${parts.join(' • ')})` : '';
+  };
+
+  const formatPhoneWithoutCountryCode = (phone) => {
+    if (!phone) return '';
+    const digits = phone.toString().replace(/\D/g, '');
+    return digits.length > 10 ? digits.slice(-10) : digits;
+  };
+
+  const getAppointmentTypeBadge = (type) => {
+    const colors = {
+      'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
+      'Detox': 'bg-teal-50 text-teal-600 border-teal-200',
+      'Review': 'bg-amber-50 text-amber-600 border-amber-200'
     };
-  });
+    return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || colors['Initial consultation']}`;
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'Scheduled':
+        return <span className="px-2 py-1 rounded bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold uppercase tracking-wider">Scheduled</span>;
+      case 'Arrived':
+        return <span className="px-2 py-1 rounded bg-amber-50 text-amber-600 border border-amber-200 text-xs font-bold uppercase tracking-wider">Arrived</span>;
+      case 'Checked-in':
+        return <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold uppercase tracking-wider">Checked-in</span>;
+      case 'Completed':
+        return <span className="px-2 py-1 rounded bg-slate-50 text-slate-500 border border-slate-200 text-xs font-bold uppercase tracking-wider">Completed</span>;
+      case 'Cancelled':
+        return <span className="px-2 py-1 rounded bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold uppercase tracking-wider">Cancelled</span>;
+      default:
+        return <span className="px-2 py-1 rounded bg-slate-50 text-slate-600 border border-slate-200 text-xs font-bold uppercase tracking-wider">{status}</span>;
+    }
+  };
 
   const filteredReceptionistAppointments = todayAppointments.filter((appt) => {
     const patient = patients.find((p) => p.id === appt.patient_id) || {};
-    const searchValue = searchQuery.trim().toLowerCase();
-    const matchesSearch = !searchValue ||
-      patient.name?.toLowerCase().includes(searchValue) ||
-      patient.phone?.includes(searchValue) ||
-      appt.appointmentType?.toLowerCase().includes(searchValue) ||
-      (appt.notes || '').toLowerCase().includes(searchValue);
-    const matchesType = appointmentFilter === 'all' || appt.appointmentType === appointmentFilter;
-    return matchesSearch && matchesType;
+    const matchesSearch = !searchQuery ||
+      patient.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      patient.phone?.includes(searchQuery) ||
+      appt.appointmentType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (appt.notes || '').toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
+    return matchesSearch && matchesFilter;
   });
 
-  // Chart data
-  const revenueData = [
-    { name: 'Jan', patients: 65, detox: 40 },
-    { name: 'Feb', patients: 85, detox: 55 },
-    { name: 'Mar', patients: 110, detox: 80 },
-    { name: 'Apr', patients: 145, detox: 110 },
-    { name: 'May', patients: 190, detox: 155 }
-  ];
-
-  const sourceData = [
-    { source: 'Phone', bookings: 45 },
-    { source: 'Walk-in', bookings: 25 },
-    { source: 'Website', bookings: 65 },
-    { source: 'WhatsApp', bookings: 85 }
-  ];
-
-  // Quick Action Queue (Today's arrivals)
-  const arrivals = appointments.filter(a => a.status === 'Scheduled' && a.date === todayDate).slice(0, 5);
-  const checkedInArrivals = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate).slice(0, 5);
   const isDoctorView = activeRole === 'doctor';
 
   return (
@@ -98,9 +195,10 @@ export default function DashboardView({
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
-              <span className="text-sm font-semibold text-slate-500 block">Today’s Patients</span>
+              <span className="text-sm font-semibold text-slate-500 block">Today’s Appointments</span>
               <div className="flex items-baseline space-x-2 mt-1">
-                <span className="text-3xl font-extrabold text-slate-800">{todaysAppts}</span>
+                <span className="text-3xl font-extrabold text-slate-800">{totalAppointmentsToday}</span>
+                <span className="text-xs text-slate-400">total today</span>
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
@@ -109,35 +207,38 @@ export default function DashboardView({
           </div>
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
-              <span className="text-sm font-semibold text-slate-500 block">Review Patients</span>
+              <span className="text-sm font-semibold text-slate-500 block">Arrived (Lobby)</span>
               <div className="flex items-baseline space-x-2 mt-1">
-                <span className="text-3xl font-extrabold text-slate-800">{reviewCount}</span>
+                <span className="text-3xl font-extrabold text-amber-600">{arrivedPatients.length}</span>
+                <span className="text-xs text-slate-400">need doctor check-in</span>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
-              <TrendingUp className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+              <Clock className="w-6 h-6" />
             </div>
           </div>
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
-              <span className="text-sm font-semibold text-slate-500 block">Detox Patients</span>
+              <span className="text-sm font-semibold text-slate-500 block">Ready for Consult</span>
               <div className="flex items-baseline space-x-2 mt-1">
-                <span className="text-3xl font-extrabold text-slate-800">{detoxCount}</span>
+                <span className="text-3xl font-extrabold text-emerald-600">{checkedInPatients.length}</span>
+                <span className="text-xs text-slate-400">doctor checked-in</span>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
-              <Calendar className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+              <ShieldCheck className="w-6 h-6" />
             </div>
           </div>
-          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('consultations')}>
             <div>
-              <span className="text-sm font-semibold text-slate-500 block">Initial Patients</span>
+              <span className="text-sm font-semibold text-slate-500 block">Completed Today</span>
               <div className="flex items-baseline space-x-2 mt-1">
-                <span className="text-3xl font-extrabold text-slate-800">{initialCount}</span>
+                <span className="text-3xl font-extrabold text-slate-800">{completedTodayCount}</span>
+                <span className="text-xs text-slate-400">patients seen</span>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
-              <Activity className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+              <CheckCircle className="w-6 h-6" />
             </div>
           </div>
         </div>
@@ -147,8 +248,6 @@ export default function DashboardView({
         <>
           {/* KPI Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            
-            {/* KPI 1 */}
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Total Patients</span>
@@ -162,7 +261,6 @@ export default function DashboardView({
               </div>
             </div>
 
-            {/* KPI 2 */}
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('appointments')}>
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Today's Appointments</span>
@@ -175,21 +273,8 @@ export default function DashboardView({
               </div>
             </div>
 
-            {/* KPI 3 */}
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('stay')}>
-              <div>
-                <span className="text-sm font-semibold text-slate-500 block">Active Admissions</span>
-                <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-3xl font-extrabold text-slate-800">{activeStays}</span>
-                  <span className="text-sm font-medium text-slate-400">/ 8 Beds</span>
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
-                <Activity className="w-6 h-6" />
-              </div>
-            </div>
+            
 
-            {/* KPI 4 */}
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Pending Reviews</span>
@@ -209,184 +294,238 @@ export default function DashboardView({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {isDoctorView ? (
           <>
-            {/* Left Column: Today's Patients */}
+            {/* Left Column: Today's Patient Queue */}
             <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900">Today’s Patient List</h2>
-                  <p className="text-sm text-slate-500">Showing all patients scheduled for today with active history counts.</p>
+                  <h2 className="text-lg font-bold text-slate-900">Today’s Patient Queue</h2>
+                  <p className="text-sm text-slate-500">Active appointments waiting for consultation • {todayPatientList.length} remaining</p>
                 </div>
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{todayPatientDetails.length} patients</span>
+                <div className="flex gap-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-amber-600">
+                    Arrived: {arrivedPatients.length}
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
+                    Checked-in: {checkedInPatients.length}
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+                    Completed: {completedTodayCount}
+                  </span>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                {todayPatientDetails.map((item) => (
-                  <div key={item.id} className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                      <div>
-                        <div className="text-sm font-semibold text-slate-900">{item.patient.name || 'Unknown Patient'}</div>
-                        <div className="text-xs text-slate-500">{item.patient.medical_conditions || item.appointmentType}</div>
-                        <div className="text-xs text-slate-500 mt-1">{item.time} • {item.source}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">History</div>
-                        <div className="text-2xl font-bold text-slate-900">{item.historyCount}</div>
-                      </div>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-700">
-                      <span className="text-xs text-slate-500 block mb-1">Latest note:</span>
-                      <span className="font-medium text-slate-900">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 80)}{item.latestNote.length > 80 ? '…' : ''}</span>
-                    </div>
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                {todayPatientList.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CheckCircle className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
+                    <p className="text-slate-500">All appointments completed for today!</p>
+                    <p className="text-sm text-slate-400 mt-1">Great job, doctor!</p>
                   </div>
-                ))}
+                ) : (
+                  todayPatientList.map((item) => (
+                    <div key={item.id} className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-bold text-slate-900">{item.patient.name || 'Unknown Patient'}</div>
+                            {item.isCheckedIn && (
+                              <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-semibold">
+                                Checked-in
+                              </span>
+                            )}
+                            {String(item.appointmentType || '').toLowerCase().includes('detox') && (
+                              <span className="text-[10px] bg-teal-500 text-white px-2 py-0.5 rounded-full font-semibold">
+                                Detox
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-1">
+                            {item.patient.medical_conditions || item.appointmentType} • {item.session === 'FN' ? 'Forenoon' : 'Afternoon'}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Total Visits: {item.historyCount}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-right">
+                            <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
+                            <div className="text-sm font-semibold text-slate-700">{item.status}</div>
+                          </div>
+                          {item.status === 'Arrived' ? (
+                            <button
+                              onClick={() => handleDoctorCheckIn(item.id)}
+                              className="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors whitespace-nowrap flex items-center gap-2"
+                            >
+                              <ShieldCheck className="w-4 h-4" />
+                              Doctor Check-in
+                            </button>
+                          ) : item.status === 'Checked-in' ? (
+                            <button
+                              onClick={() => handleStartAppointment(item)}
+                              className="px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2"
+                            >
+                              <Stethoscope className="w-4 h-4" />
+                              {String(item.appointmentType || '').toLowerCase().includes('detox') ? 'Start Detox Session' : 'Start Consultation'}
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="px-4 py-2 rounded-lg text-sm font-bold bg-slate-200 text-slate-500 cursor-not-allowed whitespace-nowrap"
+                            >
+                              Waiting
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-700">
+                        <span className="text-xs text-slate-500 block mb-1">Latest note:</span>
+                        <span className="font-medium text-slate-900 line-clamp-2">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 100)}{item.latestNote.length > 100 ? '…' : ''}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
-            {/* Right Column: Queues */}
-            <div className="lg:col-span-1 flex flex-col gap-6">
-              {/* Checked-in Patients */}
-              {checkedInArrivals.length > 0 && (
-                <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col">
-                  <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-                    <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" /> Checked-in Patients
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => onNavigateToTab('consultations')}
-                      className="text-xs font-semibold uppercase tracking-widest text-emerald-600 hover:text-emerald-800 whitespace-nowrap"
-                    >
-                      Go to Consultations
-                    </button>
+            {/* Right Column: Completed Today Summary */}
+            <div className="lg:col-span-1 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-900">Completed Today</h2>
+                <span className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+                  {completedAppointmentsList.length} completed
+                </span>
+              </div>
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {completedAppointmentsList.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ClipboardList className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm text-slate-500">No appointments completed yet today.</p>
                   </div>
-                  <div className="space-y-4 overflow-y-auto">
-                    {checkedInArrivals.map((appt) => {
-                      const pt = patients.find(p => p.id === appt.patient_id) || {};
-                      return (
-                        <div key={appt.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3 transition-colors hover:border-emerald-200">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <span className="font-bold text-slate-800 text-sm block">{pt.name}</span>
-                              <span className="text-xs text-slate-500 font-medium">{appt.time} • {appt.source}</span>
-                            </div>
-                            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md font-semibold">
-                              {appt.status}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => onNavigateToTab('consultations')}
-                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition-colors"
-                          >
-                            Open Consultation
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Queue */}
-              <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-emerald-500" /> Pending Arrivals
-                  </h3>
-                </div>
-
-                <div className="flex-1 space-y-4 overflow-y-auto">
-                  {arrivals.map((appt) => {
-                    const pt = patients.find(p => p.id === appt.patient_id) || {};
-                    return (
-                      <div key={appt.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3 transition-colors hover:border-emerald-200">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-bold text-slate-800 text-sm block">{pt.name}</span>
-                            <span className="text-xs text-slate-500 font-medium">{appt.time} • {appt.source}</span>
-                          </div>
-                          <span className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded-md font-semibold">
-                            {appt.status}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            onCheckIn(appt.id);
-                            onNavigateToTab('consultations');
-                          }}
-                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors"
-                        >
-                          <CheckCircle className="w-4 h-4" /> Check-in & Open Consultation
-                        </button>
+                ) : (
+                  completedAppointmentsList.map((item) => (
+                    <div key={item.id} className="p-3 rounded-xl bg-purple-50 border border-purple-100">
+                      <div className="font-bold text-slate-800 text-sm">{item.patient.name || 'Unknown Patient'}</div>
+                      <div className="text-xs text-slate-500 mt-1">
+                        {item.appointmentType}
+                        {String(item.appointmentType || '').toLowerCase().includes('detox') && (
+                          <span className="ml-2 text-teal-600">(Detox Session)</span>
+                        )}
                       </div>
-                    );
-                  })}
-
-                  {arrivals.length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm">
-                      No pending arrivals in queue.
+                      <div className="text-xs text-slate-400 mt-1">
+                        Appointment: {item.id}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  ))
+                )}
               </div>
             </div>
           </>
         ) : (
+          // Receptionist View - Today's Appointments with Search and Filter
           <div className="lg:col-span-3 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Receptionist Appointments</h2>
-                <p className="text-sm text-slate-500 mt-1">Today’s appointments with notes. Search by patient, type or note.</p>
+                <h2 className="text-xl font-bold text-slate-900">Today's Appointments</h2>
+                <p className="text-sm text-slate-500 mt-1">Click "Check-in" to mark patients as arrived in lobby.</p>
               </div>
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{filteredReceptionistAppointments.length} / {todayAppointments.length} today</span>
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {filteredReceptionistAppointments.length} / {todayAppointments.length} today
+              </span>
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_200px] mb-4">
-              <div className="relative">
+            
+            {/* Search and Filter Bar */}
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1 relative">
                 <input
                   type="text"
+                  placeholder="Search by patient name, phone, or appointment type..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search patient, notes, or appointment type..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                 />
               </div>
-              <div>
+              <div className="relative">
                 <select
-                  value={appointmentFilter}
-                  onChange={(e) => setAppointmentFilter(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer"
                 >
                   <option value="all">All Types</option>
-                  <option value="Initial consultation">Initial consultation</option>
+                  <option value="Initial consultation">Initial Consultation</option>
                   <option value="Detox">Detox</option>
                   <option value="Review">Review</option>
                 </select>
               </div>
             </div>
+
             <div className="overflow-x-auto">
               {filteredReceptionistAppointments.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 text-sm">No appointments available.</div>
+                <div className="py-12 text-center text-slate-400 text-sm italic">
+                  No active schedules found matching your criteria.
+                </div>
               ) : (
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full min-w-[720px] text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
-                      <th className="py-3 px-4">Patient</th>
-                      <th className="py-3 px-4">Appointment Type</th>
-                      <th className="py-3 px-4">Notes</th>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0">
+                      <th className="py-2.5 px-4">Action</th>
+                      <th className="py-2.5 px-4">Date & Session</th>
+                      <th className="py-2.5 px-4">Patient Details</th>
+                      <th className="py-2.5 px-4">Appointment Type</th>
+                      <th className="py-2.5 px-4">Status</th>
+                      <th className="py-2.5 px-4">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredReceptionistAppointments.map((appt) => {
+                    {filteredReceptionistAppointments.slice().reverse().map(appt => {
                       const pt = patients.find(p => p.id === appt.patient_id) || {};
+                      const isArrived = appt.status === 'Arrived';
+                      const isCheckedIn = appt.status === 'Checked-in';
+                      const isCompleted = appt.status === 'Completed';
+                      const isCancelled = appt.status === 'Cancelled';
+                      
                       return (
                         <tr key={appt.id} className="hover:bg-slate-50 transition-colors align-top">
-                          <td className="py-3 px-4 align-top min-w-[180px]">
-                            <div className="font-semibold text-slate-900 text-sm truncate">{pt.name || 'Unknown Patient'}</div>
-                            <div className="text-xs text-slate-500">{pt.phone || 'No phone'}</div>
+                          <td className="py-3 px-4 align-top whitespace-nowrap">
+                            {!isArrived && !isCheckedIn && !isCompleted && !isCancelled ? (
+                              <button
+                                onClick={() => onCheckIn(appt.id, false, false)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1"
+                              >
+                                <CheckCircle className="w-3 h-3" />
+                                Check-in
+                              </button>
+                            ) : (isArrived || isCheckedIn) ? (
+                              <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                {isArrived ? 'Arrived' : 'With Doctor'}
+                              </span>
+                            ) : isCompleted ? (
+                              <span className="text-slate-400 text-xs">Completed</span>
+                            ) : isCancelled ? (
+                              <span className="text-rose-400 text-xs">Cancelled</span>
+                            ) : null}
                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <span className="px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">{appt.appointmentType || 'General'}</span>
+                            <strong className="text-slate-800 block">{appt.date || todayDate}</strong>
+                            <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
                           </td>
-                          <td className="py-3 px-4 align-top text-slate-600 text-sm max-w-[420px] break-words">{appt.notes || 'No notes available.'}</td>
+                          <td className="py-3 px-4 align-top min-w-0">
+                            <span className="font-bold text-slate-800 block text-sm truncate">{pt.name || 'Unknown Patient'}</span>
+                            <span className="text-slate-500 font-medium block truncate">
+                              {formatPhoneWithoutCountryCode(pt.phone) || 'No phone'} {renderPatientMeta(pt)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 align-top whitespace-nowrap">
+                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>
+                              {appt.appointmentType || 'General'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 align-top whitespace-nowrap">
+                            {getStatusBadge(appt.status)}
+                          </td>
+                          <td className="py-3 px-4 align-top text-slate-600 text-sm max-w-[250px] break-words">
+                            {appt.notes || 'No notes available.'}
+                          </td>
                         </tr>
                       );
                     })}

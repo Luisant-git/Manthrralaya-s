@@ -82,8 +82,13 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('Call patient later to confirm detox preparation and next steps.');
   const todayDate = new Date().toISOString().split('T')[0];
 
+  const isDetoxAppointment = (appt) => {
+    return String(appt?.appointmentType || '').toLowerCase().includes('detox');
+  };
+
   // Only show today's "Checked-in" appointments for doctor to consult
-  const pendingConsults = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate);
+  // Exclude Detox appointments so those patients appear only on the detox page.
+  const pendingConsults = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate && !isDetoxAppointment(a));
   const activeAppt = pendingConsults.find(a => a.id === selectedApptId);
   const activePt = activeAppt ? patients.find(p => p.id === activeAppt.patient_id) : null;
   const patientHistory = activePt ? consultations.filter(c => c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
