@@ -576,16 +576,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                             placeholder={`Enter ${getSessionTypeDisplay(sessionType)} detox procedure notes, observations, recommendations...`}
                           />
                           
-                          <div className="mt-4 p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                            <div className="flex items-start gap-2 text-sm text-emerald-800">
-                              <Stethoscope className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                              <p>
-                                <span className="font-semibold">Detox Protocol:</span> Deep Tissue Cell Detox therapy focuses on eliminating 
-                                toxins at the cellular level. Document the procedure steps, patient response, and any specific recommendations 
-                                for this {getSessionTypeDisplay(sessionType).toLowerCase()}.
-                              </p>
-                            </div>
-                          </div>
+                          
                         </>
                       )}
                     </div>
