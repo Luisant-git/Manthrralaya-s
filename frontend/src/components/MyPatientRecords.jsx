@@ -44,11 +44,18 @@ export default function UnifiedPatientRecords({
     { id: 'followup', label: 'Follow-up' }
   ];
 
-  const getLatestAppointmentType = (patientId) => {
+  const getAppointmentTypeBadge = (type) => {
+    if (!type) return 'border-slate-200 bg-slate-100 text-slate-600';
+    if (type === 'Detox') return 'border-teal-200 bg-teal-50 text-teal-700';
+    if (type === 'Review') return 'border-amber-200 bg-amber-50 text-amber-700';
+    return 'border-purple-200 bg-purple-50 text-purple-700';
+  };
+
+  const getLatestAppointment = (patientId) => {
     const sorted = appointments
       .filter(a => a.patient_id === patientId && a.appointmentType)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
-    return sorted[0]?.appointmentType || 'No appointment type';
+    return sorted[0] || null;
   };
 
   const getNextFollowup = (patientId) => {
@@ -415,6 +422,7 @@ export default function UnifiedPatientRecords({
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] tracking-wider">
                   <th className="py-3 px-4">Patient</th>
                   <th className="py-3 px-4">Latest Appointment</th>
+                  <th className="py-3 px-4">Appointment Date</th>
                   <th className="py-3 px-4">Contact</th>
                   <th className="py-3 px-4">Follow-up</th>
                   <th className="py-3 px-4 text-right">Action</th>
@@ -422,7 +430,7 @@ export default function UnifiedPatientRecords({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {paginatedPatients.map(pt => {
-                  const latestType = getLatestAppointmentType(pt.id);
+                  const latestAppointment = getLatestAppointment(pt.id);
                   const nextFollowup = getNextFollowup(pt.id);
                   return (
                     <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
@@ -431,7 +439,23 @@ export default function UnifiedPatientRecords({
                         <div className="text-xs text-slate-500 mt-1">{pt.id}</div>
                       </td>
                       <td className="py-4 px-4 align-top">
-                        <span className="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold">{latestType}</span>
+                        {latestAppointment ? (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${getAppointmentTypeBadge(latestAppointment.appointmentType)}`}>
+                            {latestAppointment.appointmentType || 'General'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-500 text-[11px] font-semibold">No appointment</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 align-top text-slate-600 text-sm">
+                        {latestAppointment ? (
+                          <>
+                            <div>{latestAppointment.date}</div>
+                            {latestAppointment.time && <div className="text-xs text-slate-500">{latestAppointment.time}</div>}
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
                       </td>
                       <td className="py-4 px-4 align-top">
                         <div className="text-slate-600">{pt.phone || 'No phone'}</div>

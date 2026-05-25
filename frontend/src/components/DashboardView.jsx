@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList } from 'lucide-react';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search } from 'lucide-react';
 
 export default function DashboardView({ 
   patients, 
@@ -314,6 +314,22 @@ export default function DashboardView({
                 </div>
               </div>
 
+              {/* Search bar for Today's Patient Queue */}
+              <div className="p-4 border border-slate-200 bg-slate-50 rounded-xl mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 relative max-w-md">
+                    <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search patients by name, ID, phone or appointment..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                 {todayPatientList.length === 0 ? (
                   <div className="text-center py-12">
@@ -433,28 +449,32 @@ export default function DashboardView({
               </span>
             </div>
             
-            {/* Search and Filter Bar */}
-            <div className="flex gap-3 mb-4">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  placeholder="Search by patient name, phone, or appointment type..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                />
-              </div>
-              <div className="relative">
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer"
-                >
-                  <option value="all">All Types</option>
-                  <option value="Initial consultation">Initial Consultation</option>
-                  <option value="Detox">Detox</option>
-                  <option value="Review">Review</option>
-                </select>
+            {/* Search and Filter Bar (Patient Records style) */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50 rounded-xl mb-4">
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <div className="flex-1 relative max-w-md">
+                  <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search patients by name, ID, phone or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-lg pl-4 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="Initial consultation">Initial Consultation</option>
+                    <option value="Detox">Detox</option>
+                    <option value="Review">Review</option>
+                  </select>
+                </div>
               </div>
             </div>
 
