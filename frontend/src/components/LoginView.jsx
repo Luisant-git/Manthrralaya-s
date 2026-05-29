@@ -109,7 +109,7 @@ export default function LoginView({ onLogin }) {
 
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center gap-2">
-                <User className="w-4 h-4" /> Username
+                <User className="w-4 h-4" /> Email
               </label>
               <input
                 type="text"

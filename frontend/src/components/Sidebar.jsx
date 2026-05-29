@@ -9,6 +9,7 @@ import {
   MessageSquareCode,
   FileBarChart,
   Users,
+  UserPlus,
   Star,
   ClipboardList
 } from 'lucide-react';
@@ -16,6 +17,7 @@ import {
 export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
   const navigationItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist'] },
+    { id: 'user-management', name: 'Staff Management', icon: UserPlus, roles: ['admin'] },
     { id: 'receptionist-desk', name: 'Appointment Booking', icon: CalendarDays, roles: ['receptionist', 'admin'] },
     { id: 'doctor-master', name: 'Doctor Master', icon: Stethoscope, roles: ['receptionist', 'admin'] },
     { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist'] },

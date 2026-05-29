@@ -16,6 +16,7 @@ import DocumentPreview from './components/DocumentPreview';
 import LoginView from './components/LoginView';
 import ReceptionistView from './components/ReceptionistView';
 import DoctorMasterView from './components/DoctorMasterView';
+import UserManagementView from './components/UserManagementView';
 
 import {
   initialPatients,
@@ -362,6 +363,12 @@ export default function App() {
         );
       case 'doctor-master':
         return <DoctorMasterView doctors={doctors} setDoctors={setDoctors} />;
+      case 'user-management':
+        return activeRole === 'admin' ? (
+          <UserManagementView />
+        ) : (
+          <div className="text-center py-12 text-slate-500">Access Denied. Admin privileges required.</div>
+        );
       default:
         return <div className="text-center py-12 text-slate-500">Access Denied or Feature in Development.</div>;
     }
