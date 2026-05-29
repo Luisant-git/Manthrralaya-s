@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { User, Shield, Stethoscope, Lock, ArrowRight } from 'lucide-react';
+import { authApi } from '../api/authApi';
 
 export default function LoginView({ onLogin }) {
   const [selectedRole, setSelectedRole] = useState('receptionist');
   const [username, setUsername] = useState('');
   const [pin, setPin] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const roles = [
     { id: 'receptionist', title: 'Receptionist', icon: User,  },
@@ -12,22 +15,29 @@ export default function LoginView({ onLogin }) {
     { id: 'admin', title: 'System Admin', icon: Shield, }
   ];
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setError('');
     const trimmedUsername = username.trim();
     if (!trimmedUsername) return alert('Please enter your staff username.');
     if (!pin) return alert('Please enter your staff PIN code.');
 
-    const isValidCredentials =
-      (selectedRole === 'receptionist' && trimmedUsername === 'Receptionist' && pin === '1234') ||
-      (selectedRole === 'doctor' && trimmedUsername === 'Doctor' && pin === '1234') ||
-      (selectedRole === 'admin' && trimmedUsername === 'Admin' && pin === '1234');
+    setIsLoading(true);
+    try {
+      const response = await authApi.login({ email: trimmedUsername, pin });
 
-    if (!isValidCredentials) {
-      return alert('Invalid credentials. Use Receptionist / 1234 or Doctor / 1234  or Admin / 1234');
+      // Ensure the selected role in the UI matches the user's actual role in the database
+      if (selectedRole.toUpperCase() !== response.role) {
+        throw new Error(`Unauthorized: Your account does not have access to the ${selectedRole} workspace.`);
+      }
+
+      // Pass the authenticated user data to the parent component
+      onLogin({ role: response.role.toLowerCase(), username: response.fullName || response.email });
+    } catch (err) {
+      setError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
     }
-
-    onLogin({ role: selectedRole, username: trimmedUsername });
   };
 
   return (
@@ -55,6 +65,12 @@ export default function LoginView({ onLogin }) {
         <div className="p-8 flex flex-col justify-center">
           <h2 className="text-2xl font-bold text-slate-800 mb-1">Welcome Back</h2>
           <p className="text-slate-500 text-sm mb-6">Select your clinical department to access the workspace.</p>
+
+          {error && (
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-100 text-rose-600 text-sm font-medium rounded-xl animate-fadeIn text-center">
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
@@ -117,13 +133,11 @@ export default function LoginView({ onLogin }) {
 
             <button
               type="submit"
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-base shadow-sm transition-all flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-base shadow-sm transition-all flex items-center justify-center gap-2 ${isLoading ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              Access Workspace <ArrowRight className="w-5 h-5" />
+              {isLoading ? 'Authenticating...' : 'Access Workspace'} <ArrowRight className="w-5 h-5" />
             </button>
-            <p className="text-xs text-slate-400 mt-2">
-              Use: Receptionist / 1234 or Doctor / 1234 or Admin / 1234 supported.
-            </p>
           </form>
         </div>
 
