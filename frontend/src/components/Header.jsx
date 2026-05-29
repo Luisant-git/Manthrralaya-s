@@ -3,6 +3,7 @@ import { Search, User, Bell, MessageSquare, LogOut } from 'lucide-react';
 
 export default function Header({
   activeRole,
+  currentUser,
   searchQuery,
   setSearchQuery,
   onSearchSubmit,
@@ -10,6 +11,11 @@ export default function Header({
   notificationsCount = 3,
   whatsappApiConnected = true
 }) {
+  const getInitials = (name) => {
+    if (!name) return '??';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   return (
     <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
       {/* Brand logo */}
@@ -61,11 +67,11 @@ export default function Header({
         {/* Profile Avatar */}
         <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
           <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border border-emerald-200">
-            {activeRole === 'doctor' ? 'EC' : activeRole === 'receptionist' ? 'SJ' : 'AD'}
+            {getInitials(currentUser)}
           </div>
           <div className="hidden md:block text-left mr-2">
             <span className="text-sm font-bold text-slate-800 block leading-tight">
-              {activeRole === 'doctor' ? 'Dr. Evelyn Carter' : activeRole === 'receptionist' ? 'Sarah Jenkins' : 'System Admin'}
+              {currentUser || 'Staff User'}
             </span>
             <span className="text-xs text-slate-500 block capitalize">{activeRole}</span>
           </div>

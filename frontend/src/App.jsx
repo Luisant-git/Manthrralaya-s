@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
@@ -37,7 +37,39 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeRole, setActiveRole] = useState(''); // 'receptionist', 'doctor', 'admin'
   const [currentUser, setCurrentUser] = useState('');
+  const [isLoading, setIsLoading] = useState(true); // New loading state
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      try {
+        // Manually decode the JWT payload (the second segment of the token)
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(window.atob(base64));
+
+        // Check if the token has expired
+        if (payload.exp && Date.now() >= payload.exp * 1000) {
+          throw new Error('Token expired');
+        }
+
+        setActiveRole(payload.role.toLowerCase());
+        setCurrentUser(payload.name || payload.email);
+        setIsAuthenticated(true);
+
+        // Ensure the user lands on the correct tab for their role after a refresh
+        if (payload.role.toLowerCase() === 'doctor') setActiveTab('consultations');
+        else setActiveTab('dashboard');
+      } catch (e) {
+        console.error('Session restoration failed:', e.message);
+        localStorage.removeItem('access_token');
+      } finally {
+        setIsLoading(false); // Set loading to false after check
+      }
+    }
+    setIsLoading(false); // Also set to false if no token is found
+  }, []);
 
   const handleLogin = ({ role, username }) => {
     setActiveRole(role);
@@ -50,6 +82,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('access_token');
     setIsAuthenticated(false);
     setActiveRole('');
     setCurrentUser('');
@@ -261,6 +294,15 @@ export default function App() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-500"></div>
+        <p className="ml-4 text-lg text-slate-700">Loading application...</p>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return <LoginView onLogin={handleLogin} />;
   }
@@ -268,7 +310,7 @@ export default function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} />;
+        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} />;
       case 'patients':
         return <PatientsView appointments={appointments} patients={patients} followups={followups} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
       case 'phone-calls':
@@ -329,6 +371,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-50 font-inter">
       <Header
         activeRole={activeRole}
+        currentUser={currentUser}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}

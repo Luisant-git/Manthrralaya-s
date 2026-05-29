@@ -35,12 +35,13 @@ export class AuthService {
     sub: user.id,
     email: user.email,
     role: user.role,
+    name: user.fullName, 
   };
 
   return {
     access_token: await this.jwtService.signAsync(payload),
     role: user.role,
-    fullName: user.fullName,
+    name: user.fullName,
     email: user.email,
   };
 }

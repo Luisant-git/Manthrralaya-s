@@ -31,8 +31,11 @@ export default function LoginView({ onLogin }) {
         throw new Error(`Unauthorized: Your account does not have access to the ${selectedRole} workspace.`);
       }
 
+      // Save the token to local storage so the session persists on refresh
+      localStorage.setItem('access_token', response.access_token);
+
       // Pass the authenticated user data to the parent component
-      onLogin({ role: response.role.toLowerCase(), username: response.fullName || response.email });
+      onLogin({ role: response.role.toLowerCase(), username: response.name || response.fullName || response.email });
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
