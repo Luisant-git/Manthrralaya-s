@@ -29,10 +29,21 @@ export const userApi = {
         return result;
     },
 
+    // Update doctor availability status
+    updateDoctorStatus: async (doctorId, status) => {
+        const response = await fetch(`${API_URL}/doctor/${doctorId}/status`, {
+            method: 'PATCH',
+            headers: getAuthHeader(),
+            body: JSON.stringify({ status })
+        });
+        if (!response.ok) throw new Error('Failed to update doctor status');
+        return response.json();
+    },
+
     // Update existing user details
     updateUser: async (userId, userData) => {
         const response = await fetch(`${API_URL}/user/${userId}`, {
-            method: 'PUT',
+            method: 'PATCH',
             headers: getAuthHeader(),
             body: JSON.stringify(userData)
         });
@@ -43,7 +54,7 @@ export const userApi = {
     // Reset staff PIN
     resetPin: async (userId, pin) => {
         const response = await fetch(`${API_URL}/user/${userId}/pin`, {
-            method: 'PUT',
+            method: 'PATCH',
             headers: getAuthHeader(),
             body: JSON.stringify({ pin })
         });
@@ -54,7 +65,7 @@ export const userApi = {
     // Toggle user active/inactive status
     updateStatus: async (userId, isActive) => {
         const response = await fetch(`${API_URL}/user/${userId}/status`, {
-            method: 'PUT',
+            method: 'PATCH',
             headers: getAuthHeader(),
             body: JSON.stringify({ isActive })
         });

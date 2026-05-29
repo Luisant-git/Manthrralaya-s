@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Get, Param, Put, Delete } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Patch, Delete } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -11,7 +11,6 @@ import { UserRole } from '../common/enums/user-role.enum';
 @ApiBearerAuth()
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
 export class AdminController {
   constructor(private adminService: AdminService) {}
 
@@ -19,6 +18,7 @@ export class AdminController {
   
   // Get user by ID (specific route before generic :role routes)
   @ApiOperation({ summary: 'Get user by ID' })
+  @Roles('ADMIN')
   @Get('user/:id')
   getUserById(@Param('id') id: string) {
     return this.adminService.getUserById(Number(id));
@@ -26,7 +26,8 @@ export class AdminController {
 
   // Update user status
   @ApiOperation({ summary: 'Activate/Deactivate user' })
-  @Put('user/:id/status')
+  @Roles('ADMIN')
+  @Patch('user/:id/status')
   updateUserStatus(
     @Param('id') id: string,
     @Body('isActive') isActive: boolean,
@@ -34,47 +35,52 @@ export class AdminController {
     return this.adminService.updateUserStatus(Number(id), isActive);
   }
 
+  // Reset user PIN
+  @ApiOperation({ summary: 'Reset staff access PIN' })
+  @Roles('ADMIN')
+  @Patch('user/:id/pin')
+  resetPin(
+    @Param('id') id: string,
+    @Body() body: { pin: string },
+  ) {
+    return this.adminService.resetUserPin(Number(id), body.pin);
+  }
+
+  // Update user details
+  @ApiOperation({ summary: 'Update staff details' })
+  @Roles('ADMIN', 'DOCTOR')
+  @Patch('user/:id')
+  updateUser(
+    @Param('id') id: string,
+    @Body() dto: any,
+  ) {
+    return this.adminService.updateUser(Number(id), dto);
+  }
+
   // Delete user
   @ApiOperation({ summary: 'Delete user' })
+  @Roles('ADMIN')
   @Delete('user/:id')
   deleteUser(@Param('id') id: string) {
     return this.adminService.deleteUser(Number(id));
   }
 
-  // Update user details
-  @ApiOperation({ summary: 'Update staff details' })
-  @Put('user/:id')
-  updateUser(
-    @Param('id') id: string,
-    @Body() dto: CreateUserDto,
-  ) {
-    return this.adminService.updateUser(Number(id), dto);
-  }
-
-  // Reset user PIN
-  @ApiOperation({ summary: 'Reset staff access PIN' })
-  @Put('user/:id/pin')
-  resetPin(
-    @Param('id') id: string,
-    @Body('pin') pin: string,
-  ) {
-    return this.adminService.resetUserPin(Number(id), pin);
-  }
-
   // Update doctor status
   @ApiOperation({ summary: 'Update doctor availability status' })
-  @Put('doctor/:id/status')
+  @Roles('ADMIN', 'DOCTOR')
+  @Patch('doctor/:id/status')
   updateDoctorStatus(
     @Param('id') id: string,
-    @Body('status') status: string,
+    @Body() body: { status: string },
   ) {
-    return this.adminService.updateDoctorStatus(Number(id), status);
+    return this.adminService.updateDoctorStatus(Number(id), body.status);
   }
 
 
   
   // Create user by role (receptionist/doctor)
   @ApiOperation({ summary: 'Create user by role (receptionist/doctor)' })
+  @Roles('ADMIN')
   @ApiParam({ name: 'role', enum: UserRole, description: 'User role' })
   @Post(':role')
   createUser(
@@ -86,6 +92,7 @@ export class AdminController {
 
   // Get all users by role
   @ApiOperation({ summary: 'Get all users by role' })
+  @Roles('ADMIN', 'RECEPTIONIST')
   @ApiParam({ name: 'role', enum: UserRole, description: 'User role' })
   @Get(':role')
   getUsersByRole(@Param('role') role: UserRole) {

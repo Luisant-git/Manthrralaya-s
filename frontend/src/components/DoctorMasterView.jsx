@@ -1,85 +1,115 @@
-import React, { useState } from 'react';
-import { Stethoscope, Briefcase, Plus, Save, X, Trash2, Edit3, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Stethoscope, Briefcase, Save, X, Trash2, Edit3, AlertTriangle, RefreshCw, Loader2, Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { userApi } from '../api/userApi';
 
-export default function DoctorMasterView({ doctors, setDoctors }) {
-  const [isAdding, setIsAdding] = useState(false);
+export default function DoctorMasterView() {
+  const [doctors, setDoctors] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [editingDoctor, setEditingDoctor] = useState(null); // Doctor object currently being edited
   const [deletingDoctor, setDeletingDoctor] = useState(null); // Doctor object currently being deleted
 
-  const [formData, setFormData] = useState({
-    name: '',
-    designation: '',
-    status: 'Available'
-  });
+  // Search, Filter & Pagination
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'Available', 'On Leave'
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const [editFormData, setEditFormData] = useState({
-    name: '',
+    fullName: '',
     designation: '',
     status: 'Available'
   });
 
-  const handleAddDoctor = (e) => {
-    e.preventDefault();
-    if (!formData.name.trim()) return alert('Name is required');
-    if (!formData.designation.trim()) return alert('Designation is required');
+  useEffect(() => {
+    loadDoctors();
+  }, []);
 
-    const newDoc = {
-      id: `DOC-0${doctors.length + 1}`,
-      name: formData.name,
-      designation: formData.designation,
-      status: formData.status
-    };
+  const loadDoctors = async () => {
+    setIsLoading(true);
+    try {
+      const response = await userApi.getUsersByRole('DOCTOR');
+      setDoctors(response.data || []);
+      setError(null);
+    } catch (err) {
+      setError('Failed to synchronize doctor directory.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    setDoctors(prev => [...prev, newDoc]);
-    setIsAdding(false);
-    setFormData({ name: '', designation: '', status: 'Available' });
+  // Filter doctors based on search and status filter
+  const filteredDoctors = doctors.filter(doc => {
+    const matchesSearch = !searchTerm.trim() ||
+      doc.user?.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doc.specialization?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doc.id?.toString().includes(searchTerm);
+    
+    const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredDoctors.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedDoctors = filteredDoctors.slice(startIndex, startIndex + itemsPerPage);
+
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
   };
 
   const handleStartEdit = (doc) => {
     setEditingDoctor(doc);
     setEditFormData({
-      name: doc.name,
-      designation: doc.designation,
+      fullName: doc.user?.fullName || '',
+      designation: doc.specialization || '',
       status: doc.status
     });
   };
 
-  const handleSaveEdit = (e) => {
+  const handleSaveEdit = async (e) => {
     e.preventDefault();
-    if (!editFormData.name.trim()) return alert('Name is required');
-    if (!editFormData.designation.trim()) return alert('Designation is required');
-
-    setDoctors(prev => prev.map(doc => {
-      if (doc.id === editingDoctor.id) {
-        return {
-          ...doc,
-          name: editFormData.name,
-          designation: editFormData.designation,
-          status: editFormData.status
-        };
-      }
-      return doc;
-    }));
-    setEditingDoctor(null);
-  };
-
-  const confirmDeleteDoctor = () => {
-    if (deletingDoctor) {
-      setDoctors(prev => prev.filter(doc => doc.id !== deletingDoctor.id));
-      setDeletingDoctor(null);
+    
+    try {
+      await userApi.updateUser(editingDoctor.user.id, {
+        fullName: editingDoctor.user.fullName, // Keep original name
+        specialization: editingDoctor.specialization, // Keep original specialization
+        status: editFormData.status, // Only update status
+        email: editingDoctor.user.email,
+        role: 'DOCTOR',
+        phone: editingDoctor.user.phone
+      });
+      setEditingDoctor(null);
+      loadDoctors();
+    } catch (err) {
+      alert(err.message);
     }
   };
 
-  const toggleStatus = (id) => {
-    setDoctors(prev => prev.map(doc => {
-      if (doc.id === id) {
-        return {
-          ...doc,
-          status: doc.status === 'Available' ? 'On Leave' : 'Available'
-        };
+  const confirmDeleteDoctor = async () => {
+    if (deletingDoctor) {
+      try {
+        await userApi.deleteUser(deletingDoctor.user.id);
+        setDeletingDoctor(null);
+        loadDoctors();
+      } catch (err) {
+        alert(err.message);
       }
-      return doc;
-    }));
+    }
+  };
+
+  const toggleStatus = async (doctorId, currentStatus) => {
+    const newStatus = currentStatus === 'Available' ? 'On Leave' : 'Available';
+    try {
+      await userApi.updateDoctorStatus(doctorId, newStatus);
+      await loadDoctors();
+    } catch (err) {
+      console.error('Status update error:', err);
+      alert(err.message || 'Failed to update doctor status');
+    }
   };
 
   return (
@@ -92,99 +122,26 @@ export default function DoctorMasterView({ doctors, setDoctors }) {
             Doctor Master Directory
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Manage clinical practitioners, department specialization, and live status.
+            View clinical practitioners and manage availability status. To add a new doctor, use Staff Management.
           </p>
         </div>
-        <button
-          onClick={() => setIsAdding(true)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
+        <button 
+          onClick={loadDoctors}
+          className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+          title="Refresh List"
         >
-          <Plus className="w-4 h-4" /> Register New Doctor
+          <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {/* Add New Doctor Modal */}
-      {isAdding && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn text-left">
-          <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-scaleIn">
-            <div className="bg-emerald-600 text-white p-5 flex items-center justify-between">
-              <div>
-                <h3 className="font-extrabold text-lg m-0 font-outfit">Register New Doctor</h3>
-                <p className="text-emerald-100 text-xs mt-0.5">Add a new clinical practitioner to the system</p>
-              </div>
-              <button 
-                onClick={() => setIsAdding(false)} 
-                className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleAddDoctor} className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 font-outfit">Doctor Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Dr. Arthur Dent"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 font-outfit">Specialization / Designation</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Naturopathic Lead"
-                  value={formData.designation}
-                  onChange={e => setFormData({ ...formData, designation: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 font-outfit">Initial Status</label>
-                <select
-                  value={formData.status}
-                  onChange={e => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium"
-                >
-                  <option value="Available">Available / Active</option>
-                  <option value="On Leave">On Leave / Inactive</option>
-                </select>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAdding(false)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-2.5 rounded-xl text-xs transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors shadow-sm"
-                >
-                  Register Practitioner
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Doctor Modal */}
+      {/* Edit Doctor Modal - Name & Specialization READ-ONLY */}
       {editingDoctor && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fadeIn text-left">
           <div className="bg-white border border-slate-200 w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-scaleIn">
             <div className="bg-emerald-600 text-white p-5 flex items-center justify-between">
               <div>
                 <h3 className="font-extrabold text-lg m-0 font-outfit">Edit Doctor Profile</h3>
-                <p className="text-emerald-100 text-xs mt-0.5">Modify details for {editingDoctor.name}</p>
+                <p className="text-emerald-100 text-xs mt-0.5">Modify details for {editingDoctor.user?.fullName}</p>
               </div>
               <button 
                 onClick={() => setEditingDoctor(null)} 
@@ -199,24 +156,22 @@ export default function DoctorMasterView({ doctors, setDoctors }) {
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 font-outfit">Doctor Name</label>
                 <input
                   type="text"
-                  required
-                  placeholder="e.g. Dr. Arthur Dent"
-                  value={editFormData.name}
-                  onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium"
+                  disabled
+                  value={editFormData.fullName}
+                  className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-500 font-medium cursor-not-allowed"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">Name cannot be edited</p>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5 font-outfit">Specialization / Designation</label>
                 <input
                   type="text"
-                  required
-                  placeholder="e.g. Naturopathic Lead"
+                  disabled
                   value={editFormData.designation}
-                  onChange={e => setEditFormData({ ...editFormData, designation: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium"
+                  className="w-full bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-500 font-medium cursor-not-allowed"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">Specialization cannot be edited</p>
               </div>
 
               <div>
@@ -265,7 +220,7 @@ export default function DoctorMasterView({ doctors, setDoctors }) {
             
             <div className="p-6 space-y-4">
               <p className="text-slate-600 text-sm leading-relaxed">
-                Are you sure you want to permanently delete the profile of <strong className="text-slate-800">{deletingDoctor.name}</strong> ({deletingDoctor.designation})? 
+                Are you sure you want to permanently delete the profile of <strong className="text-slate-800">{deletingDoctor.user?.fullName}</strong> ({deletingDoctor.specialization})? 
               </p>
               <div className="bg-rose-50 p-3 border border-rose-150 rounded-xl text-xs text-rose-800">
                 Warning: This action is irreversible. All scheduling availability for this doctor will be removed.
@@ -292,64 +247,197 @@ export default function DoctorMasterView({ doctors, setDoctors }) {
         </div>
       )}
 
-      {/* Grid of Doctor Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {doctors.map(doc => {
-          return (
-            <div 
-              key={doc.id}
-              className={`bg-white border rounded-2xl p-5 shadow-xs text-left transition-all hover:shadow-md flex flex-col justify-between min-h-[180px] ${
-                doc.status === 'Available' ? 'border-slate-200' : 'border-rose-100 bg-rose-50/10'
-              }`}
-            >
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                    <Stethoscope className="w-5 h-5" />
-                  </div>
-                  <button
-                    onClick={() => toggleStatus(doc.id)}
-                    className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border tracking-wider transition-colors ${
-                      doc.status === 'Available' 
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                        : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
-                    }`}
-                    title="Click to toggle availability status"
+      {isLoading ? (
+        <div className="py-20 flex flex-col items-center justify-center text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin mb-3" />
+          <p className="font-medium">Syncing clinical records...</p>
+        </div>
+      ) : error ? (
+        <div className="py-20 text-center">
+          <AlertTriangle className="w-12 h-12 text-rose-300 mx-auto mb-3" />
+          <p className="text-slate-500">{error}</p>
+          <button onClick={loadDoctors} className="mt-4 text-emerald-600 font-bold hover:underline">Try Again</button>
+        </div>
+      ) : (
+        <>
+          {/* Search and Filter Bar */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-200 bg-slate-50">
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Search Input with Clear Icon */}
+<div className="relative flex-1 max-w-md">
+  <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+  <input
+    type="text"
+    placeholder="Search doctors by name, specialization or ID..."
+    value={searchTerm}
+    onChange={e => {
+      setSearchTerm(e.target.value);
+      setCurrentPage(1);
+    }}
+    className="w-full pl-10 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+  />
+  {searchTerm && (
+    <button
+      onClick={() => {
+        setSearchTerm('');
+        setCurrentPage(1);
+      }}
+      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+    >
+      <X className="w-5 h-5" />
+    </button>
+  )}
+</div>
+              
+                
+                {/* Status Filter Dropdown */}
+                <div className="relative w-full sm:w-48">
+                  <Filter className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                  <select
+                    value={statusFilter}
+                    onChange={e => {
+                      setStatusFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 appearance-none cursor-pointer"
                   >
-                    {doc.status}
-                  </button>
-                </div>
-
-                <div className="mt-4">
-                  <h4 className="font-extrabold text-slate-800 text-base">{doc.name}</h4>
-                  <p className="text-slate-500 text-xs mt-1 flex items-center gap-1.5 font-medium">
-                    <Briefcase className="w-3.5 h-3.5 text-slate-400" /> {doc.designation}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-3 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-extrabold uppercase">
-                <span>ID: {doc.id}</span>
-                <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => handleStartEdit(doc)}
-                    className="text-emerald-600 hover:text-emerald-700 font-bold tracking-wider flex items-center gap-1 text-[11px]"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" /> Edit
-                  </button>
-                  <button 
-                    onClick={() => setDeletingDoctor(doc)}
-                    className="text-rose-600 hover:text-rose-700 font-bold tracking-wider flex items-center gap-1 text-[11px]"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Delete
-                  </button>
+                    <option value="all">All Status</option>
+                    <option value="Available">Available</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
                 </div>
               </div>
             </div>
-          );
-        })}
-      </div>
 
+            {/* Doctors Grid */}
+            <div className="p-4">
+              {paginatedDoctors.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">
+                  <Stethoscope className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p>No doctors found matching your search.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {paginatedDoctors.map(item => {
+                      const doc = item;
+                      const user = item.user || {};
+                      return (
+                        <div 
+                          key={item.id}
+                          className={`bg-white border rounded-2xl p-5 shadow-xs text-left transition-all hover:shadow-md flex flex-col justify-between min-h-[180px] ${
+                            doc.status === 'Available' ? 'border-slate-200' : 'border-rose-100 bg-rose-50/10'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between">
+                              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                <Stethoscope className="w-5 h-5" />
+                              </div>
+                              <button
+                                onClick={() => toggleStatus(item.id, doc.status)}
+                                className={`px-3 py-1 rounded-full text-[10px] font-extrabold uppercase border tracking-wider transition-colors ${
+                                  doc.status === 'Available' 
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                                    : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                                }`}
+                                title="Click to toggle availability status"
+                              >
+                                {doc.status}
+                              </button>
+                            </div>
+
+                            <div className="mt-4">
+                              <h4 className="font-extrabold text-slate-800 text-base">{user.fullName}</h4>
+                              <p className="text-slate-500 text-xs mt-1 flex items-center gap-1.5 font-medium">
+                                <Briefcase className="w-3.5 h-3.5 text-slate-400" /> {doc.specialization}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-6 pt-3 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400 font-extrabold uppercase">
+                            <span>Doc ID: {item.id}</span>
+                            <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => handleStartEdit(item)}
+                                className="text-emerald-600 hover:text-emerald-700 font-bold tracking-wider flex items-center gap-1 text-[11px]"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" /> Edit
+                              </button>
+                              <button 
+                                onClick={() => setDeletingDoctor(doc)}
+                                className="text-rose-600 hover:text-rose-700 font-bold tracking-wider flex items-center gap-1 text-[11px]"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
+                      <p className="text-sm text-slate-500">
+                        Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredDoctors.length)}</span> of <span className="font-semibold text-slate-800">{filteredDoctors.length}</span> doctors
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => goToPage(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                          <ChevronLeft className="w-5 h-5" />
+                        </button>
+                        
+                        <div className="flex items-center">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => goToPage(pageNum)}
+                                className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${
+                                  currentPage === pageNum 
+                                    ? 'bg-emerald-600 text-white' 
+                                    : 'text-slate-600 hover:bg-slate-50'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => goToPage(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

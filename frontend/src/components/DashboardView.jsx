@@ -174,34 +174,31 @@ export default function DashboardView({
   });
 
   const isDoctorView = activeRole === 'doctor';
-
-  const getInitials = (name) => {
+ const getInitials = (name) => {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-
   return (
     <div className="space-y-6">
-      
-      {/* Top Title & Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
-            {getInitials(currentUser)}
-          </div>
-          <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
-            {isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
-          </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>. 
-            {isDoctorView
-              ? ' Here is your patient queue for today.'
-              : ' View real-time insights on patient flow and admissions.'}
-          </p>
-          </div>
-        </div>
-      </div>
+{/* Top Title & Actions */}
+<div className="flex items-center justify-between">
+  <div className="flex items-center gap-4">
+    <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
+      {getInitials(currentUser)}
+    </div>
+    <div>
+    <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
+      {isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
+    </h1>
+    <p className="text-slate-500 text-sm mt-1">
+      Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>. 
+      {isDoctorView
+        ? ' Here is your patient queue for today.'
+        : ' View real-time insights on patient flow and admissions.'}
+    </p>
+    </div>
+  </div>
+</div>
 
       {isDoctorView && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">

@@ -22,7 +22,7 @@ export const authApi = {
 
     // Optional: store token
     if (result.access_token) {
-      localStorage.setItem('token', result.access_token);
+      localStorage.setItem('access_token', result.access_token);
     }
 
     return result;

@@ -26,7 +26,7 @@ export class AdminService {
       throw new ConflictException('Email already exists');
     }
 
-    const existingPhoneUser = await this.prisma.user.findUnique({
+    const existingPhoneUser = await this.prisma.user.findFirst({
       where: { phone: dto.phone }
     });
     if (existingPhoneUser) {
@@ -157,20 +157,31 @@ export class AdminService {
     };
   }
 
-  // ========== UPDATE DOCTOR STATUS ==========
-  async updateDoctorStatus(doctorId: number, status: string) {
-    const doctor = await this.prisma.doctor.update({
-      where: { id: doctorId },
-      data: { status },
-      include: { user: true }
-    });
+ // ========== UPDATE DOCTOR STATUS ==========
+async updateDoctorStatus(doctorId: number, status: string) {
+  // First check if doctor exists
+  const doctor = await this.prisma.doctor.findUnique({
+    where: { id: doctorId },
+    include: { user: true }
+  });
 
-    return {
-      success: true,
-      message: `Doctor status updated to ${status}`,
-      data: doctor,
-    };
+  if (!doctor) {
+    throw new NotFoundException(`Doctor with ID ${doctorId} not found`);
   }
+
+  // Update the doctor status
+  const updatedDoctor = await this.prisma.doctor.update({
+    where: { id: doctorId },
+    data: { status },
+    include: { user: true }
+  });
+
+  return {
+    success: true,
+    message: `Doctor status updated to ${status}`,
+    data: updatedDoctor,
+  };
+}
 
   // ========== DELETE USER ==========
   async deleteUser(userId: number) {
@@ -212,7 +223,7 @@ async getUserById(id: number) {
 }
 
   // ========== UPDATE USER ==========
-  async updateUser(userId: number, dto: CreateUserDto) {
+  async updateUser(userId: number, dto: any) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { doctor: true }
@@ -250,11 +261,11 @@ async getUserById(id: number) {
       });
 
       let profile = null;
-      if (user.role === UserRole.DOCTOR && dto.specialization) {
+      if (user.role === UserRole.DOCTOR && user.doctor) {
         profile = await prisma.doctor.update({
           where: { userId: userId },
           data: {
-            specialization: dto.specialization,
+            specialization: dto.specialization || user.doctor.specialization,
             status: dto.status || user.doctor?.status || 'Available',
           },
         });
