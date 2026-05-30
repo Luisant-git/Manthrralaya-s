@@ -54,11 +54,6 @@ export default function ReceptionistView({
     session: 'FN',
     notes: ''
   });
-// Add this useEffect to debug doctors data
-useEffect(() => {
-  console.log('Doctors received:', doctors);
-  console.log('Doctors count:', doctors?.length);
-}, [doctors]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -71,6 +66,24 @@ useEffect(() => {
   const [foundPatient, setFoundPatient] = useState(null);
   const [showPatientFoundAlert, setShowPatientFoundAlert] = useState(false);
   const [phoneDebounce, setPhoneDebounce] = useState(null);
+
+  // Debug: Log doctors data
+  useEffect(() => {
+    console.log('Doctors received:', doctors);
+    console.log('Doctors count:', doctors?.length);
+  }, [doctors]);
+
+  // Debug: Log appointments data
+  useEffect(() => {
+    console.log('Appointments received in ReceptionistView:', appointments);
+    console.log('Total appointments:', appointments?.length);
+  }, [appointments]);
+
+  // Debug: Log patients data
+  useEffect(() => {
+    console.log('Patients received:', patients);
+    console.log('Patients count:', patients?.length);
+  }, [patients]);
 
   const fetchPatientByPhone = async (phoneNumber) => {
     if (!phoneNumber || phoneNumber.trim() === '') {
@@ -128,17 +141,16 @@ useEffect(() => {
   }, [formData.phone]);
 
   // Synchronization for Searchable Doctor Field
-useEffect(() => {
-  const doc = doctors?.find(d => String(d.id) === String(formData.doctor_id));
-  if (doc) {
-    const doctorName = doc.user?.fullName || doc.name || `Doctor ${doc.id}`;
-    const doctorSpecialty = doc.specialization || doc.designation || '';
-    setDoctorSearchTerm(`${doctorName} (${doctorSpecialty})`);
-  } else if (!formData.doctor_id) {
-    setDoctorSearchTerm('');
-  }
-}, [formData.doctor_id, doctors]);
- 
+  useEffect(() => {
+    const doc = doctors?.find(d => String(d.id) === String(formData.doctor_id));
+    if (doc) {
+      const doctorName = doc.user?.fullName || doc.name || `Doctor ${doc.id}`;
+      const doctorSpecialty = doc.specialization || doc.designation || '';
+      setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${doc.status})`);
+    } else if (!formData.doctor_id) {
+      setDoctorSearchTerm('');
+    }
+  }, [formData.doctor_id, doctors]);
 
   // Close doctor dropdown on click outside
   useEffect(() => {
@@ -170,14 +182,6 @@ useEffect(() => {
   const normalizePhone = (phone) => {
     if (!phone) return '';
     return phone.toString().replace(/\D/g, '');
-  };
-
-  const phoneNumbersMatch = (a, b) => {
-    const normalizedA = normalizePhone(a);
-    const normalizedB = normalizePhone(b);
-    if (!normalizedA || !normalizedB) return false;
-    if (normalizedA === normalizedB) return true;
-    return normalizedA.endsWith(normalizedB) || normalizedB.endsWith(normalizedA);
   };
 
   const handleAction = async (type) => {
@@ -251,7 +255,7 @@ useEffect(() => {
     e.preventDefault();
     if (!modalBookingData.doctor_id) return alert('Please assign a doctor.');
     try {
-      const waitingAppt = appointments.find(a => (a.patientId === bookingModalPatient.id || a.patient_id === bookingModalPatient.id) && a.status === 'Waiting');
+      const waitingAppt = appointments.find(a => (String(a.patientId || a.patient_id) === String(bookingModalPatient.id)) && a.status === 'Waiting');
       if (waitingAppt) {
         const updated = await updateAppointmentStatus(waitingAppt.id, 'Scheduled');
         setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
@@ -291,18 +295,21 @@ useEffect(() => {
     }
   };
 
-  const activeBookings = appointments.filter(a => {
+  const activeBookings = appointments?.filter(a => {
+    if (!a) return false;
     const apptDate = a.appointmentDate ? (typeof a.appointmentDate === 'string' ? a.appointmentDate.split('T')[0] : a.appointmentDate) : a.date;
     return a.status !== 'Waiting' && apptDate === todayDate;
-  });
-  const waitingList = appointments.filter(a => a.status === 'Waiting');
+  }) || [];
+
+  const waitingList = appointments?.filter(a => a?.status === 'Waiting') || [];
 
   const filteredActiveBookings = activeBookings.filter(appt => {
-    const pt = patients.find(p => p.id === appt.patientId || p.id === appt.patient_id) || appt.patient || {};
-    const doc = doctors.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || appt.doctor || {};
+    if (!appt) return false;
+    const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || appt.Patient || {};
+    const doc = doctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || {};
     const docFullName = doc?.user?.fullName || doc?.name || '';
 
-    const matchesSearch = 
+    const matchesSearch = !searchQuery || 
       pt.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pt.phone?.includes(searchQuery) ||
       docFullName.toLowerCase().includes(searchQuery.toLowerCase());
@@ -331,8 +338,8 @@ useEffect(() => {
 
   const renderPatientMeta = (pt) => {
     const parts = [];
-    if (pt.age) parts.push(`${pt.age} yrs`);
-    if (pt.location && pt.location !== 'n/a') parts.push(pt.location);
+    if (pt?.age) parts.push(`${pt.age} yrs`);
+    if (pt?.location && pt.location !== 'n/a') parts.push(pt.location);
     return parts.length > 0 ? `(${parts.join(' • ')})` : '';
   };
 
@@ -486,119 +493,108 @@ useEffect(() => {
             )}
 
             <div>
-  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Schedule Doctor <span className="text-rose-500">*</span></label>
-  <div className="relative" onClick={(e) => e.stopPropagation()}>
-    <div className="relative">
-      <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-      <input
-        type="text"
-        placeholder="Search doctor by name or specialty..."
-        value={doctorSearchTerm}
-        onFocus={() => setShowDoctorDropdown(true)}
-        onChange={(e) => {
-          setDoctorSearchTerm(e.target.value);
-          setShowDoctorDropdown(true);
-          if (formData.doctor_id) setFormData(prev => ({ ...prev, doctor_id: '' }));
-        }}
-        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-      />
-      {/* Clear/X Icon */}
-      {doctorSearchTerm && (
-        <button
-          type="button"
-          onClick={() => {
-            setDoctorSearchTerm('');
-            setFormData(prev => ({ ...prev, doctor_id: '' }));
-            setShowDoctorDropdown(false);
-          }}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-    
-    {showDoctorDropdown && (
-      <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto animate-fadeIn">
-        {doctors && doctors.length > 0 ? (
-          doctors
-            .filter(d => {
-              const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
-              const doctorSpecialty = d.specialization || d.designation || '';
-              return d.status === 'Available' && 
-                (doctorName.toLowerCase().includes(doctorSearchTerm.toLowerCase()) ||
-                 doctorSpecialty.toLowerCase().includes(doctorSearchTerm.toLowerCase()));
-            })
-            .map(d => {
-              const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
-              const doctorSpecialty = d.specialization || d.designation || 'General Physician';
-              const isAvailable = d.status === 'Available';
-              
-              return (
-                <button
-                  key={d.id}
-                  type="button"
-                  onClick={() => {
-                    if (isAvailable) {
-                      setFormData({ ...formData, doctor_id: d.id });
-                      setDoctorSearchTerm(`${doctorName} (${doctorSpecialty})`);
-                      setShowDoctorDropdown(false);
-                    }
-                  }}
-                  disabled={!isAvailable}
-                  className={`w-full text-left px-4 py-3 text-sm border-b border-slate-100 last:border-0 transition-colors ${
-                    isAvailable 
-                      ? 'hover:bg-emerald-50 cursor-pointer' 
-                      : 'opacity-50 cursor-not-allowed bg-slate-50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-slate-800">{doctorName}</div>
-                      <div className="text-[11px] text-slate-500 uppercase font-medium tracking-tight mt-0.5">
-                        {doctorSpecialty}
-                      </div>
-                    </div>
-                    {!isAvailable && (
-                      <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">
-                        On Leave
-                      </span>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Schedule Doctor <span className="text-rose-500">*</span></label>
+              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search doctor by name or specialty..."
+                    value={doctorSearchTerm}
+                    onFocus={() => setShowDoctorDropdown(true)}
+                    onChange={(e) => {
+                      setDoctorSearchTerm(e.target.value);
+                      setShowDoctorDropdown(true);
+                      if (formData.doctor_id) setFormData(prev => ({ ...prev, doctor_id: '' }));
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                  />
+                  {doctorSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDoctorSearchTerm('');
+                        setFormData(prev => ({ ...prev, doctor_id: '' }));
+                        setShowDoctorDropdown(false);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                
+                {showDoctorDropdown && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto animate-fadeIn">
+                    {doctors && doctors.length > 0 ? (
+                      doctors
+                        .filter(d => {
+                          const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
+                          const doctorSpecialty = d.specialization || d.designation || '';
+                          return d.status === 'Available' && 
+                            (doctorName.toLowerCase().includes(doctorSearchTerm.toLowerCase()) ||
+                             doctorSpecialty.toLowerCase().includes(doctorSearchTerm.toLowerCase()));
+                        })
+                        .map(d => {
+                          const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
+                          const doctorSpecialty = d.specialization || d.designation || 'General Physician';
+                          const isAvailable = d.status === 'Available';
+                          
+                          return (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => {
+                                if (isAvailable) {
+                                  setFormData({ ...formData, doctor_id: d.id });
+                                  setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
+                                  setShowDoctorDropdown(false);
+                                }
+                              }}
+                              disabled={!isAvailable}
+                              className="w-full text-left px-4 py-2 text-sm border-b border-slate-100 last:border-0 transition-colors hover:bg-emerald-50 cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <span className="font-bold text-slate-800">{doctorName}</span>
+                                  <span className="text-slate-500 ml-1 text-xs">({doctorSpecialty})</span>
+                                </div>
+                                <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border whitespace-nowrap ${
+                                  isAvailable 
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
+                                    : 'bg-rose-50 border-rose-200 text-rose-600'
+                                }`}>
+                                  {d.status}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-400 italic">Loading doctors...</div>
                     )}
-                    {isAvailable && (
-                      <span className="text-[10px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-semibold">
-                        Available
-                      </span>
+                    {doctors && doctors.length > 0 && doctors.filter(d => d.status === 'Available').length === 0 && (
+                      <div className="p-4 text-center text-xs text-slate-400 italic">No doctors available today.</div>
                     )}
                   </div>
-                </button>
-              );
-            })
-        ) : (
-          <div className="p-4 text-center text-xs text-slate-400 italic">Loading doctors...</div>
-        )}
-        {doctors && doctors.length > 0 && doctors.filter(d => d.status === 'Available').length === 0 && (
-          <div className="p-4 text-center text-xs text-slate-400 italic">No doctors available today.</div>
-        )}
-      </div>
-    )}
-  </div>
-  {/* Show selected doctor info */}
-  {formData.doctor_id && doctorSearchTerm && (
-    <div className="mt-2 text-xs text-emerald-600 bg-emerald-50 p-2 rounded-lg flex items-center justify-between">
-      <span>✓ Selected: {doctorSearchTerm}</span>
-      <button
-        type="button"
-        onClick={() => {
-          setDoctorSearchTerm('');
-          setFormData(prev => ({ ...prev, doctor_id: '' }));
-        }}
-        className="text-emerald-600 hover:text-emerald-800"
-      >
-        <X className="w-3 h-3" />
-      </button>
-    </div>
-  )}
-</div>
+                )}
+              </div>
+              {formData.doctor_id && doctorSearchTerm && (
+                <div className="mt-2 text-xs text-emerald-600 bg-emerald-50 p-2 rounded-lg flex items-center justify-between">
+                  <span>✓ Selected: {doctorSearchTerm}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDoctorSearchTerm('');
+                      setFormData(prev => ({ ...prev, doctor_id: '' }));
+                    }}
+                    className="text-emerald-600 hover:text-emerald-800"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -670,7 +666,7 @@ useEffect(() => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {waitingList.map(appt => {
-                      const pt = patients.find(p => p.id === appt.patientId || p.id === appt.patient_id) || appt.patient || {};
+                      const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || appt.Patient || {};
                       return (
                         <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors align-top">
                           <td className="py-2.5 px-4">
@@ -736,7 +732,7 @@ useEffect(() => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredActiveBookings.slice().reverse().map(appt => {
-                      const pt = patients.find(p => p.id === appt.patientId || p.id === appt.patient_id) || appt.patient || {};
+                      const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || appt.Patient || {};
                       const isScheduled = appt.status === 'Scheduled';
                       const isArrived = appt.status === 'Arrived';
                       const isCheckedIn = appt.status === 'Checked-in';
@@ -758,7 +754,7 @@ useEffect(() => {
                             {isCancelled && <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-3 py-1 text-xs font-semibold"><X className="w-3.5 h-3.5" /> Cancelled</span>}
                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <strong className="text-slate-800 block">{appt.appointmentDate ? (typeof appt.appointmentDate === 'string' ? appt.appointmentDate.split('T')[0] : appt.appointmentDate) : appt.date || todayDate}</strong>
+                            <strong className="text-slate-800 block">{appt.appointmentDate ? (typeof appt.appointmentDate === 'string' ? appt.appointmentDate.split('T')[0] : new Date(appt.appointmentDate).toISOString().split('T')[0]) : appt.date || todayDate}</strong>
                             <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
                           </td>
                           <td className="py-3 px-4 align-top min-w-0">
@@ -829,31 +825,42 @@ useEffect(() => {
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
-                 {showDoctorDropdown && (
-  <div className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-    {doctors
-      .filter(d => d.status === 'Available' && (d.user?.fullName || d.name || '').toLowerCase().includes(doctorSearchTerm.toLowerCase()))
-      .map(d => {
-        const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
-        const doctorSpecialty = d.specialization || d.designation || 'General Physician';
-        return (
-          <button
-            key={d.id}
-            type="button"
-            onClick={() => {
-              setModalBookingData({ ...modalBookingData, doctor_id: d.id });
-              setDoctorSearchTerm(`${doctorName} (${doctorSpecialty})`);
-              setShowDoctorDropdown(false);
-            }}
-            className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 border-b border-slate-50 last:border-0"
-          >
-            <div className="font-bold text-slate-800">{doctorName}</div>
-            <div className="text-[10px] text-slate-500 uppercase">{doctorSpecialty}</div>
-          </button>
-        );
-      })}
-  </div>
-)}
+                  {showDoctorDropdown && (
+                    <div className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                      {doctors
+                        .filter(d => d.status === 'Available' && (d.user?.fullName || d.name || '').toLowerCase().includes(doctorSearchTerm.toLowerCase()))
+                        .map(d => {
+                          const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
+                          const doctorSpecialty = d.specialization || d.designation || 'General Physician';
+                          return (
+                            <button
+                              key={d.id}
+                              type="button"
+                              onClick={() => {
+                                setModalBookingData({ ...modalBookingData, doctor_id: d.id });
+                                setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
+                                setShowDoctorDropdown(false);
+                              }}
+                              className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 border-b border-slate-50 last:border-0"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0 flex-1 truncate">
+                                  <span className="font-bold text-slate-800">{doctorName}</span>
+                                  <span className="text-slate-500 ml-1 text-xs">({doctorSpecialty})</span>
+                                </div>
+                                <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border whitespace-nowrap ${
+                                  d.status === 'Available' 
+                                    ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
+                                    : 'bg-rose-50 border-rose-200 text-rose-600'
+                                }`}>
+                                  {d.status}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
-import { Search, Plus, UserPlus, Activity, FileText, Eye, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, Plus, UserPlus, Activity, FileText, Eye, X, Loader2, RefreshCw } from 'lucide-react';
+import { getAllPatients, createPatient } from '../api/patientApi';
 
-export default function PatientsView({ patients, appointments = [], followups = [], onAddPatient, onSelectPatient }) {
+export default function PatientsView({ appointments = [], followups = [], onAddPatient, onSelectPatient }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
   const [viewingPatient, setViewingPatient] = useState(null);
+  const [patients, setPatients] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   const appointmentTabs = [
     { id: 'all', label: 'All' },
@@ -14,10 +18,31 @@ export default function PatientsView({ patients, appointments = [], followups = 
     { id: 'followup', label: 'Follow-up', type: 'Followup' }
   ];
 
+  // Fetch patients from backend
+  const fetchPatients = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await getAllPatients();
+      const patientsData = Array.isArray(response) ? response : response.data || [];
+      setPatients(patientsData);
+      console.log('Patients fetched:', patientsData);
+    } catch (err) {
+      console.error('Error fetching patients:', err);
+      setError('Failed to load patients. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
   const getLatestAppointmentType = (patientId) => {
     const sorted = appointments
-      .filter(a => a.patient_id === patientId && a.appointmentType)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
+      .filter(a => a.patientId === patientId && a.appointmentType)
+      .sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate));
     return sorted[0]?.appointmentType || 'No appointment type';
   };
 
@@ -34,13 +59,14 @@ export default function PatientsView({ patients, appointments = [], followups = 
     if (tab.id === 'followup') {
       return followups.some(f => f.patient_id === patient.id && f.status === 'Pending');
     }
-    return appointments.some(appt => appt.patient_id === patient.id && appt.appointmentType === tab.type);
+    return appointments.some(appt => appt.patientId === patient.id && appt.appointmentType === tab.type);
   };
 
   // New Patient Form State
   const [formData, setFormData] = useState({
     name: '',
     age: '',
+    gender: '',
     location: '',
     address: '',
     phone: '',
@@ -48,6 +74,8 @@ export default function PatientsView({ patients, appointments = [], followups = 
     whatsapp: '',
     medical_conditions: ''
   });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handlePhoneChange = (e) => {
     const val = e.target.value;
@@ -67,42 +95,87 @@ export default function PatientsView({ patients, appointments = [], followups = 
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newPt = {
-      id: `P-${100 + patients.length + 1}`,
-      name: formData.name,
-      age: parseInt(formData.age) || 30,
-      gender: 'Other',
-      blood_group: 'O+',
-      phone: formData.phone,
-      whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
-      location: formData.location,
-      address: formData.address || 'n/a',
-      medical_conditions: formData.medical_conditions || 'Registered via Intake form',
-      email: 'n/a',
-      registered_at: new Date().toISOString().split('T')[0]
-    };
-    onAddPatient(newPt);
-    setIsAdding(false);
-    setFormData({
-      name: '',
-      age: '',
-      location: '',
-      address: '',
-      phone: '',
-      phoneAsWhatsapp: true,
-      whatsapp: '',
-      medical_conditions: ''
-    });
+    
+    // Validate required fields
+    if (!formData.name.trim()) return alert('Patient Name is required.');
+    if (!formData.age) return alert('Age is required.');
+    if (!formData.gender) return alert('Gender is required.');
+    if (!formData.location.trim()) return alert('Location is required.');
+    if (!formData.phone.trim()) return alert('Phone Number is required.');
+    
+    setIsSubmitting(true);
+    
+    try {
+      const newPatient = await createPatient({
+        name: formData.name,
+        age: parseInt(formData.age),
+        gender: formData.gender,
+        phone: formData.phone,
+        whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
+        location: formData.location,
+        address: formData.address || '',
+        medical_conditions: formData.medical_conditions || ''
+      });
+      
+      await fetchPatients();
+      
+      if (onAddPatient) {
+        onAddPatient(newPatient);
+      }
+      
+      setIsAdding(false);
+      setFormData({
+        name: '',
+        age: '',
+        gender: '',
+        location: '',
+        address: '',
+        phone: '',
+        phoneAsWhatsapp: true,
+        whatsapp: '',
+        medical_conditions: ''
+      });
+      alert('Patient registered successfully!');
+    } catch (err) {
+      console.error('Error creating patient:', err);
+      alert(err.message || 'Failed to register patient');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const filteredPatients = patients.filter(p => 
-    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.phone.includes(searchTerm) ||
-    p.id.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (p.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    p.phone?.includes(searchTerm) ||
+    p.id?.toString().includes(searchTerm)) &&
     matchesTypeFilter(p)
   );
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mb-3" />
+        <span className="text-slate-500">Loading patients...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-20">
+        <div className="text-rose-600 mb-4">{error}</div>
+        <button 
+          onClick={fetchPatients} 
+          className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-2 mx-auto"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -149,7 +222,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               {/* Age */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
@@ -163,6 +236,24 @@ export default function PatientsView({ patients, appointments = [], followups = 
                   onChange={e => setFormData({ ...formData, age: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                 />
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                  Gender <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.gender}
+                  onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
 
               {/* Location */}
@@ -254,9 +345,11 @@ export default function PatientsView({ patients, appointments = [], followups = 
             <div className="flex justify-end pt-2">
               <button
                 type="submit"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition-colors shadow-sm"
+                disabled={isSubmitting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Register Intake Record
+                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSubmitting ? 'Registering...' : 'Register Intake Record'}
               </button>
             </div>
           </form>
@@ -278,7 +371,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
             </div>
           </div>
 
-          {/* Search Bar */}
+          {/* Search Bar with Clear Icon */}
           <div className="p-4 border-b border-slate-200 bg-slate-50">
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
@@ -287,8 +380,16 @@ export default function PatientsView({ patients, appointments = [], followups = 
                 placeholder="Search by name, ID or phone number..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                className="w-full pl-10 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
               />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -303,6 +404,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
                   <th className="py-3 px-4">WhatsApp</th>
                   <th className="py-3 px-4">Type</th>
                   <th className="py-3 px-4">Age</th>
+                  <th className="py-3 px-4">Gender</th>
                   <th className="py-3 px-4">Location</th>
                   <th className="py-3 px-4">Next Follow-up Date</th>
                   <th className="py-3 px-4 text-right">Actions</th>
@@ -311,7 +413,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
               <tbody className="divide-y divide-slate-100">
                 {filteredPatients.map(pt => (
                   <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-emerald-600">{pt.id}</td>
+                    <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
                     <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.whatsapp || pt.phone}</td>
@@ -319,6 +421,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
                       {getLatestAppointmentType(pt.id)}
                     </td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
+                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.gender || 'N/A'}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium max-w-[200px] truncate">
                       {getNextFollowup(pt.id)?.scheduled_date || 'No follow-up'}
@@ -332,7 +435,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
                           <Eye className="w-4 h-4" /> View
                         </button>
                         <button 
-                          onClick={() => onSelectPatient(pt)}
+                          onClick={() => onSelectPatient && onSelectPatient(pt)}
                           className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
                         >
                           <Activity className="w-4 h-4" /> Timeline
@@ -343,7 +446,7 @@ export default function PatientsView({ patients, appointments = [], followups = 
                 ))}
                 {filteredPatients.length === 0 && (
                   <tr>
-                    <td colSpan="9" className="py-12 text-center text-slate-500">
+                    <td colSpan="10" className="py-12 text-center text-slate-500">
                       No patients found matching your search.
                     </td>
                   </tr>
@@ -356,16 +459,16 @@ export default function PatientsView({ patients, appointments = [], followups = 
 
       {/* View Patient Details Modal */}
       {viewingPatient && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 z-[100] animate-fadeIn">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl overflow-hidden text-left animate-scaleIn">
             <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-lg">
-                  {viewingPatient.name.charAt(0)}
+                  {viewingPatient.name?.charAt(0) || 'P'}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-800">{viewingPatient.name}</h2>
-                  <p className="text-slate-500 text-sm font-medium">{viewingPatient.id} • Registered {viewingPatient.registered_at || 'N/A'}</p>
+                  <p className="text-slate-500 text-sm font-medium">P-{viewingPatient.id} • Registered {viewingPatient.createdAt ? new Date(viewingPatient.createdAt).toISOString().split('T')[0] : 'N/A'}</p>
                 </div>
               </div>
               <button 
@@ -435,6 +538,19 @@ export default function PatientsView({ patients, appointments = [], followups = 
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+        .animate-scaleIn { animation: scaleIn 0.2s ease-out; }
+      `}</style>
     </div>
   );
 }

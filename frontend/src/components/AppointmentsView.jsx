@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPlus } from 'lucide-react';
 
 export default function AppointmentsView({ appointments, patients, doctors, onAddAppointment, onCheckIn, onCancelAppointment }) {
@@ -13,18 +13,36 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
     notes: ''
   });
 
+  // Debug: Log appointments and patients
+  useEffect(() => {
+    console.log('=== AppointmentsView Debug ===');
+    console.log('Appointments:', appointments);
+    console.log('Patients:', patients);
+    console.log('Doctors:', doctors);
+    
+    if (appointments?.length > 0 && patients?.length > 0) {
+      console.log('Checking patient matching:');
+      appointments.forEach(appt => {
+        const patientId = appt.patientId || appt.patient_id;
+        console.log(`Appointment ${appt.id}: Looking for patient ID ${patientId} (type: ${typeof patientId})`);
+        const foundPatient = patients.find(p => String(p.id) === String(patientId));
+        console.log(`  Found: ${foundPatient?.name || 'NOT FOUND'}`);
+      });
+    }
+  }, [appointments, patients]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.patient_id) return alert('Please select a patient.');
     if (!formData.doctor_id) return alert('Please select a doctor.');
 
-    const patientObj = patients.find(p => p.id === parseInt(formData.patient_id));
-    const doctorObj = doctors.find(d => d.id === parseInt(formData.doctor_id));
+    const patientObj = patients.find(p => String(p.id) === String(formData.patient_id));
+    const doctorObj = doctors.find(d => String(d.id) === String(formData.doctor_id));
     
     const newAppt = {
       id: `A-${200 + appointments.length + 1}`,
-      patient_id: parseInt(formData.patient_id),
-      doctor_id: parseInt(formData.doctor_id),
+      patient_id: formData.patient_id,
+      doctor_id: formData.doctor_id,
       appointmentType: formData.appointmentType,
       doctor_name: doctorObj?.user?.fullName || doctorObj?.name || 'Not Applicable',
       date: formData.date,
@@ -57,6 +75,39 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
     }
   };
 
+  // Helper function to find patient by ID (handles both camelCase and snake_case)
+  const findPatient = (appointment) => {
+    if (!appointment) return {};
+    const pid = appointment.patientId || appointment.patient_id;
+
+    // 1. Try lookup in master patients list by ID
+    const masterPt = patients?.find(p => String(p.id) === String(pid));
+    if (masterPt) return masterPt;
+
+    // 2. Fallback to nested patient data if included by backend
+    if (appointment.patient || appointment.Patient) return appointment.patient || appointment.Patient;
+
+    // 3. Fallback to name lookup if available
+    const nameToMatch = appointment.patient_name || appointment.patient?.name;
+    if (nameToMatch) {
+      return patients?.find(p => p.name === nameToMatch) || {};
+    }
+
+    return {};
+  };
+
+  // Helper function to find doctor by ID
+  const findDoctor = (appointment) => {
+    const doctorId = appointment.doctorId || appointment.doctor_id;
+    if (!doctorId) return null;
+    
+    let doctor = doctors.find(d => d.id === doctorId);
+    if (!doctor) {
+      doctor = doctors.find(d => String(d.id) === String(doctorId));
+    }
+    return doctor;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -68,14 +119,16 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
             Manage daily schedules, patient arrivals, and doctor queues.
           </p>
         </div>
-        <button
+        {/* <button
           onClick={() => setIsBooking(!isBooking)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
         >
           {isBooking ? <CalendarIcon className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {isBooking ? 'View Schedule' : 'Book Appointment'}
-        </button>
+        </button> */}
       </div>
+
+    
 
       {isBooking ? (
         <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm text-left max-w-2xl mx-auto">
@@ -136,10 +189,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date</label>
                 <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Time</label>
-                <input required type="time" value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-              </div>
+              
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reason / Intake Notes</label>
@@ -168,7 +218,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="bg-white border-b border-slate-200 text-slate-500 font-semibold uppercase text-xs tracking-wider">
-                  <th className="py-3 px-4">Time & Date</th>
+                  <th className="py-3 px-4"> Date</th>
                   <th className="py-3 px-4">Patient Profile</th>
                   <th className="py-3 px-4">Appointment Type</th>
                   <th className="py-3 px-4">Assigned Doctor</th>
@@ -179,16 +229,22 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {appointments.map(appt => {
-                  const pt = patients.find(p => p.id === appt.patient_id) || {};
+                  const pt = findPatient(appt);
+                  const doctor = findDoctor(appt);
+                  const doctorName = doctor?.user?.fullName || doctor?.name || 'Not Assigned';
+                  
                   return (
                     <tr key={appt.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3 px-4">
-                        <span className="font-bold text-slate-800 block">{appt.time}</span>
-                        <span className="text-slate-500">{appt.date}</span>
+                        
+                        <span className="text-slate-500">{appt.date || (appt.appointmentDate ? new Date(appt.appointmentDate).toISOString().split('T')[0] : '--')}</span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-bold text-slate-800 block">{pt.name || 'Unknown'}</span>
-                        <span className="text-slate-500">{pt.phone || 'No phone'}</span>
+                        <span className="font-bold text-slate-800 block">{pt.name || 'Unknown Patient'}</span>
+                        <div className="text-[11px] text-slate-500 mt-0.5 space-y-0.5 font-medium">
+                          <div>{pt.phone || pt.whatsapp || 'No mobile'}</div>
+                          <div>{pt.age ? `${pt.age} yrs` : 'Age N/A'} {pt.location ? `• ${pt.location}` : ''}</div>
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${appt.appointmentType === 'Detox' ? 'border-teal-200 bg-teal-50 text-teal-700' : appt.appointmentType === 'Review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-purple-200 bg-purple-50 text-purple-700'}`}>
@@ -197,10 +253,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-semibold text-slate-700 block">
-                          {(() => {
-                            const doctor = doctors.find(d => d.id === appt.doctor_id);
-                            return doctor?.user?.fullName || doctor?.name || 'Not Assigned';
-                          })()}
+                          {doctorName}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate">
@@ -231,6 +284,9 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 })}
               </tbody>
             </table>
+            {appointments.length === 0 && (
+              <div className="py-12 text-center text-slate-500">No appointments found</div>
+            )}
           </div>
         </div>
       )}

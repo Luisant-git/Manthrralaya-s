@@ -53,14 +53,14 @@ export default function UnifiedPatientRecords({
 
   const getLatestAppointment = (patientId) => {
     const sorted = appointments
-      .filter(a => a.patient_id === patientId && a.appointmentType)
+      .filter(a => String(a.patient_id || a.patientId) === String(patientId) && a.appointmentType)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
     return sorted[0] || null;
   };
 
   const getNextFollowup = (patientId) => {
     return followups
-      .filter(f => f.patient_id === patientId && f.status === 'Pending')
+      .filter(f => String(f.patient_id) === String(patientId) && f.status === 'Pending')
       .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0] || null;
   };
 
@@ -69,9 +69,9 @@ export default function UnifiedPatientRecords({
     const tab = appointmentTabs.find(t => t.id === selectedTab);
     if (!tab) return true;
     if (tab.id === 'followup') {
-      return followups.some(f => f.patient_id === patient.id && f.status === 'Pending');
+      return followups.some(f => String(f.patient_id) === String(patient.id) && f.status === 'Pending');
     }
-    return appointments.some(a => a.patient_id === patient.id && a.appointmentType === tab.type);
+    return appointments.some(a => String(a.patient_id || a.patientId) === String(patient.id) && a.appointmentType === tab.type);
   };
 
   const filteredPatients = patients.filter(pt => {
@@ -108,13 +108,13 @@ export default function UnifiedPatientRecords({
 
   const patientConsultations = selectedPatient 
     ? consultations
-        .filter(c => c.patient_id === selectedPatient.id)
+        .filter(c => String(c.patient_id) === String(selectedPatient.id))
         .sort((a, b) => new Date(b.date) - new Date(a.date))
     : [];
 
   const patientDetoxSessions = selectedPatient
     ? detoxSessions
-        .filter(d => d.patient_id === selectedPatient.id)
+        .filter(d => String(d.patient_id) === String(selectedPatient.id))
         .sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))
     : [];
   

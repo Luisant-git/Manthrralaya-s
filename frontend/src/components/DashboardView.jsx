@@ -37,8 +37,8 @@ export default function DashboardView({
   
   // For counting unique completed patients (for the metric)
   const completedPatientsToday = appointments
-    .filter(a => a.status === 'Completed' && a.date === todayDate)
-    .map(a => a.patient_id);
+    .filter(a => a.status === 'Completed' && (a.date === todayDate || a.appointmentDate?.split('T')[0] === todayDate))
+    .map(a => a.patient_id || a.patientId);
   const completedTodayCount = new Set(completedPatientsToday).size;
   
   // Get patients who have been received by the receptionist and are waiting for the doctor
@@ -78,9 +78,10 @@ export default function DashboardView({
   // Get today's patient list for doctor with all details
   const todayPatientList = doctorQueue
     .map((appt) => {
-      const patient = patients.find(p => p.id === appt.patient_id) || {};
+      const pid = appt.patientId || appt.patient_id;
+      const patient = patients.find(p => String(p.id) === String(pid)) || appt.patient || {};
       // Count previous consultations for this patient (all time, not just today)
-      const patientConsultations = consultations.filter(c => c.patient_id === appt.patient_id);
+      const patientConsultations = consultations.filter(c => String(c.patient_id) === String(pid));
       const historyCount = patientConsultations.length;
       const historyRecords = patientConsultations.sort((a, b) => new Date(b.date) - new Date(a.date));
       const latestNote = historyRecords[0]?.consultation_notes || appt.notes || 'No consultation notes yet.';
@@ -88,8 +89,8 @@ export default function DashboardView({
       
       // Check if this specific appointment already has a completed consultation
       const hasCompletedConsultation = consultations.some(c => 
-        c.appointment_id === appt.id || 
-        (c.patient_id === appt.patient_id && c.date === todayDate && c.appointment_id === appt.id)
+        String(c.appointment_id || c.appointmentId) === String(appt.id) || 
+        (String(c.patient_id) === String(pid) && c.date === todayDate && String(c.appointment_id) === String(appt.id))
       );
 
       return {
@@ -108,11 +109,11 @@ export default function DashboardView({
   const completedAppointmentsList = todayAppointments
     .filter(a => a.status === 'Completed')
     .map((appt) => {
-      const patient = patients.find(p => p.id === appt.patient_id) || {};
+      const pid = appt.patientId || appt.patient_id;
+      const patient = patients.find(p => String(p.id) === String(pid)) || appt.patient || {};
       // Find the consultation associated with this appointment
       const completedConsultation = consultations.find(c => 
-        c.appointment_id === appt.id || 
-        (c.patient_id === appt.patient_id && c.date === todayDate)
+        String(c.appointment_id) === String(appt.id) || (String(c.patient_id) === String(pid) && c.date === todayDate)
       );
       
       return {
@@ -163,7 +164,8 @@ export default function DashboardView({
   };
 
   const filteredReceptionistAppointments = todayAppointments.filter((appt) => {
-    const patient = patients.find((p) => p.id === appt.patient_id) || {};
+    const pid = appt.patientId || appt.patient_id;
+    const patient = patients.find((p) => String(p.id) === String(pid)) || appt.patient || {};
     const matchesSearch = !searchQuery ||
       patient.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       patient.phone?.includes(searchQuery) ||
@@ -506,7 +508,8 @@ export default function DashboardView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredReceptionistAppointments.slice().reverse().map(appt => {
-                      const pt = patients.find(p => p.id === appt.patient_id) || {};
+                      const pid = appt.patientId || appt.patient_id;
+                      const pt = patients.find(p => String(p.id) === String(pid)) || appt.patient || {};
                       const isArrived = appt.status === 'Arrived';
                       const isCheckedIn = appt.status === 'Checked-in';
                       const isCompleted = appt.status === 'Completed';

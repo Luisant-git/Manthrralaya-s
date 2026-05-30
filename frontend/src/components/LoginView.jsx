@@ -19,7 +19,7 @@ export default function LoginView({ onLogin }) {
     e.preventDefault();
     setError('');
     const trimmedUsername = username.trim();
-    if (!trimmedUsername) return alert('Please enter your staff username.');
+    if (!trimmedUsername) return alert('Please enter your staff email.');
     if (!pin) return alert('Please enter your staff PIN code.');
 
     setIsLoading(true);
@@ -114,7 +114,7 @@ export default function LoginView({ onLogin }) {
               <input
                 type="text"
                 required
-                placeholder="Enter your username"
+                placeholder="Enter your Email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-center font-bold text-lg placeholder:text-sm placeholder:font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"

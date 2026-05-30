@@ -17,13 +17,14 @@ import LoginView from './components/LoginView';
 import ReceptionistView from './components/ReceptionistView';
 import DoctorMasterView from './components/DoctorMasterView';
 import UserManagementView from './components/UserManagementView';
+import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
+import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
 
 import {
   initialPatients,
   initialDoctors,
   initialPhoneCalls,
-  initialAppointments,
   initialConsultations,
   initialDetoxSessions,
   initialStayManagement,
@@ -37,27 +38,41 @@ import {
 export default function App() {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeRole, setActiveRole] = useState(''); // 'receptionist', 'doctor', 'admin'
+  const [activeRole, setActiveRole] = useState('');
   const [currentUser, setCurrentUser] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // Database States
-  const [patients, setPatients] = useState(initialPatients);
-  const [doctors, setDoctors] = useState([]); // Start empty, will be populated by API
-  const [phoneCalls, setPhoneCalls] = useState(initialPhoneCalls);
-  const [appointments, setAppointments] = useState(initialAppointments);
-  const [consultations, setConsultations] = useState(initialConsultations);
-  const [detoxSessions, setDetoxSessions] = useState(initialDetoxSessions);
-  const [stayManagement, setStayManagement] = useState(initialStayManagement);
-  const [prescriptions, setPrescriptions] = useState(initialPrescriptions);
-  const [dietCharts, setDietCharts] = useState(initialDietCharts);
-  const [followups, setFollowups] = useState(initialFollowups);
-  const [whatsappLogs, setWhatsappLogs] = useState(initialWhatsappLogs);
-  const [reviews, setReviews] = useState(initialReviews);
+  // Database States - Start with empty arrays
+  const [patients, setPatients] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [phoneCalls, setPhoneCalls] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [consultations, setConsultations] = useState([]);
+  const [detoxSessions, setDetoxSessions] = useState([]);
+  const [stayManagement, setStayManagement] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
+  const [dietCharts, setDietCharts] = useState([]);
+  const [followups, setFollowups] = useState([]);
+  const [whatsappLogs, setWhatsappLogs] = useState([]);
+  const [reviews, setReviews] = useState([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [timelinePatient, setTimelinePatient] = useState(null);
+
+  // Fetch patients from backend
+  const fetchPatientsFromBackend = async () => {
+    try {
+      console.log('Fetching patients from backend...');
+      const response = await getAllPatients();
+      if (response && response.data) {
+        setPatients(response.data);
+        console.log('Patients fetched successfully:', response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+    }
+  };
 
   // Fetch doctors from backend
   const fetchDoctorsFromBackend = async () => {
@@ -78,26 +93,71 @@ export default function App() {
         setDoctors(doctorsFromBackend);
         console.log('Doctors fetched successfully:', doctorsFromBackend);
       } else {
-        console.warn('No doctors data from API, using mock data as fallback');
-        setDoctors(initialDoctors);
+        setDoctors([]);
       }
     } catch (error) {
-      console.error('Error fetching doctors:', error);
-      // Fallback to mock data if API fails
-      setDoctors(initialDoctors);
+      setDoctors([]);
     }
   };
 
+ // In fetchAppointmentsFromBackend function
+const fetchAppointmentsFromBackend = async () => {
+    try {
+        console.log('Fetching appointments from backend...');
+        const response = await getAllAppointments();
+        console.log('Raw API Response:', response);
+        
+        // Check the response structure
+        let appointmentsData = [];
+        if (response && response.data) {
+            appointmentsData = response.data;
+        } else if (response && Array.isArray(response)) {
+            appointmentsData = response;
+        }
+        
+        const formattedAppointments = appointmentsData.map(apt => ({
+            ...apt, // Preserve backend relations like apt.patient or apt.doctor
+            id: apt.id,
+            patient_id: apt.patientId || apt.patient_id,
+            doctor_id: apt.doctorId || apt.doctor_id,
+            appointmentDate: apt.appointmentDate || apt.date,
+            appointmentType: apt.appointmentType,
+            session: apt.session || 'FN',
+            status: apt.status,
+            notes: apt.notes,
+            date: (apt.appointmentDate || apt.date)?.split('T')[0],
+            doctor_name: apt.doctor?.user?.fullName || apt.doctor?.name || apt.doctor_name
+        }));
+        
+        setAppointments(formattedAppointments);
+        console.log('Formatted appointments:', formattedAppointments);
+    } catch (error) {
+        console.error('Error fetching appointments:', error);
+    }
+};
+
+  // Fetch all data when authenticated
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchPatientsFromBackend(),
+      fetchDoctorsFromBackend(),
+      fetchAppointmentsFromBackend()
+    ]);
+  };
+
   useEffect(() => {
+    // Clear legacy storage to prevent ID conflicts or stale data causing "Unknown Patient"
+    localStorage.removeItem('patients');
+    localStorage.removeItem('appointments');
+    localStorage.removeItem('initial_data_sync');
+
     const token = localStorage.getItem('access_token');
     if (token) {
       try {
-        // Manually decode the JWT payload (the second segment of the token)
         const base64Url = token.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const payload = JSON.parse(window.atob(base64));
 
-        // Check if the token has expired
         if (payload.exp && Date.now() >= payload.exp * 1000) {
           throw new Error('Token expired');
         }
@@ -106,7 +166,6 @@ export default function App() {
         setCurrentUser(payload.name || payload.email);
         setIsAuthenticated(true);
 
-        // Ensure the user lands on the correct tab for their role after a refresh
         if (payload.role.toLowerCase() === 'doctor') setActiveTab('consultations');
         else setActiveTab('dashboard');
       } catch (e) {
@@ -119,10 +178,10 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  // Fetch doctors when authenticated
+  // Fetch data when authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      fetchDoctorsFromBackend();
+      fetchAllData();
     }
   }, [isAuthenticated]);
 
@@ -130,7 +189,6 @@ export default function App() {
     setActiveRole(role);
     setCurrentUser(username);
     setIsAuthenticated(true);
-    // Route to appropriate starting tab
     if (role === 'doctor') setActiveTab('consultations');
     else if (role === 'receptionist') setActiveTab('dashboard');
     else setActiveTab('dashboard');
@@ -177,55 +235,89 @@ export default function App() {
     alert(`Appointment scheduled for ${patientObj.name}!\n\nAutomated WhatsApp confirmation dispatched.`);
   };
 
-  const handleAddAppointment = (newAppt, patientObj, doctorObj) => {
-    setAppointments(prev => [...prev, newAppt]);
-    const docName = doctorObj ? doctorObj.name : 'our specialist';
-    const waLog = {
-      id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
-      type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${newAppt.date} at ${newAppt.time}. - Manthrralaya's Wellness`,
-      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'appointment_confirm'
-    };
-    setWhatsappLogs(prev => [...prev, waLog]);
+  const handleAddAppointment = async (newAppt, patientObj, doctorObj) => {
+    try {
+      const appointmentData = {
+        patientId: patientObj.id,
+        doctorId: doctorObj?.id,
+        appointmentDate: newAppt.date,
+        appointmentType: newAppt.appointmentType,
+        session: newAppt.session || 'FN',
+        notes: newAppt.notes,
+        status: 'Scheduled'
+      };
+      
+      const createdAppt = await apiCreateAppointment(appointmentData);
+      setAppointments(prev => [...prev, createdAppt]);
+      
+      const docName = doctorObj ? doctorObj.name : 'our specialist';
+      const waLog = {
+        id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
+        type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${newAppt.date} at ${newAppt.time}. - Manthrralaya's Wellness`,
+        sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'appointment_confirm'
+      };
+      setWhatsappLogs(prev => [...prev, waLog]);
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      alert('Failed to create appointment');
+    }
   };
 
   const isDetoxAppointment = (appt) => {
     return String(appt?.appointmentType || '').toLowerCase().includes('detox');
   };
 
-  const handleCheckIn = (apptId, navigate = false, doctorInitiated = false) => {
-    const appt = appointments.find(a => a.id === apptId);
+  const handleCheckIn = async (apptId, navigate = false, doctorInitiated = false) => {
+    const appt = appointments.find(a => String(a.id) === String(apptId));
     if (!appt) return;
 
-    if (doctorInitiated) {
-      setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Checked-in' } : a)));
-    } else {
-      setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Arrived' } : a)));
-    }
+    const newStatus = doctorInitiated ? 'Checked-in' : 'Arrived';
+    
+    try {
+      await apiUpdateStatus(apptId, newStatus);
+      
+      if (doctorInitiated) {
+        setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Checked-in' } : a)));
+      } else {
+        setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Arrived' } : a)));
+      }
 
-    const pt = patients.find(p => p.id === appt.patient_id) || {};
-    const waLog = {
-      id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: pt.id, patient_name: pt.name, phone: pt.phone,
-      type: doctorInitiated ? 'Doctor Alert' : 'Clinic Alert',
-      message_text: doctorInitiated
-        ? `Hello ${pt.name}, your consultation has been started by the doctor. Please proceed to the consultation room.`
-        : `Hello ${pt.name}, you have checked in at the clinic lobby. Please take a seat while the doctor prepares to see you.`,
-      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Read', template_name: doctorInitiated ? 'doctor_checkin' : 'checkin_alert'
-    };
-    setWhatsappLogs(prev => [...prev, waLog]);
+      const pt = patients.find(p => String(p.id) === String(appt.patient_id || appt.patientId)) || {};
+      const waLog = {
+        id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: pt.id, patient_name: pt.name, phone: pt.phone,
+        type: doctorInitiated ? 'Doctor Alert' : 'Clinic Alert',
+        message_text: doctorInitiated
+          ? `Hello ${pt.name}, your consultation has been started by the doctor. Please proceed to the consultation room.`
+          : `Hello ${pt.name}, you have checked in at the clinic lobby. Please take a seat while the doctor prepares to see you.`,
+        sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Read', template_name: doctorInitiated ? 'doctor_checkin' : 'checkin_alert'
+      };
+      setWhatsappLogs(prev => [...prev, waLog]);
 
-    if (navigate && doctorInitiated) {
-      setActiveTab(isDetoxAppointment(appt) ? 'detox' : 'consultations');
+      if (navigate && doctorInitiated) {
+        setActiveTab(isDetoxAppointment(appt) ? 'detox' : 'consultations');
+      }
+    } catch (error) {
+      console.error('Error updating appointment status:', error);
+      alert('Failed to update status');
     }
   };
 
-  const handleCancelAppointment = (apptId) => setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Cancelled' } : a)));
+  const handleCancelAppointment = async (apptId) => {
+    try {
+      await apiUpdateStatus(apptId, 'Cancelled');
+      setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Cancelled' } : a)));
+    } catch (error) {
+      console.error('Error cancelling appointment:', error);
+      alert('Failed to cancel appointment');
+    }
+  };
 
   const handleAddConsultation = (newCons, apptId) => {
     setConsultations(prev => [...prev, newCons]);
-    setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Completed' } : a)));
+    setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Completed' } : a)));
 
     if (newCons.detox_recommended) {
-      const ptObj = patients.find(p => p.id === newCons.patient_id) || {};
+      const ptObj = patients.find(p => String(p.id) === String(newCons.patient_id)) || {};
       const followupDateString = newCons.followup_date || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       const newDtx = {
@@ -255,7 +347,7 @@ export default function App() {
 
   const handleAddPrescription = (newPresc) => {
     setPrescriptions(prev => [...prev, newPresc]);
-    const ptObj = patients.find(p => p.id === newPresc.patient_id) || {};
+    const ptObj = patients.find(p => String(p.id) === String(newPresc.patient_id)) || {};
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
       type: 'PDF Delivery', message_text: `Dear ${ptObj.name}, here is your customized prescription PDF: https://manthrralayas.co/shared/docs/presc_${newPresc.id}. Please download. - Manthrralaya's Wellness`,
@@ -299,8 +391,8 @@ export default function App() {
   };
 
   const handleDischargePatient = (stayId, roomId) => {
-    const stayObj = stayManagement.find(s => s.id === stayId);
-    const ptObj = patients.find(p => p.id === stayObj.patient_id) || {};
+    const stayObj = stayManagement.find(s => String(s.id) === String(stayId));
+    const ptObj = patients.find(p => String(p.id) === String(stayObj.patient_id)) || {};
     setStayManagement(prev => prev.map(s => (s.id === stayId ? { ...s, status: 'Discharged', check_out_time: new Date().toISOString().replace('T', ' ').substring(0, 16) } : s)));
 
     const newFollowup = {
@@ -323,7 +415,7 @@ export default function App() {
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
-    const pt = patients.find(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.id.toLowerCase() === searchQuery.toLowerCase() || p.phone.includes(searchQuery));
+    const pt = patients.find(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.id?.toString().toLowerCase() === searchQuery.toLowerCase() || p.phone?.includes(searchQuery));
     if (pt) {
       setTimelinePatient(pt);
       setSearchQuery('');
