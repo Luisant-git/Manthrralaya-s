@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { getPatientByPhone, createPatient } from '../api/patientApi';
+import { createAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
 import { 
   UserPlus, 
   Clock, 
@@ -52,50 +54,57 @@ export default function ReceptionistView({
     session: 'FN',
     notes: ''
   });
+// Add this useEffect to debug doctors data
+useEffect(() => {
+  console.log('Doctors received:', doctors);
+  console.log('Doctors count:', doctors?.length);
+}, [doctors]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const todayDate = new Date().toISOString().split('T')[0];
+
+  const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
+  const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
   
   const [isFetchingPatient, setIsFetchingPatient] = useState(false);
   const [foundPatient, setFoundPatient] = useState(null);
   const [showPatientFoundAlert, setShowPatientFoundAlert] = useState(false);
   const [phoneDebounce, setPhoneDebounce] = useState(null);
 
-  const fetchPatientByPhone = (phoneNumber) => {
+  const fetchPatientByPhone = async (phoneNumber) => {
     if (!phoneNumber || phoneNumber.trim() === '') {
       setFoundPatient(null);
       return;
     }
 
     setIsFetchingPatient(true);
-    
-    setTimeout(() => {
-      const existingPatient = patients.find(p => phoneNumbersMatch(p.phone, phoneNumber));
-      
-      if (existingPatient) {
-        setFoundPatient(existingPatient);
+    try {
+      const patient = await getPatientByPhone(phoneNumber);
+      if (patient) {
+        setFoundPatient(patient);
         setShowPatientFoundAlert(true);
         
         setFormData(prev => ({
           ...prev,
-          name: existingPatient.name,
-          age: existingPatient.age.toString(),
-          gender: existingPatient.gender || '',
-          location: existingPatient.location || '',
-          address: existingPatient.address || '',
-          whatsapp: existingPatient.whatsapp || existingPatient.phone,
-          phoneAsWhatsapp: !existingPatient.whatsapp || existingPatient.whatsapp === existingPatient.phone
+          name: patient.name,
+          age: patient.age.toString(),
+          gender: patient.gender || '',
+          location: patient.location || '',
+          address: patient.address || '',
+          whatsapp: patient.whatsapp || patient.phone,
+          phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
         }));
         
-        setTimeout(() => {
-          setShowPatientFoundAlert(false);
-        }, 5000);
+        setTimeout(() => setShowPatientFoundAlert(false), 5000);
       } else {
         setFoundPatient(null);
       }
+    } catch (error) {
+      setFoundPatient(null);
+    } finally {
       setIsFetchingPatient(false);
-    }, 500);
+    }
   };
 
   useEffect(() => {
@@ -117,6 +126,28 @@ export default function ReceptionistView({
       if (timer) clearTimeout(timer);
     };
   }, [formData.phone]);
+
+  // Synchronization for Searchable Doctor Field
+useEffect(() => {
+  const doc = doctors?.find(d => String(d.id) === String(formData.doctor_id));
+  if (doc) {
+    const doctorName = doc.user?.fullName || doc.name || `Doctor ${doc.id}`;
+    const doctorSpecialty = doc.specialization || doc.designation || '';
+    setDoctorSearchTerm(`${doctorName} (${doctorSpecialty})`);
+  } else if (!formData.doctor_id) {
+    setDoctorSearchTerm('');
+  }
+}, [formData.doctor_id, doctors]);
+ 
+
+  // Close doctor dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = () => setShowDoctorDropdown(false);
+    if (showDoctorDropdown) {
+      window.addEventListener('click', handleClickOutside);
+    }
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [showDoctorDropdown]);
 
   const handlePhoneChange = (e) => {
     const val = e.target.value;
@@ -149,224 +180,132 @@ export default function ReceptionistView({
     return normalizedA.endsWith(normalizedB) || normalizedB.endsWith(normalizedA);
   };
 
-  const getOrCreatePatient = (data) => {
-    let patient = patients.find(p => phoneNumbersMatch(p.phone, data.phone));
-    
-    if (!patient) {
-      patient = {
-        id: `P-${100 + patients.length + 1}`,
-        name: data.name,
-        age: parseInt(data.age) || 30,
-        gender: data.gender || 'Other',
-        blood_group: 'O+',
-        phone: data.phone,
-        whatsapp: data.phoneAsWhatsapp ? data.phone : data.whatsapp,
-        location: data.location,
-        address: data.address || 'n/a',
-        medical_conditions: data.notes || 'Registered via Reception desk',
-        email: 'n/a',
-        registered_at: new Date().toISOString().split('T')[0]
-      };
-      setPatients(prev => [...prev, patient]);
-    } else {
-      const updatedPatient = { ...patient };
-      let needsUpdate = false;
-      
-      if (data.name && data.name !== patient.name) {
-        updatedPatient.name = data.name;
-        needsUpdate = true;
-      }
-      if (data.age && parseInt(data.age) !== patient.age) {
-        updatedPatient.age = parseInt(data.age);
-        needsUpdate = true;
-      }
-      if (data.gender && data.gender !== patient.gender) {
-        updatedPatient.gender = data.gender;
-        needsUpdate = true;
-      }
-      if (data.location && data.location !== patient.location) {
-        updatedPatient.location = data.location;
-        needsUpdate = true;
-      }
-      if (data.address && data.address !== patient.address) {
-        updatedPatient.address = data.address;
-        needsUpdate = true;
-      }
-      
-      if (needsUpdate) {
-        setPatients(prev => prev.map(p => 
-          p.id === patient.id ? updatedPatient : p
-        ));
-        patient = updatedPatient;
-      }
-    }
-    return patient;
-  };
-
-  const handleAction = (type) => {
+  const handleAction = async (type) => {
     if (!formData.name.trim()) return alert('Patient Name is required.');
     if (!formData.age.trim()) return alert('Patient Age is required.');
     if (!formData.gender) return alert('Patient Gender is required.');
     if (!formData.location.trim()) return alert('Patient Location is required.');
     if (!formData.phone.trim()) return alert('Patient Phone is required.');
 
-    const patientObj = getOrCreatePatient(formData);
+    try {
+      let patientObj = await getPatientByPhone(formData.phone);
+      
+      if (!patientObj) {
+        patientObj = await createPatient({
+          name: formData.name,
+          age: parseInt(formData.age),
+          gender: formData.gender,
+          phone: formData.phone,
+          whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
+          location: formData.location,
+          address: formData.address,
+          medical_conditions: formData.notes || 'Registered via Reception desk'
+        });
+        setPatients(prev => [...prev, patientObj]);
+      }
 
-    if (type === 'book') {
-      if (!formData.doctor_id) return alert('Please assign a doctor to book an appointment.');
+      if (type === 'book' && !formData.doctor_id) {
+        return alert('Please assign a doctor to book an appointment.');
+      }
 
-      const doctorObj = doctors.find(d => d.id === formData.doctor_id);
-      const newAppt = {
-        id: `A-${200 + appointments.length + 1}`,
-        patient_id: patientObj.id,
-        doctor_id: formData.doctor_id,
-        doctor_name: doctorObj ? doctorObj.name : 'Chief Clinical Consultant',
-        date: formData.date,
+      const appointmentData = {
+        patientId: patientObj.id,
+        doctorId: formData.doctor_id ? parseInt(formData.doctor_id) : null,
+        appointmentDate: formData.date,
         appointmentType: formData.appointmentType,
         session: formData.session,
-        source: 'Phone Lead / On-Call',
-        status: 'Scheduled',
-        notes: formData.notes
+        notes: formData.notes,
+        status: type === 'waiting' ? 'Waiting' : 'Scheduled'
       };
 
+      const newAppt = await createAppointment(appointmentData);
       setAppointments(prev => [...prev, newAppt]);
 
-      const docName = doctorObj ? doctorObj.name : 'our specialist';
-      const waLog = {
-        id: `WA-${900 + (whatsappLogs ? whatsappLogs.length : 0) + 1}`,
-        patient_id: patientObj.id,
-        patient_name: patientObj.name,
-        phone: patientObj.phone,
-        type: 'Booking Confirmation',
-        message_text: `Dear ${patientObj.name}, your ${formData.appointmentType} appointment (${formData.session} session) with ${docName} is confirmed for ${newAppt.date}. - Manthrralaya's Wellness`,
-        sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-        status: 'Delivered',
-        template_name: 'appointment_confirm'
-      };
-      if (setWhatsappLogs) setWhatsappLogs(prev => [...prev, waLog]);
+      if (type === 'book') {
+        const doctorObj = doctors.find(d => String(d.id) === String(formData.doctor_id));
+        const docName = doctorObj?.user?.fullName || doctorObj?.name || 'Not Applicable';
+        const waLog = {
+          id: `WA-${Date.now()}`,
+          patient_id: patientObj.id,
+          patient_name: patientObj.name,
+          phone: patientObj.phone,
+          type: 'Booking Confirmation',
+          message_text: `Dear ${patientObj.name}, your ${formData.appointmentType} appointment (${formData.session} session) with ${docName} is confirmed for ${formData.date}. - Manthrralaya's Wellness`,
+          sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+          status: 'Delivered',
+          template_name: 'appointment_confirm'
+        };
+        if (setWhatsappLogs) setWhatsappLogs(prev => [...prev, waLog]);
+        alert(`Appointment confirmed for ${patientObj.name}!`);
+      } else {
+        alert(`Patient ${patientObj.name} added to the Waiting Registry.`);
+      }
 
-      alert(`Appointment confirmed for ${patientObj.name}!\nWhatsApp notification dispatched.`);
-    } else if (type === 'waiting') {
-      const newWaitingAppt = {
-        id: `A-${200 + appointments.length + 1}`,
-        patient_id: patientObj.id,
-        doctor_id: formData.doctor_id || '',
-        doctor_name: formData.doctor_id ? (doctors.find(d => d.id === formData.doctor_id)?.name || '') : '',
-        date: formData.date,
-        appointmentType: formData.appointmentType,
-        session: formData.session,
-        source: 'Phone Inquiry / Tentative',
-        status: 'Waiting',
-        notes: formData.notes || 'Patient asked for appointment details / callback'
-      };
-      setAppointments(prev => [...prev, newWaitingAppt]);
-      alert(`Patient ${patientObj.name} added to the Waiting Registry.`);
+      clearForm();
+    } catch (error) {
+      alert(`Error: ${error.message}`);
     }
-
-    setFormData({
-      name: '',
-      age: '',
-      location: '',
-      address: '',
-      phone: '',
-      phoneAsWhatsapp: true,
-      whatsapp: '',
-      doctor_id: '',
-      date: new Date().toISOString().split('T')[0],
-      appointmentType: 'Initial consultation',
-      session: 'FN',
-      notes: ''
-    });
-    setFoundPatient(null);
   };
 
-  const handleModalBookConfirm = (e) => {
+  const handleModalBookConfirm = async (e) => {
     e.preventDefault();
     if (!modalBookingData.doctor_id) return alert('Please assign a doctor.');
-    if (!modalBookingData.appointmentType) return alert('Please select appointment type.');
-
-    const patientObj = bookingModalPatient;
-    const doctorObj = doctors.find(d => d.id === modalBookingData.doctor_id);
-
-    setAppointments(prev => prev.map(appt => {
-      if (appt.patient_id === patientObj.id && appt.status === 'Waiting') {
-        return {
-          ...appt,
-          doctor_id: modalBookingData.doctor_id,
-          doctor_name: doctorObj ? doctorObj.name : 'Chief Clinical Consultant',
-          date: modalBookingData.date,
-          appointmentType: modalBookingData.appointmentType,
-          session: modalBookingData.session,
-          status: 'Scheduled',
-          notes: modalBookingData.notes || appt.notes
-        };
+    try {
+      const waitingAppt = appointments.find(a => (a.patientId === bookingModalPatient.id || a.patient_id === bookingModalPatient.id) && a.status === 'Waiting');
+      if (waitingAppt) {
+        const updated = await updateAppointmentStatus(waitingAppt.id, 'Scheduled');
+        setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
+        alert(`Appointment successfully scheduled for ${bookingModalPatient.name}!`);
+        setBookingModalPatient(null);
       }
-      return appt;
-    }));
-
-    const docName = doctorObj ? doctorObj.name : 'our specialist';
-    const waLog = {
-      id: `WA-${900 + (whatsappLogs ? whatsappLogs.length : 0) + 1}`,
-      patient_id: patientObj.id,
-      patient_name: patientObj.name,
-      phone: patientObj.phone,
-      type: 'Booking Confirmation',
-      message_text: `Dear ${patientObj.name}, your ${modalBookingData.appointmentType} appointment (${modalBookingData.session} session) with ${docName} is confirmed for ${modalBookingData.date}. - Manthrralaya's Wellness`,
-      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      status: 'Delivered',
-      template_name: 'appointment_confirm'
-    };
-    if (setWhatsappLogs) setWhatsappLogs(prev => [...prev, waLog]);
-
-    alert(`Appointment successfully confirmed and scheduled for ${patientObj.name}!`);
-    setBookingModalPatient(null);
-    setModalBookingData({
-      doctor_id: '',
-      date: new Date().toISOString().split('T')[0],
-      appointmentType: 'Initial consultation',
-      session: 'FN',
-      notes: ''
-    });
-  };
-
-  const handleCheckIn = (apptId) => {
-    setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Arrived' } : a)));
-    const appt = appointments.find(a => a.id === apptId);
-    const pt = patients.find(p => p.id === appt.patient_id) || {};
-    
-    const waLog = {
-      id: `WA-${900 + (whatsappLogs ? whatsappLogs.length : 0) + 1}`,
-      patient_id: pt.id,
-      patient_name: pt.name,
-      phone: pt.phone,
-      type: 'Clinic Alert',
-      message_text: `Hello ${pt.name}, you have arrived at the clinic lobby. Please take a seat, the doctor will see you shortly. - Manthrralaya's Wellness`,
-      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
-      status: 'Read',
-      template_name: 'checkin_alert'
-    };
-    if (setWhatsappLogs) setWhatsappLogs(prev => [...prev, waLog]);
-  };
-
-  const handleCancelAppointment = (apptId) => {
-    setAppointments(prev => prev.map(a => (a.id === apptId ? { ...a, status: 'Cancelled' } : a)));
-  };
-
-  const handleDeleteWaiting = (apptId) => {
-    if (window.confirm("Are you sure you want to remove this inquiry from the Waiting Registry?")) {
-      setAppointments(prev => prev.filter(a => a.id !== apptId));
+    } catch (error) {
+      alert(`Error: ${error.message}`);
     }
   };
 
-  const activeBookings = appointments.filter(a => a.status !== 'Waiting' && a.date === todayDate);
+  const handleCheckIn = async (apptId) => {
+    try {
+      const updated = await updateAppointmentStatus(apptId, 'Arrived');
+      setAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
+    } catch (error) {
+      alert('Check-in failed');
+    }
+  };
+
+  const handleCancelAppointment = async (apptId) => {
+    try {
+      const updated = await updateAppointmentStatus(apptId, 'Cancelled');
+      setAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
+    } catch (error) {
+      alert('Cancellation failed');
+    }
+  };
+
+  const handleDeleteWaiting = async (apptId) => {
+    if (!window.confirm("Remove this inquiry?")) return;
+    try {
+      await deleteAppointment(apptId);
+      setAppointments(prev => prev.filter(a => a.id !== apptId));
+    } catch (error) {
+      alert('Delete failed');
+    }
+  };
+
+  const activeBookings = appointments.filter(a => {
+    const apptDate = a.appointmentDate ? (typeof a.appointmentDate === 'string' ? a.appointmentDate.split('T')[0] : a.appointmentDate) : a.date;
+    return a.status !== 'Waiting' && apptDate === todayDate;
+  });
   const waitingList = appointments.filter(a => a.status === 'Waiting');
 
   const filteredActiveBookings = activeBookings.filter(appt => {
-    const pt = patients.find(p => p.id === appt.patient_id) || {};
+    const pt = patients.find(p => p.id === appt.patientId || p.id === appt.patient_id) || appt.patient || {};
+    const doc = doctors.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || appt.doctor || {};
+    const docFullName = doc?.user?.fullName || doc?.name || '';
+
     const matchesSearch = 
       pt.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       pt.phone?.includes(searchQuery) ||
-      appt.doctor_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      docFullName.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
     
@@ -547,12 +486,119 @@ export default function ReceptionistView({
             )}
 
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Schedule Doctor</label>
-              <select value={formData.doctor_id} onChange={e => setFormData({ ...formData, doctor_id: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
-                <option value="">-- Choose specialist --</option>
-                {doctors.map(d => <option key={d.id} value={d.id} disabled={d.status !== 'Available'}>{d.name} ({d.designation}) {d.status !== 'Available' ? '(On Leave)' : ''}</option>)}
-              </select>
-            </div>
+  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Schedule Doctor <span className="text-rose-500">*</span></label>
+  <div className="relative" onClick={(e) => e.stopPropagation()}>
+    <div className="relative">
+      <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+      <input
+        type="text"
+        placeholder="Search doctor by name or specialty..."
+        value={doctorSearchTerm}
+        onFocus={() => setShowDoctorDropdown(true)}
+        onChange={(e) => {
+          setDoctorSearchTerm(e.target.value);
+          setShowDoctorDropdown(true);
+          if (formData.doctor_id) setFormData(prev => ({ ...prev, doctor_id: '' }));
+        }}
+        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+      />
+      {/* Clear/X Icon */}
+      {doctorSearchTerm && (
+        <button
+          type="button"
+          onClick={() => {
+            setDoctorSearchTerm('');
+            setFormData(prev => ({ ...prev, doctor_id: '' }));
+            setShowDoctorDropdown(false);
+          }}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+    
+    {showDoctorDropdown && (
+      <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto animate-fadeIn">
+        {doctors && doctors.length > 0 ? (
+          doctors
+            .filter(d => {
+              const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
+              const doctorSpecialty = d.specialization || d.designation || '';
+              return d.status === 'Available' && 
+                (doctorName.toLowerCase().includes(doctorSearchTerm.toLowerCase()) ||
+                 doctorSpecialty.toLowerCase().includes(doctorSearchTerm.toLowerCase()));
+            })
+            .map(d => {
+              const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
+              const doctorSpecialty = d.specialization || d.designation || 'General Physician';
+              const isAvailable = d.status === 'Available';
+              
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => {
+                    if (isAvailable) {
+                      setFormData({ ...formData, doctor_id: d.id });
+                      setDoctorSearchTerm(`${doctorName} (${doctorSpecialty})`);
+                      setShowDoctorDropdown(false);
+                    }
+                  }}
+                  disabled={!isAvailable}
+                  className={`w-full text-left px-4 py-3 text-sm border-b border-slate-100 last:border-0 transition-colors ${
+                    isAvailable 
+                      ? 'hover:bg-emerald-50 cursor-pointer' 
+                      : 'opacity-50 cursor-not-allowed bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-slate-800">{doctorName}</div>
+                      <div className="text-[11px] text-slate-500 uppercase font-medium tracking-tight mt-0.5">
+                        {doctorSpecialty}
+                      </div>
+                    </div>
+                    {!isAvailable && (
+                      <span className="text-[10px] bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">
+                        On Leave
+                      </span>
+                    )}
+                    {isAvailable && (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full font-semibold">
+                        Available
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+        ) : (
+          <div className="p-4 text-center text-xs text-slate-400 italic">Loading doctors...</div>
+        )}
+        {doctors && doctors.length > 0 && doctors.filter(d => d.status === 'Available').length === 0 && (
+          <div className="p-4 text-center text-xs text-slate-400 italic">No doctors available today.</div>
+        )}
+      </div>
+    )}
+  </div>
+  {/* Show selected doctor info */}
+  {formData.doctor_id && doctorSearchTerm && (
+    <div className="mt-2 text-xs text-emerald-600 bg-emerald-50 p-2 rounded-lg flex items-center justify-between">
+      <span>✓ Selected: {doctorSearchTerm}</span>
+      <button
+        type="button"
+        onClick={() => {
+          setDoctorSearchTerm('');
+          setFormData(prev => ({ ...prev, doctor_id: '' }));
+        }}
+        className="text-emerald-600 hover:text-emerald-800"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    </div>
+  )}
+</div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -624,12 +670,12 @@ export default function ReceptionistView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {waitingList.map(appt => {
-                      const pt = patients.find(p => p.id === appt.patient_id) || {};
+                      const pt = patients.find(p => p.id === appt.patientId || p.id === appt.patient_id) || appt.patient || {};
                       return (
-                        <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors">
+                        <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors align-top">
                           <td className="py-2.5 px-4">
-                            <span className="font-bold text-slate-800 block text-sm">{pt.name}</span>
-                            <span className="text-slate-500 text-xs">{pt.phone}</span>
+                            <span className="font-bold text-slate-800 block text-sm">{pt.name || 'Unknown Patient'}</span>
+                            <span className="text-slate-500 text-xs">{pt.phone || 'No phone'}</span>
                           </td>
                           <td className="py-2.5 px-4">
                             <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType}</span>
@@ -690,7 +736,7 @@ export default function ReceptionistView({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredActiveBookings.slice().reverse().map(appt => {
-                      const pt = patients.find(p => p.id === appt.patient_id) || {};
+                      const pt = patients.find(p => p.id === appt.patientId || p.id === appt.patient_id) || appt.patient || {};
                       const isScheduled = appt.status === 'Scheduled';
                       const isArrived = appt.status === 'Arrived';
                       const isCheckedIn = appt.status === 'Checked-in';
@@ -712,18 +758,26 @@ export default function ReceptionistView({
                             {isCancelled && <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-3 py-1 text-xs font-semibold"><X className="w-3.5 h-3.5" /> Cancelled</span>}
                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <strong className="text-slate-800 block">{appt.date || todayDate}</strong>
+                            <strong className="text-slate-800 block">{appt.appointmentDate ? (typeof appt.appointmentDate === 'string' ? appt.appointmentDate.split('T')[0] : appt.appointmentDate) : appt.date || todayDate}</strong>
                             <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
                           </td>
                           <td className="py-3 px-4 align-top min-w-0">
                             <span className="font-bold text-slate-800 block text-sm truncate">{pt.name || 'Unknown Patient'}</span>
-                            <span className="text-slate-500 font-medium block truncate">{formatPhoneWithoutCountryCode(pt.phone) || 'No phone'} {renderPatientMeta(pt)}</span>
+                            <span className="text-slate-500 font-medium block truncate">{formatPhoneWithoutCountryCode(pt.phone)} {renderPatientMeta(pt)}</span>
                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
                             <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType || 'General'}</span>
                           </td>
                           <td className="py-3 px-4 align-top min-w-0 whitespace-nowrap">
-                            <span className="font-semibold text-slate-700 block truncate">{appt.doctor_name || 'Dr. Evelyn Carter'}</span>
+                            <span className="font-semibold text-slate-700 block truncate">
+                              {appt?.doctor?.user?.fullName ||
+                                appt?.doctor?.name ||
+                                (() => {
+                                  const doctor = doctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
+                                  return doctor?.user?.fullName || doctor?.name || '';
+                                })() ||
+                                'Not Assigned'}
+                            </span>
                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
                             {getStatusBadge(appt.status)}
@@ -760,10 +814,47 @@ export default function ReceptionistView({
             <form onSubmit={handleModalBookConfirm} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Assign Doctor</label>
-                <select required value={modalBookingData.doctor_id} onChange={e => setModalBookingData({ ...modalBookingData, doctor_id: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500">
-                  <option value="">-- Choose specialist --</option>
-                  {doctors.map(d => <option key={d.id} value={d.id} disabled={d.status !== 'Available'}>{d.name} ({d.designation})</option>)}
-                </select>
+                <div className="relative" onClick={(e) => e.stopPropagation()}>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search available doctor..."
+                      value={doctorSearchTerm}
+                      onFocus={() => setShowDoctorDropdown(true)}
+                      onChange={(e) => {
+                        setDoctorSearchTerm(e.target.value);
+                        setShowDoctorDropdown(true);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                 {showDoctorDropdown && (
+  <div className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+    {doctors
+      .filter(d => d.status === 'Available' && (d.user?.fullName || d.name || '').toLowerCase().includes(doctorSearchTerm.toLowerCase()))
+      .map(d => {
+        const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
+        const doctorSpecialty = d.specialization || d.designation || 'General Physician';
+        return (
+          <button
+            key={d.id}
+            type="button"
+            onClick={() => {
+              setModalBookingData({ ...modalBookingData, doctor_id: d.id });
+              setDoctorSearchTerm(`${doctorName} (${doctorSpecialty})`);
+              setShowDoctorDropdown(false);
+            }}
+            className="w-full text-left px-4 py-2 text-sm hover:bg-emerald-50 border-b border-slate-50 last:border-0"
+          >
+            <div className="font-bold text-slate-800">{doctorName}</div>
+            <div className="text-[10px] text-slate-500 uppercase">{doctorSpecialty}</div>
+          </button>
+        );
+      })}
+  </div>
+)}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

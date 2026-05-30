@@ -39,9 +39,47 @@ model Doctor {
   userId         Int      @unique
   specialization String
   status         String   @default("Available")
-
   user           User     @relation(fields: [userId], references: [id])
-
+  appointments   Appointment[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model Patient {
+  id                Int       @id @default(autoincrement())
+  name              String
+  age               Int
+  gender            String?
+  phone             String    @unique
+  whatsapp          String?
+  location          String?
+  address           String?
+  createdAt         DateTime  @default(now()) 
+  updatedAt         DateTime  @updatedAt 
+
+  appointments      Appointment[]
+
+  @@map("patients")
+   @@index([phone])
+}
+
+model Appointment {
+  id              Int       @id @default(autoincrement())
+  patientId       Int       
+  doctorId        Int?      
+  appointmentDate DateTime 
+  appointmentType String    
+  session         String    @default("FN")
+  status          String    @default("Scheduled")
+  notes           String? 
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt 
+
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor          Doctor?   @relation(fields: [doctorId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([appointmentDate])
+  @@index([status])
 }

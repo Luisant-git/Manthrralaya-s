@@ -18,14 +18,15 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
     if (!formData.patient_id) return alert('Please select a patient.');
     if (!formData.doctor_id) return alert('Please select a doctor.');
 
-    const patientObj = patients.find(p => p.id === formData.patient_id);
-    const doctorObj = doctors.find(d => d.id === formData.doctor_id);
+    const patientObj = patients.find(p => p.id === parseInt(formData.patient_id));
+    const doctorObj = doctors.find(d => d.id === parseInt(formData.doctor_id));
+    
     const newAppt = {
       id: `A-${200 + appointments.length + 1}`,
-      patient_id: formData.patient_id,
-      doctor_id: formData.doctor_id,
+      patient_id: parseInt(formData.patient_id),
+      doctor_id: parseInt(formData.doctor_id),
       appointmentType: formData.appointmentType,
-      doctor_name: doctorObj.name,
+      doctor_name: doctorObj?.user?.fullName || doctorObj?.name || 'Not Applicable',
       date: formData.date,
       time: formData.time,
       source: 'Direct Booking',
@@ -35,7 +36,14 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
 
     onAddAppointment(newAppt, patientObj, doctorObj);
     setIsBooking(false);
-    setFormData({ patient_id: '', doctor_id: '', appointmentType: 'Initial consultation', date: new Date().toISOString().split('T')[0], time: '10:00 AM', notes: '' });
+    setFormData({ 
+      patient_id: '', 
+      doctor_id: '', 
+      appointmentType: 'Initial consultation', 
+      date: new Date().toISOString().split('T')[0], 
+      time: '10:00 AM', 
+      notes: '' 
+    });
   };
 
   const getStatusColor = (status) => {
@@ -103,7 +111,8 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                   <option value="">-- Choose available doctor --</option>
                   {doctors.map(d => (
                     <option key={d.id} value={d.id} disabled={d.status !== 'Available'}>
-                      {d.name} ({d.designation}) {d.status !== 'Available' ? '- On Leave' : ''}
+                      {d.user?.fullName || d.name} ({d.specialization}) 
+                      {d.status !== 'Available' ? ' - On Leave' : ''}
                     </option>
                   ))}
                 </select>
@@ -178,8 +187,8 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                         <span className="text-slate-500">{appt.date}</span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-bold text-slate-800 block">{pt.name}</span>
-                        <span className="text-slate-500">{pt.phone}</span>
+                        <span className="font-bold text-slate-800 block">{pt.name || 'Unknown'}</span>
+                        <span className="text-slate-500">{pt.phone || 'No phone'}</span>
                       </td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${appt.appointmentType === 'Detox' ? 'border-teal-200 bg-teal-50 text-teal-700' : appt.appointmentType === 'Review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-purple-200 bg-purple-50 text-purple-700'}`}>
@@ -187,10 +196,15 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="font-semibold text-slate-700 block">{appt.doctor_name || 'Dr. Evelyn Carter'}</span>
+                        <span className="font-semibold text-slate-700 block">
+                          {(() => {
+                            const doctor = doctors.find(d => d.id === appt.doctor_id);
+                            return doctor?.user?.fullName || doctor?.name || 'Not Assigned';
+                          })()}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate">
-                        {appt.notes}
+                        {appt.notes || '-'}
                       </td>
                       <td className="py-3 px-4">
                         <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getStatusColor(appt.status)}`}>

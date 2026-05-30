@@ -17,6 +17,7 @@ import LoginView from './components/LoginView';
 import ReceptionistView from './components/ReceptionistView';
 import DoctorMasterView from './components/DoctorMasterView';
 import UserManagementView from './components/UserManagementView';
+import { userApi } from './api/userApi';
 
 import {
   initialPatients,
@@ -38,8 +39,54 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeRole, setActiveRole] = useState(''); // 'receptionist', 'doctor', 'admin'
   const [currentUser, setCurrentUser] = useState('');
-  const [isLoading, setIsLoading] = useState(true); // New loading state
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Database States
+  const [patients, setPatients] = useState(initialPatients);
+  const [doctors, setDoctors] = useState([]); // Start empty, will be populated by API
+  const [phoneCalls, setPhoneCalls] = useState(initialPhoneCalls);
+  const [appointments, setAppointments] = useState(initialAppointments);
+  const [consultations, setConsultations] = useState(initialConsultations);
+  const [detoxSessions, setDetoxSessions] = useState(initialDetoxSessions);
+  const [stayManagement, setStayManagement] = useState(initialStayManagement);
+  const [prescriptions, setPrescriptions] = useState(initialPrescriptions);
+  const [dietCharts, setDietCharts] = useState(initialDietCharts);
+  const [followups, setFollowups] = useState(initialFollowups);
+  const [whatsappLogs, setWhatsappLogs] = useState(initialWhatsappLogs);
+  const [reviews, setReviews] = useState(initialReviews);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [timelinePatient, setTimelinePatient] = useState(null);
+
+  // Fetch doctors from backend
+  const fetchDoctorsFromBackend = async () => {
+    try {
+      console.log('Fetching doctors from backend...');
+      const response = await userApi.getUsersByRole('DOCTOR');
+      console.log('API Response:', response);
+      
+      if (response && response.data && response.data.length > 0) {
+        const doctorsFromBackend = response.data.map(doc => ({
+          id: doc.id,
+          name: doc.user?.fullName || `Doctor ${doc.id}`,
+          specialization: doc.specialization,
+          status: doc.status,
+          designation: doc.specialization,
+          user: doc.user
+        }));
+        setDoctors(doctorsFromBackend);
+        console.log('Doctors fetched successfully:', doctorsFromBackend);
+      } else {
+        console.warn('No doctors data from API, using mock data as fallback');
+        setDoctors(initialDoctors);
+      }
+    } catch (error) {
+      console.error('Error fetching doctors:', error);
+      // Fallback to mock data if API fails
+      setDoctors(initialDoctors);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -66,11 +113,18 @@ export default function App() {
         console.error('Session restoration failed:', e.message);
         localStorage.removeItem('access_token');
       } finally {
-        setIsLoading(false); // Set loading to false after check
+        setIsLoading(false);
       }
     }
-    setIsLoading(false); // Also set to false if no token is found
+    setIsLoading(false);
   }, []);
+
+  // Fetch doctors when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDoctorsFromBackend();
+    }
+  }, [isAuthenticated]);
 
   const handleLogin = ({ role, username }) => {
     setActiveRole(role);
@@ -89,23 +143,6 @@ export default function App() {
     setCurrentUser('');
     setActiveTab('dashboard');
   };
-
-  // Database States
-  const [patients, setPatients] = useState(initialPatients);
-  const [doctors, setDoctors] = useState(initialDoctors);
-  const [phoneCalls, setPhoneCalls] = useState(initialPhoneCalls);
-  const [appointments, setAppointments] = useState(initialAppointments);
-  const [consultations, setConsultations] = useState(initialConsultations);
-  const [detoxSessions, setDetoxSessions] = useState(initialDetoxSessions);
-  const [stayManagement, setStayManagement] = useState(initialStayManagement);
-  const [prescriptions, setPrescriptions] = useState(initialPrescriptions);
-  const [dietCharts, setDietCharts] = useState(initialDietCharts);
-  const [followups, setFollowups] = useState(initialFollowups);
-  const [whatsappLogs, setWhatsappLogs] = useState(initialWhatsappLogs);
-  const [reviews, setReviews] = useState(initialReviews);
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [timelinePatient, setTimelinePatient] = useState(null);
 
   const handleAddPatient = (newPt) => setPatients(prev => [...prev, newPt]);
   const handleAddCall = (newCall) => setPhoneCalls(prev => [...prev, newCall]);
@@ -358,7 +395,6 @@ export default function App() {
             doctors={doctors}
             whatsappLogs={whatsappLogs}
             setWhatsappLogs={setWhatsappLogs}
-            onCheckIn={handleCheckIn}
           />
         );
       case 'doctor-master':
