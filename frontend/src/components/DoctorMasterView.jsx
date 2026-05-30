@@ -75,9 +75,9 @@ export default function DoctorMasterView() {
     
     try {
       await userApi.updateUser(editingDoctor.user.id, {
-        fullName: editingDoctor.user.fullName, // Keep original name
-        specialization: editingDoctor.specialization, // Keep original specialization
-        status: editFormData.status, // Only update status
+        fullName: editingDoctor.user.fullName,
+        specialization: editingDoctor.specialization,
+        status: editFormData.status,
         email: editingDoctor.user.email,
         role: 'DOCTOR',
         phone: editingDoctor.user.phone
@@ -265,31 +265,30 @@ export default function DoctorMasterView() {
             <div className="p-4 border-b border-slate-200 bg-slate-50">
               <div className="flex flex-col sm:flex-row gap-3">
                 {/* Search Input with Clear Icon */}
-<div className="relative flex-1 max-w-md">
-  <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
-  <input
-    type="text"
-    placeholder="Search doctors by name, specialization or ID..."
-    value={searchTerm}
-    onChange={e => {
-      setSearchTerm(e.target.value);
-      setCurrentPage(1);
-    }}
-    className="w-full pl-10 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-  />
-  {searchTerm && (
-    <button
-      onClick={() => {
-        setSearchTerm('');
-        setCurrentPage(1);
-      }}
-      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
-    >
-      <X className="w-5 h-5" />
-    </button>
-  )}
-</div>
-              
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search doctors by name, specialization or ID..."
+                    value={searchTerm}
+                    onChange={e => {
+                      setSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full pl-10 pr-10 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
+                  {searchTerm && (
+                    <button
+                      onClick={() => {
+                        setSearchTerm('');
+                        setCurrentPage(1);
+                      }}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
                 
                 {/* Status Filter Dropdown */}
                 <div className="relative w-full sm:w-48">
@@ -310,10 +309,10 @@ export default function DoctorMasterView() {
               </div>
             </div>
 
-            {/* Doctors Grid */}
-            <div className="p-4">
+            {/* Doctors Grid with #F1F5F9 Background */}
+            <div className="p-4 bg-slate-100">
               {paginatedDoctors.length === 0 ? (
-                <div className="py-12 text-center text-slate-500">
+                <div className="py-12 text-center text-slate-500 bg-white rounded-xl">
                   <Stethoscope className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p>No doctors found matching your search.</p>
                 </div>
@@ -326,7 +325,7 @@ export default function DoctorMasterView() {
                       return (
                         <div 
                           key={item.id}
-                          className={`bg-white border rounded-2xl p-5 shadow-xs text-left transition-all hover:shadow-md flex flex-col justify-between min-h-[180px] ${
+                          className={`bg-white border rounded-2xl p-5 shadow-sm text-left transition-all hover:shadow-md flex flex-col justify-between min-h-[180px] ${
                             doc.status === 'Available' ? 'border-slate-200' : 'border-rose-100 bg-rose-50/10'
                           }`}
                         >
@@ -380,7 +379,7 @@ export default function DoctorMasterView() {
 
                   {/* Pagination */}
                   {totalPages > 1 && (
-                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
+                    <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-6">
                       <p className="text-sm text-slate-500">
                         Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredDoctors.length)}</span> of <span className="font-semibold text-slate-800">{filteredDoctors.length}</span> doctors
                       </p>
@@ -413,7 +412,7 @@ export default function DoctorMasterView() {
                                 className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${
                                   currentPage === pageNum 
                                     ? 'bg-emerald-600 text-white' 
-                                    : 'text-slate-600 hover:bg-slate-50'
+                                    : 'text-slate-600 hover:bg-slate-100'
                                 }`}
                               >
                                 {pageNum}
