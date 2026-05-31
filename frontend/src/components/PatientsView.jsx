@@ -416,8 +416,8 @@ export default function PatientsView({ appointments = [], followups = [], onAddP
                   <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
                     <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.whatsapp || pt.phone}</td>
+                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone?.replace(/\D/g, '').slice(-10)}</td>
+                    <td className="py-3 px-4 text-slate-600 font-medium">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10)}</td>
                     <td className="py-3 px-4 text-slate-600 font-medium">
                       {getLatestAppointmentType(pt.id)}
                     </td>
@@ -493,11 +493,11 @@ export default function PatientsView({ appointments = [], followups = [], onAddP
                 </li>
                 <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
                   <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Phone Number</span>
-                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.phone || 'N/A'}</span>
+                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.phone?.replace(/\D/g, '').slice(-10) || 'N/A'}</span>
                 </li>
                 <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
                   <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">WhatsApp</span>
-                  <span className="font-medium text-slate-800 text-sm">{viewingPatient.whatsapp || viewingPatient.phone || 'N/A'}</span>
+                  <span className="font-medium text-slate-800 text-sm">{(viewingPatient.whatsapp || viewingPatient.phone)?.replace(/\D/g, '').slice(-10) || 'N/A'}</span>
                 </li>
                 <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
                   <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Location</span>

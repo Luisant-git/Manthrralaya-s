@@ -672,7 +672,7 @@ export default function ReceptionistView({
                         <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors align-top">
                           <td className="py-2.5 px-4">
                             <span className="font-bold text-slate-800 block text-sm">{pt.name || 'Unknown Patient'}</span>
-                            <span className="text-slate-500 text-xs">{pt.phone || 'No phone'}</span>
+                            <span className="text-slate-500 text-xs">{formatPhoneWithoutCountryCode(pt.phone) || 'No phone'}</span>
                           </td>
                           <td className="py-2.5 px-4">
                             <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType}</span>

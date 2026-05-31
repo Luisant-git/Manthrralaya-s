@@ -112,7 +112,7 @@ export default function WhatsAppHubView({
                   <tr key={log.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4">
                       <div className="font-bold text-slate-800 text-sm">{log.patient_name}</div>
-                      <div className="text-xs text-slate-500">{log.phone}</div>
+                      <div className="text-xs text-slate-500">{log.phone?.replace(/\D/g, '').slice(-10)}</div>
                     </td>
                     <td className="py-3 px-4">
                       <span className="px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs text-slate-600 font-medium">

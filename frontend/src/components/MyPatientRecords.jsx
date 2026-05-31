@@ -549,7 +549,7 @@ export default function UnifiedPatientRecords({
                     <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
                       <td className="py-4 px-4 align-top">
                         <div className="font-semibold text-slate-900">{pt.name}</div>
-                        <div className="text-xs text-slate-500 mt-1">{pt.id}</div>
+                        <div className="text-xs text-slate-500 mt-1">P-{pt.id}</div>
                       </td>
                       <td className="py-4 px-4 align-top">
                         {latestAppointment ? (
@@ -571,7 +571,7 @@ export default function UnifiedPatientRecords({
                         )}
                       </td>
                       <td className="py-4 px-4 align-top">
-                        <div className="text-slate-600">{pt.phone || 'No phone'}</div>
+                        <div className="text-slate-600">{pt.phone?.replace(/\D/g, '').slice(-10) || 'No phone'}</div>
                         <div className="text-xs text-slate-500 mt-1">{pt.email || 'No email'}</div>
                       </td>
                       <td className="py-4 px-4 align-top">
@@ -681,7 +681,7 @@ export default function UnifiedPatientRecords({
                     </div>
                     <div>
                       <h2 className="text-lg font-bold text-white">{selectedPatient.name}</h2>
-                      <p className="text-xs text-emerald-100">{selectedPatient.id}</p>
+                      <p className="text-xs text-emerald-100">P-{selectedPatient.id}</p>
                     </div>
                   </div>
                   <button onClick={closeModal} className="p-2 rounded-full hover:bg-white/10 transition text-white">
@@ -695,7 +695,7 @@ export default function UnifiedPatientRecords({
                     <div className="flex items-center gap-6">
                       <div className="flex items-center gap-2">
                         <Phone className="w-4 h-4 text-emerald-600" />
-                        <span className="text-slate-700">{selectedPatient.phone || 'No phone'}</span>
+                        <span className="text-slate-700">{selectedPatient.phone?.replace(/\D/g, '').slice(-10) || 'No phone'}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Mail className="w-4 h-4 text-emerald-600" />

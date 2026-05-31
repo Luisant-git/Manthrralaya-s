@@ -243,7 +243,7 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                       <td className="py-3 px-4">
                         <span className="font-bold text-slate-800 block">{pt.name || 'Unknown Patient'}</span>
                         <div className="text-[11px] text-slate-500 mt-0.5 space-y-0.5 font-medium">
-                          <div>{pt.phone || pt.whatsapp || 'No mobile'}</div>
+                          <div>{pt.phone?.replace(/\D/g, '').slice(-10) || 'No mobile'}</div>
                           <div>{pt.age ? `${pt.age} yrs` : 'Age N/A'} {pt.location ? `• ${pt.location}` : ''}</div>
                         </div>
                       </td>

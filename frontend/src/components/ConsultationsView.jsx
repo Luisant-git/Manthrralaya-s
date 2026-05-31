@@ -480,7 +480,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                 <div className="p-5 bg-slate-50 flex justify-between items-center">
                   <div>
                     <h2 className="text-lg font-bold text-slate-800">{activePt.name}</h2>
-                    <span className="text-sm text-slate-500">ID: {activePt.id} • Phone: {activePt.phone}</span>
+                    <span className="text-sm text-slate-500">ID: P-{activePt.id} • Phone: {activePt.phone?.replace(/\D/g, '').slice(-10)}</span>
                   </div>
                   <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">
                     Consultation in Progress
@@ -661,7 +661,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                               <div>
                                 <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
                                 <h4 className="text-xl font-bold text-slate-900 mt-1">{pt.name || pt.fullName || 'Unknown Patient'}</h4>
-                                <div className="text-sm text-slate-600">Patient ID: {pt.id || record.patient_id || 'N/A'} • {pt.age || '--'} yrs • {pt.gender || '--'}</div>
+                                <div className="text-sm text-slate-600">Patient ID: P-{pt.id || record.patient_id || 'N/A'} • {pt.age || '--'} yrs • {pt.gender || '--'}</div>
                               </div>
                               <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
                                 Provider: {record.doctor_name || 'Assigned Provider'}

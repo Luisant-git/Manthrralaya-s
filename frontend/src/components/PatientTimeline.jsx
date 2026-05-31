@@ -136,7 +136,7 @@ export default function PatientTimeline({
           <div className="text-left">
             <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Unified Lifecycle Profile</span>
             <h2 className="text-xl font-bold text-slate-800 mt-1">360° Timeline: {patient.name}</h2>
-            <p className="text-sm text-slate-500 mt-0.5">Phone: {patient.phone} • ID: {patient.id}</p>
+            <p className="text-sm text-slate-500 mt-0.5">Phone: {patient.phone?.replace(/\D/g, '').slice(-10)} • ID: P-{patient.id}</p>
           </div>
           <button onClick={onClose} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:text-slate-800 transition-colors shadow-sm">
             <X className="w-5 h-5" />
