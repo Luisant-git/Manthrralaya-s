@@ -11,11 +11,64 @@ export default function DashboardView({
   activeRole,
   onCheckIn,
   onNavigateToTab,
-  currentUser
+  currentUser,
+  doctors = []
 }) {
   
-  const todayDate = new Date().toISOString().split('T')[0];
+  const todayDate = new Date().toLocaleDateString('en-CA');
+  const isDoctorView = activeRole === 'doctor';
+  
+  // DEBUG: Log what we received
+  console.log('📊 DashboardView Debug:');
+  console.log('  - activeRole:', activeRole);
+  console.log('  - currentUser:', currentUser);
+  console.log('  - doctors array length:', doctors.length);
+  console.log('  - doctors:', doctors);
+  console.log('  - appointments count:', appointments.length);
+  
+ 
 
+  // Find current doctor - Match from doctors list or fallback to appointments data
+  let currentDoctor = isDoctorView
+    ? doctors.find(d => {
+        const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
+        const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
+        const currentUserLower = String(currentUser || '').toLowerCase();
+        
+        // Match by email or name to ensure the doctor record is found correctly
+        return doctorEmail === currentUserLower || doctorName === currentUserLower;
+      })
+    : null;
+
+  // FALLBACK: If doctors list is empty (e.g. 403 Forbidden error on admin list)
+  // or match not found, try to identify the doctor from the appointments data.
+  if (isDoctorView && !currentDoctor && appointments && appointments.length > 0) {
+    const aptWithDoctor = appointments.find(a => {
+      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
+      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
+      const currentUserLower = String(currentUser || '').toLowerCase();
+      return dEmail === currentUserLower || dName === currentUserLower;
+    });
+    
+    if (aptWithDoctor && aptWithDoctor.doctor) {
+      currentDoctor = {
+        ...aptWithDoctor.doctor,
+        name: aptWithDoctor.doctor.user?.fullName || aptWithDoctor.doctor.name,
+      };
+      console.log('💡 Identified current doctor from appointments fallback:', currentDoctor);
+    }
+  }
+
+const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor.id) : null;
+
+  console.log('🎯 Current Doctor found:', currentDoctor);
+  console.log('🎯 Current Doctor ID (number):', currentDoctorId);
+  if (isDoctorView) console.log('📋 All doctors available:', doctors.map(d => ({ 
+    id: d.id, 
+    name: d.name, 
+    email: d.user?.email || d.email 
+  })));
+  
   // Calculate quick metrics
   const totalPatients = patients.length;
   const todaysAppts = appointments.filter(a => a.date === todayDate).length;
@@ -25,42 +78,66 @@ export default function DashboardView({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   
-  // Get today's appointments
-  const todayAppointments = appointments.filter(a => a.date === todayDate);
+  // Get today's appointments - FIXED: Strict doctor filtering
+  const todayAppointments = appointments.filter(a => {
+    const apptDate = a.date || (a.appointmentDate ? new Date(a.appointmentDate).toLocaleDateString('en-CA') : '');
+    const isToday = apptDate === todayDate;
+    
+    if (!isDoctorView) return isToday;
+    
+    // If no doctor is logged in, show nothing
+    if (!currentDoctorId) {
+      return false;
+    }
+    
+    // Get doctor_id from multiple sources and convert to number
+    const appointmentDoctorId = a.doctor_id ?? a.doctorId ?? a.doctor?.id;
+    
+    // Convert to number for strict comparison
+    const appointmentDoctorIdNum = appointmentDoctorId ? Number(appointmentDoctorId) : null;
+    
+    // STRICT MATCH: Only show appointments where doctor ID matches exactly
+    const isMatch = isToday && appointmentDoctorIdNum === currentDoctorId;
+    
+    if (isToday && appointmentDoctorIdNum) {
+      console.log(`  Appointment ${a.id}: doctorId=${appointmentDoctorIdNum}, currentDoctorId=${currentDoctorId}, match=${isMatch ? '✅' : '❌'}`);
+    }
+    
+    return isMatch;
+  });
+  
+  console.log('📅 Today Appointments count:', todayAppointments.length);
+  console.log('📅 Today Appointments details:', todayAppointments.map(a => ({ 
+    id: a.id, 
+    doctorId: a.doctor_id || a.doctorId, 
+    status: a.status,
+    patientName: a.patient?.name || 'Unknown'
+  })));
+  
   const totalAppointmentsToday = todayAppointments.length;
   
-  // IMPORTANT: Track which appointments have been completed (not just patients)
-  // An appointment is completed when its status is 'Completed'
-  const completedAppointmentIds = appointments
-    .filter(a => a.status === 'Completed' && a.date === todayDate)
-    .map(a => a.id);
-  
-  // For counting unique completed patients (for the metric)
-  const completedPatientsToday = appointments
-    .filter(a => a.status === 'Completed' && (a.date === todayDate || a.appointmentDate?.split('T')[0] === todayDate))
+  // For counting unique completed patients
+  const completedPatientsToday = todayAppointments
+    .filter(a => a.status === 'Completed')
     .map(a => a.patient_id || a.patientId);
   const completedTodayCount = new Set(completedPatientsToday).size;
   
-  // Get patients who have been received by the receptionist and are waiting for the doctor
-  // Don't filter by completed consultations - use appointment status instead
-  const arrivedPatients = appointments.filter(a => a.status === 'Arrived' && a.date === todayDate);
-  const checkedInPatients = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate);
+  // Get patients who are waiting for the doctor
+  const arrivedPatients = todayAppointments.filter(a => a.status === 'Arrived');
+  const checkedInPatients = todayAppointments.filter(a => a.status === 'Checked-in');
   
-  // Doctor queue: only show appointments that are NOT completed
-  const doctorQueue = appointments.filter(a =>
-    (a.status === 'Arrived' || a.status === 'Checked-in') &&
-    a.date === todayDate
+  // Doctor queue: show appointments that are NOT completed
+  const doctorQueue = todayAppointments.filter(a =>
+    a.status === 'Arrived' || a.status === 'Checked-in'
   );
   
-  const pendingArrivals = appointments.filter(a => 
-    a.status === 'Scheduled' && 
-    a.date === todayDate
-  );
+  console.log('👨‍⚕️ Doctor Queue length:', doctorQueue.length);
   
   const getAppointmentTypeKey = (appt) => String(appt?.appointmentType || '').toLowerCase();
 
   const handleStartAppointment = (appt) => {
     if (appt.status !== 'Checked-in') {
+      alert('Patient must be checked-in before starting consultation');
       return;
     }
     const typeKey = getAppointmentTypeKey(appt);
@@ -71,27 +148,35 @@ export default function DashboardView({
     }
   };
 
-  const handleDoctorCheckIn = (appointmentId) => {
-    onCheckIn(appointmentId, false, true);
+  const handleDoctorCheckIn = async (appointmentId) => {
+    await onCheckIn(appointmentId, false, true);
   };
 
   // Get today's patient list for doctor with all details
   const todayPatientList = doctorQueue
     .map((appt) => {
       const pid = appt.patientId || appt.patient_id;
-      const patient = patients.find(p => String(p.id) === String(pid)) || appt.patient || {};
-      // Count previous consultations for this patient (all time, not just today)
-      const patientConsultations = consultations.filter(c => String(c.patient_id) === String(pid));
+      // Find patient from patients array or from nested patient object in appointment
+      let patient = patients.find(p => String(p.id) === String(pid));
+      
+      // If not found in patients array, check if appointment has nested patient data
+      if (!patient && appt.patient) {
+        patient = appt.patient;
+      }
+      
+      // Count previous consultations for this patient
+      const patientConsultations = consultations.filter(c => String(c.patient_id || c.patientId) === String(pid));
       const historyCount = patientConsultations.length;
       const historyRecords = patientConsultations.sort((a, b) => new Date(b.date) - new Date(a.date));
       const latestNote = historyRecords[0]?.consultation_notes || appt.notes || 'No consultation notes yet.';
       const isCheckedIn = appt.status === 'Checked-in';
       
-      // Check if this specific appointment already has a completed consultation
-      const hasCompletedConsultation = consultations.some(c => 
-        String(c.appointment_id || c.appointmentId) === String(appt.id) || 
-        (String(c.patient_id) === String(pid) && c.date === todayDate && String(c.appointment_id) === String(appt.id))
-      );
+      // Check if this appointment already has a completed consultation
+      const hasCompletedConsultation = consultations.some(c => {
+        const apptIdFromConsult = c.appointment_id ?? c.appointmentId;
+        if (!apptIdFromConsult) return false;
+        return String(apptIdFromConsult) === String(appt.id);
+      });
 
       return {
         ...appt,
@@ -103,15 +188,19 @@ export default function DashboardView({
       };
     })
     // Only show appointments that don't have a completed consultation yet
-    .filter(item => !item.hasCompletedConsultation);
+    .filter(item => !item.hasCompletedConsultation && item.patient);
   
-  // Get completed appointments list for display (by appointment, not just patient)
+  // Get completed appointments list for display
   const completedAppointmentsList = todayAppointments
     .filter(a => a.status === 'Completed')
     .map((appt) => {
       const pid = appt.patientId || appt.patient_id;
-      const patient = patients.find(p => String(p.id) === String(pid)) || appt.patient || {};
-      // Find the consultation associated with this appointment
+      let patient = patients.find(p => String(p.id) === String(pid));
+      
+      if (!patient && appt.patient) {
+        patient = appt.patient;
+      }
+      
       const completedConsultation = consultations.find(c => 
         String(c.appointment_id) === String(appt.id) || (String(c.patient_id) === String(pid) && c.date === todayDate)
       );
@@ -121,10 +210,11 @@ export default function DashboardView({
         patient,
         completedConsultation
       };
-    });
+    })
+    .filter(item => item.patient);
 
-  // Meta function for rendering patient info
   const renderPatientMeta = (pt) => {
+    if (!pt) return '';
     const parts = [];
     if (pt.age) parts.push(`${pt.age} yrs`);
     if (pt.location && pt.location !== 'n/a') parts.push(pt.location);
@@ -165,42 +255,120 @@ export default function DashboardView({
 
   const filteredReceptionistAppointments = todayAppointments.filter((appt) => {
     const pid = appt.patientId || appt.patient_id;
-    const patient = patients.find((p) => String(p.id) === String(pid)) || appt.patient || {};
+    let patient = patients.find((p) => String(p.id) === String(pid));
+    
+    if (!patient && appt.patient) {
+      patient = appt.patient;
+    }
+    
     const matchesSearch = !searchQuery ||
-      patient.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      patient.phone?.includes(searchQuery) ||
+      patient?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      patient?.phone?.includes(searchQuery) ||
       appt.appointmentType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (appt.notes || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
     return matchesSearch && matchesFilter;
   });
 
-  const isDoctorView = activeRole === 'doctor';
- const getInitials = (name) => {
+  const getInitials = (name) => {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
+  
+  // If doctor view but we haven't identified the doctor profile yet (even with fallback)
+  if (isDoctorView && !currentDoctor && doctors.length === 0) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-8 text-center">
+        <h3 className="text-lg font-bold text-yellow-800 mb-2">Identifying Doctor Profile</h3>
+        <p className="text-yellow-700">Please wait while we sync your account details...</p>
+        <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600 mx-auto"></div>
+      </div>
+    );
+  }
+  
+  // If doctor view but no doctor found, show debug info
+  if (isDoctorView && doctors.length > 0 && !currentDoctor) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-8 text-center">
+        <h3 className="text-lg font-bold text-yellow-800 mb-2">Doctor Not Found</h3>
+        <p className="text-yellow-700">Could not find doctor record for user: <strong>{currentUser}</strong></p>
+        <p className="text-sm text-yellow-600 mt-2">Available doctors:</p>
+        <ul className="text-sm text-yellow-600 mt-1">
+          {doctors.map(d => (
+            <li key={d.id}>ID: {d.id}, Name: {d.name || d.user?.fullName}, Email: {d.user?.email}</li>
+          ))}
+        </ul>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+        >
+          Refresh Data
+        </button>
+      </div>
+    );
+  }
+  
+  // If doctor view but no appointments found, show helpful message
+  if (isDoctorView && currentDoctor && todayAppointments.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
+              {getInitials(currentUser)}
+            </div>
+            <div>
+              <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
+                Doctor Dashboard
+              </h1>
+              <p className="text-slate-500 text-sm mt-1">
+                Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-8 text-center">
+          <Calendar className="w-16 h-16 text-blue-400 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-blue-800 mb-2">No Appointments Today</h3>
+          <p className="text-blue-700">
+            You don't have any appointments scheduled for today ({todayDate}).
+          </p>
+          <p className="text-sm text-blue-600 mt-2">
+            Check with the receptionist to schedule appointments or view other days in the appointments tab.
+          </p>
+          <button
+            onClick={() => onNavigateToTab('appointments')}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            View All Appointments
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6">
-{/* Top Title & Actions */}
-<div className="flex items-center justify-between">
-  <div className="flex items-center gap-4">
-    <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
-      {getInitials(currentUser)}
-    </div>
-    <div>
-    <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
-      {isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
-    </h1>
-    <p className="text-slate-500 text-sm mt-1">
-      Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>. 
-      {isDoctorView
-        ? ' Here is your patient queue for today.'
-        : ' View real-time insights on patient flow and admissions.'}
-    </p>
-    </div>
-  </div>
-</div>
+      {/* Top Title & Actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
+            {getInitials(currentUser)}
+          </div>
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
+              {isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+              Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>. 
+              {isDoctorView
+                ? ' Here is your patient queue for today.'
+                : ' View real-time insights on patient flow and admissions.'}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {isDoctorView && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -284,8 +452,6 @@ export default function DashboardView({
               </div>
             </div>
 
-            
-
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Pending Reviews</span>
@@ -354,7 +520,7 @@ export default function DashboardView({
                       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <div className="text-sm font-bold text-slate-900">{item.patient.name || 'Unknown Patient'}</div>
+                            <div className="text-sm font-bold text-slate-900">{item.patient?.name || 'Unknown Patient'}</div>
                             {item.isCheckedIn && (
                               <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-semibold">
                                 Checked-in
@@ -367,11 +533,16 @@ export default function DashboardView({
                             )}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">
-                            {item.patient.medical_conditions || item.appointmentType} • {item.session === 'FN' ? 'Forenoon' : 'Afternoon'}
+                            {item.patient?.medical_conditions || item.appointmentType} • {item.session === 'FN' ? 'Forenoon' : 'Afternoon'}
                           </div>
                           <div className="text-xs text-slate-500">
                             Total Visits: {item.historyCount}
                           </div>
+                          {item.patient?.phone && (
+                            <div className="text-xs text-slate-400 mt-1">
+                              📞 {formatPhoneWithoutCountryCode(item.patient.phone)}
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <div className="text-right">
@@ -431,7 +602,7 @@ export default function DashboardView({
                 ) : (
                   completedAppointmentsList.map((item) => (
                     <div key={item.id} className="p-3 rounded-xl bg-purple-50 border border-purple-100">
-                      <div className="font-bold text-slate-800 text-sm">{item.patient.name || 'Unknown Patient'}</div>
+                      <div className="font-bold text-slate-800 text-sm">{item.patient?.name || 'Unknown Patient'}</div>
                       <div className="text-xs text-slate-500 mt-1">
                         {item.appointmentType}
                         {String(item.appointmentType || '').toLowerCase().includes('detox') && (
@@ -439,7 +610,7 @@ export default function DashboardView({
                         )}
                       </div>
                       <div className="text-xs text-slate-400 mt-1">
-                        Appointment: {item.id}
+                        Time: {item.session === 'FN' ? '9:00 AM - 1:00 PM' : '2:00 PM - 6:00 PM'}
                       </div>
                     </div>
                   ))
@@ -460,7 +631,7 @@ export default function DashboardView({
               </span>
             </div>
             
-            {/* Search and Filter Bar (Patient Records style) */}
+            {/* Search and Filter Bar */}
             <div className="p-4 border-b border-slate-200 bg-slate-50 rounded-xl mb-4">
               <div className="flex flex-col md:flex-row md:items-center gap-3">
                 <div className="flex-1 relative max-w-md">
@@ -509,7 +680,12 @@ export default function DashboardView({
                   <tbody className="divide-y divide-slate-100">
                     {filteredReceptionistAppointments.slice().reverse().map(appt => {
                       const pid = appt.patientId || appt.patient_id;
-                      const pt = patients.find(p => String(p.id) === String(pid)) || appt.patient || {};
+                      let pt = patients.find(p => String(p.id) === String(pid));
+                      
+                      if (!pt && appt.patient) {
+                        pt = appt.patient;
+                      }
+                      
                       const isArrived = appt.status === 'Arrived';
                       const isCheckedIn = appt.status === 'Checked-in';
                       const isCompleted = appt.status === 'Completed';
@@ -542,9 +718,9 @@ export default function DashboardView({
                             <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
                           </td>
                           <td className="py-3 px-4 align-top min-w-0">
-                            <span className="font-bold text-slate-800 block text-sm truncate">{pt.name || 'Unknown Patient'}</span>
+                            <span className="font-bold text-slate-800 block text-sm truncate">{pt?.name || 'Unknown Patient'}</span>
                             <span className="text-slate-500 font-medium block truncate">
-                              {formatPhoneWithoutCountryCode(pt.phone) || 'No phone'} {renderPatientMeta(pt)}
+                              {formatPhoneWithoutCountryCode(pt?.phone) || 'No phone'} {renderPatientMeta(pt)}
                             </span>
                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">

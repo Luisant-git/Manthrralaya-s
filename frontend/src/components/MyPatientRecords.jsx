@@ -11,7 +11,10 @@ export default function UnifiedPatientRecords({
   dietCharts = [],
   followups = [],
   reviews = [],
-  onAddPatient
+  onAddPatient,
+  activeRole,
+  currentUser,
+  doctors = []
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
@@ -35,6 +38,19 @@ export default function UnifiedPatientRecords({
     whatsapp: '',
     medical_conditions: ''
   });
+
+  // Identify current doctor and their relevant patients
+  const isDoctor = activeRole === 'doctor';
+  const currentDoc = isDoctor 
+    ? doctors.find(d => d.name === currentUser || d.user?.fullName === currentUser || d.user?.email === currentUser) 
+    : null;
+  const currentDocId = currentDoc?.id;
+
+  // Create a set of patient IDs assigned to this doctor
+  const myPatientIds = isDoctor ? new Set([
+    ...appointments.filter(a => String(a.doctor_id || a.doctorId) === String(currentDocId)).map(a => String(a.patient_id || a.patientId)),
+    ...consultations.filter(c => String(c.doctor_id || c.doctorId) === String(currentDocId)).map(c => String(c.patient_id))
+  ]) : null;
 
   const appointmentTabs = [
     { id: 'all', label: 'All' },
@@ -74,11 +90,16 @@ export default function UnifiedPatientRecords({
     return appointments.some(a => String(a.patient_id || a.patientId) === String(patient.id) && a.appointmentType === tab.type);
   };
 
-  const filteredPatients = patients.filter(pt => {
+  // Filter patients: either ALL (for admin/receptionist) or only MY patients (for doctor)
+  const basePatients = isDoctor 
+    ? patients.filter(p => myPatientIds.has(String(p.id))) 
+    : patients;
+
+  const filteredPatients = basePatients.filter(pt => {
     const normalized = searchTerm.trim().toLowerCase();
     const matchesSearch = !normalized ||
       pt.name.toLowerCase().includes(normalized) ||
-      pt.id.toLowerCase().includes(normalized) ||
+      String(pt.id).toLowerCase().includes(normalized) ||
       (pt.phone || '').includes(normalized) ||
       (pt.email || '').toLowerCase().includes(normalized);
     return matchesSearch && matchesTypeFilter(pt);

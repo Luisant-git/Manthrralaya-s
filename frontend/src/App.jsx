@@ -21,20 +21,6 @@ import { getAllAppointments, createAppointment as apiCreateAppointment, updateAp
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
 
-import {
-  initialPatients,
-  initialDoctors,
-  initialPhoneCalls,
-  initialConsultations,
-  initialDetoxSessions,
-  initialStayManagement,
-  initialPrescriptions,
-  initialDietCharts,
-  initialFollowups,
-  initialWhatsappLogs,
-  initialReviews
-} from './mockData';
-
 export default function App() {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -74,67 +60,104 @@ export default function App() {
     }
   };
 
-  // Fetch doctors from backend
   const fetchDoctorsFromBackend = async () => {
-    try {
-      console.log('Fetching doctors from backend...');
-      const response = await userApi.getUsersByRole('DOCTOR');
-      console.log('API Response:', response);
+  try {
+    console.log('🟢 Fetching doctors from backend...');
+    const response = await userApi.getUsersByRole('DOCTOR');
+    console.log('🔍 Raw response for doctors:', response);
+    
+    let doctorsList = [];
+    
+    // Robustly extract the array from various possible response formats (NestJS, Axios, or Raw Array)
+    if (Array.isArray(response)) {
+      doctorsList = response;
+    } else if (response?.data && Array.isArray(response.data)) {
+      doctorsList = response.data;
+    } else if (response?.data?.data && Array.isArray(response.data.data)) {
+      doctorsList = response.data.data;
+    } else if (response?.success && Array.isArray(response.data)) {
+      doctorsList = response.data;
+    }
+    
+    if (doctorsList?.length > 0) {
+      const doctorsFromBackend = doctorsList.map(doc => ({
+        id: doc.id ? Number(doc.id) : null, // Ensure ID is numeric for strict matching
+        userId: doc.userId,
+        name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`,
+        email: doc.user?.email || doc.email,
+        specialization: doc.specialization,
+        status: doc.status,
+        user: doc.user
+      }));
       
-      if (response && response.data && response.data.length > 0) {
-        const doctorsFromBackend = response.data.map(doc => ({
-          id: doc.id,
-          name: doc.user?.fullName || `Doctor ${doc.id}`,
-          specialization: doc.specialization,
-          status: doc.status,
-          designation: doc.specialization,
-          user: doc.user
-        }));
-        setDoctors(doctorsFromBackend);
-        console.log('Doctors fetched successfully:', doctorsFromBackend);
-      } else {
-        setDoctors([]);
-      }
-    } catch (error) {
+      setDoctors(doctorsFromBackend);
+      console.log('✅ Doctors loaded successfully:', doctorsFromBackend.length);
+    } else {
+      console.warn('⚠️ No doctors found in any response structure');
       setDoctors([]);
     }
+  } catch (error) {
+    console.error('🔴 Error fetching doctors:', error);
+    setDoctors([]);
+  }
+};
+  // Helper to ensure all appointments have consistent property names for filtering/UI
+  const normalizeAppointment = (apt) => {
+    if (!apt) return null;
+    
+    // Get patient ID from multiple possible sources
+    const pid = apt.patientId || apt.patient_id || apt.patient?.id;
+    
+    // Get doctor ID from multiple possible sources
+    const did = apt.doctorId || apt.doctor_id || apt.doctor?.id;
+    
+    // Get YYYY-MM-DD in local time consistently
+    let dateStr = '';
+    const rawDateSource = apt.appointmentDate || apt.date;
+    if (rawDateSource) {
+      const dateObj = new Date(rawDateSource);
+      if (!isNaN(dateObj.getTime())) {
+        dateStr = dateObj.toLocaleDateString('en-CA');
+      } else {
+        dateStr = new Date().toLocaleDateString('en-CA');
+      }
+    }
+
+    return {
+      ...apt,
+      id: apt.id,
+      patient_id: pid !== undefined && pid !== null ? String(pid) : null,
+      doctor_id: did !== undefined && did !== null ? Number(did) : null, // Ensure numeric
+      appointmentDate: apt.appointmentDate || apt.date,
+      appointmentType: apt.appointmentType,
+      session: apt.session || 'FN',
+      status: apt.status,
+      notes: apt.notes,
+      date: dateStr,
+      doctor_name: apt.doctor?.user?.fullName || apt.doctor?.name || apt.doctor_name
+    };
   };
 
- // In fetchAppointmentsFromBackend function
-const fetchAppointmentsFromBackend = async () => {
+  // In fetchAppointmentsFromBackend function
+  const fetchAppointmentsFromBackend = async () => {
     try {
-        console.log('Fetching appointments from backend...');
-        const response = await getAllAppointments();
-        console.log('Raw API Response:', response);
-        
-        // Check the response structure
-        let appointmentsData = [];
-        if (response && response.data) {
-            appointmentsData = response.data;
-        } else if (response && Array.isArray(response)) {
-            appointmentsData = response;
-        }
-        
-        const formattedAppointments = appointmentsData.map(apt => ({
-            ...apt, // Preserve backend relations like apt.patient or apt.doctor
-            id: apt.id,
-            patient_id: apt.patientId || apt.patient_id,
-            doctor_id: apt.doctorId || apt.doctor_id,
-            appointmentDate: apt.appointmentDate || apt.date,
-            appointmentType: apt.appointmentType,
-            session: apt.session || 'FN',
-            status: apt.status,
-            notes: apt.notes,
-            date: (apt.appointmentDate || apt.date)?.split('T')[0],
-            doctor_name: apt.doctor?.user?.fullName || apt.doctor?.name || apt.doctor_name
-        }));
-        
-        setAppointments(formattedAppointments);
-        console.log('Formatted appointments:', formattedAppointments);
+      console.log('Fetching appointments from backend...');
+      const response = await getAllAppointments();
+      
+      let appointmentsData = [];
+      if (response && response.data) {
+        appointmentsData = response.data;
+      } else if (response && Array.isArray(response)) {
+        appointmentsData = response;
+      }
+      
+      const formattedAppointments = appointmentsData.map(normalizeAppointment);
+      setAppointments(formattedAppointments);
+      console.log('Formatted appointments:', formattedAppointments);
     } catch (error) {
-        console.error('Error fetching appointments:', error);
+      console.error('Error fetching appointments:', error);
     }
-};
+  };
 
   // Fetch all data when authenticated
   const fetchAllData = async () => {
@@ -146,11 +169,6 @@ const fetchAppointmentsFromBackend = async () => {
   };
 
   useEffect(() => {
-    // Clear legacy storage to prevent ID conflicts or stale data causing "Unknown Patient"
-    localStorage.removeItem('patients');
-    localStorage.removeItem('appointments');
-    localStorage.removeItem('initial_data_sync');
-
     const token = localStorage.getItem('access_token');
     if (token) {
       try {
@@ -163,7 +181,7 @@ const fetchAppointmentsFromBackend = async () => {
         }
 
         setActiveRole(payload.role.toLowerCase());
-        setCurrentUser(payload.name || payload.email);
+        setCurrentUser(payload.email || payload.name); // Use email from token
         setIsAuthenticated(true);
 
         if (payload.role.toLowerCase() === 'doctor') setActiveTab('consultations');
@@ -185,17 +203,31 @@ const fetchAppointmentsFromBackend = async () => {
     }
   }, [isAuthenticated]);
 
-  const handleLogin = ({ role, username }) => {
+  const handleLogin = ({ role, username, displayName, email, userId }) => {
     setActiveRole(role);
-    setCurrentUser(username);
+    setCurrentUser(email || username);
     setIsAuthenticated(true);
-    if (role === 'doctor') setActiveTab('consultations');
-    else if (role === 'receptionist') setActiveTab('dashboard');
-    else setActiveTab('dashboard');
+    
+    localStorage.setItem('user_email', email || username);
+    localStorage.setItem('user_display_name', displayName || username);
+    localStorage.setItem('user_role', role);
+    
+    console.log('✅ User logged in:', { role, email: email || username });
+    
+    if (role === 'doctor') {
+      setActiveTab('consultations');
+    } else if (role === 'receptionist') {
+      setActiveTab('dashboard');
+    } else {
+      setActiveTab('dashboard');
+    }
   };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_display_name');
+    localStorage.removeItem('user_role');
     setIsAuthenticated(false);
     setActiveRole('');
     setCurrentUser('');
@@ -248,7 +280,7 @@ const fetchAppointmentsFromBackend = async () => {
       };
       
       const createdAppt = await apiCreateAppointment(appointmentData);
-      setAppointments(prev => [...prev, createdAppt]);
+      setAppointments(prev => [...prev, normalizeAppointment(createdAppt)]);
       
       const docName = doctorObj ? doctorObj.name : 'our specialist';
       const waLog = {
@@ -440,7 +472,7 @@ const fetchAppointmentsFromBackend = async () => {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} />;
+        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} doctors={doctors} />;
       case 'patients':
         return <PatientsView appointments={appointments} patients={patients} followups={followups} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
       case 'phone-calls':
@@ -450,7 +482,7 @@ const fetchAppointmentsFromBackend = async () => {
       case 'consultations':
         return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} />;
       case 'my-patient-records':
-        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} />;
+        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} />;
       case 'detox':
       case 'stay':
         return <DetoxStayView

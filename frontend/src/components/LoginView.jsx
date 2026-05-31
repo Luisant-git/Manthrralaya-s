@@ -10,9 +10,9 @@ export default function LoginView({ onLogin }) {
   const [error, setError] = useState('');
 
   const roles = [
-    { id: 'receptionist', title: 'Receptionist', icon: User,  },
-    { id: 'doctor', title: 'Doctor', icon: Stethoscope,  },
-    { id: 'admin', title: 'System Admin', icon: Shield, }
+    { id: 'receptionist', title: 'Receptionist', icon: User },
+    { id: 'doctor', title: 'Doctor', icon: Stethoscope },
+    { id: 'admin', title: 'System Admin', icon: Shield }
   ];
 
   const handleLogin = async (e) => {
@@ -33,9 +33,20 @@ export default function LoginView({ onLogin }) {
 
       // Save the token to local storage so the session persists on refresh
       localStorage.setItem('access_token', response.access_token);
+      // Also store user info for consistent matching
+      localStorage.setItem('user_email', response.email);
+      localStorage.setItem('user_name', response.name || response.fullName || response.email);
+      localStorage.setItem('user_role', response.role.toLowerCase());
 
       // Pass the authenticated user data to the parent component
-      onLogin({ role: response.role.toLowerCase(), username: response.name || response.fullName || response.email });
+      // Use email as the primary identifier for better matching
+      onLogin({ 
+        role: response.role.toLowerCase(), 
+        username: response.email, // Use email as primary identifier
+        displayName: response.name || response.fullName || response.email,
+        email: response.email,
+        userId: response.id
+      });
     } catch (err) {
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {

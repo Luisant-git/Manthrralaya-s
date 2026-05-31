@@ -10,11 +10,27 @@ const getAuthHeader = () => ({
 export const userApi = {
     // Get all users by role (RECEPTIONIST, DOCTOR, ADMIN)
     getUsersByRole: async (role) => {
-        const response = await fetch(`${API_URL}/${role}`, {
-            headers: getAuthHeader()
-        });
-        if (!response.ok) throw new Error('Failed to fetch staff list');
-        return response.json();
+        try {
+            console.log(`🟢 Calling API: ${API_URL}/${role}`);
+            const response = await fetch(`${API_URL}/${role}`, {
+                headers: getAuthHeader()
+            });
+            
+            console.log(`🟢 Response status: ${response.status}`);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`🔴 API Error ${response.status}:`, errorText);
+                throw new Error(`Failed to fetch staff list: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log(`🟢 API Response for ${role}:`, result);
+            return result;
+        } catch (error) {
+            console.error(`🔴 Error in getUsersByRole(${role}):`, error);
+            throw error;
+        }
     },
 
     // Create a new user with a specific role
