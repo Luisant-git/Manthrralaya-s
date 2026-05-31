@@ -137,12 +137,16 @@ export default function UnifiedPatientRecords({
 
     if (fromFollowups) return fromFollowups;
 
-    // Fallback: Check consultations directly if followups state isn't synced
-    const fromConsults = consultations
-      .filter(c => String(c.patient_id || c.patientId) === String(patientId) && c.detox_recommended && (c.followup_date || c.followupDate))
+    // Fallback: Check clinical context from ABSOLUTE LATEST visit only
+    const latestCons = consultations
+      .filter(c => String(c.patient_id || c.patientId) === String(patientId))
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    
+    if (latestCons && latestCons.detox_recommended && (latestCons.followup_date || latestCons.followupDate)) {
+      return { scheduled_date: latestCons.followup_date || latestCons.followupDate };
+    }
 
-    return fromConsults ? { scheduled_date: fromConsults.followup_date || fromConsults.followupDate } : null;
+    return null;
   };
 
   const matchesTypeFilter = (patient) => {

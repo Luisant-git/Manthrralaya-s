@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Star, Download, Calendar, ShieldCheck, User, ClipboardList, PenTool } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 export default function PatientPortalView({
   patients,
@@ -26,6 +27,7 @@ export default function PatientPortalView({
   const handleFeedbackSubmit = (e) => {
     e.preventDefault();
     if (!comment) return alert('Please enter comments.');
+    if (!comment) return toast.warn('Please enter comments.');
 
     const newReview = {
       id: `REV-${10 + reviews.length + 1}`,

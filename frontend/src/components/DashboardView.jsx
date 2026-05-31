@@ -149,7 +149,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   };
 
   const handleDoctorCheckIn = async (appointmentId) => {
-    await onCheckIn(appointmentId, false, true);
+    await onCheckIn(appointmentId, true, true);
   };
 
   // Get today's patient list for doctor with all details

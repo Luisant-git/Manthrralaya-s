@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getPatientByPhone, createPatient } from '../api/patientApi';
 import { createAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
+import { toast } from 'react-toastify';
 import { 
   UserPlus, 
   Clock, 
@@ -185,11 +186,11 @@ export default function ReceptionistView({
   };
 
   const handleAction = async (type) => {
-    if (!formData.name.trim()) return alert('Patient Name is required.');
-    if (!formData.age.trim()) return alert('Patient Age is required.');
-    if (!formData.gender) return alert('Patient Gender is required.');
-    if (!formData.location.trim()) return alert('Patient Location is required.');
-    if (!formData.phone.trim()) return alert('Patient Phone is required.');
+    if (!formData.name.trim()) { toast.warn('Patient Name is required.'); return; }
+    if (!formData.age.trim()) { toast.warn('Patient Age is required.'); return; }
+    if (!formData.gender) { toast.warn('Patient Gender is required.'); return; }
+    if (!formData.location.trim()) { toast.warn('Patient Location is required.'); return; }
+    if (!formData.phone.trim()) { toast.warn('Patient Phone is required.'); return; }
 
     try {
       let patientObj = await getPatientByPhone(formData.phone);
@@ -209,7 +210,7 @@ export default function ReceptionistView({
       }
 
       if (type === 'book' && !formData.doctor_id) {
-        return alert('Please assign a doctor to book an appointment.');
+        toast.warn('Please assign a doctor to book an appointment.'); return;
       }
 
       const appointmentData = {
@@ -240,30 +241,30 @@ export default function ReceptionistView({
           template_name: 'appointment_confirm'
         };
         if (setWhatsappLogs) setWhatsappLogs(prev => [...prev, waLog]);
-        alert(`Appointment confirmed for ${patientObj.name}!`);
+        toast.success(`Appointment confirmed for ${patientObj.name}!`);
       } else {
-        alert(`Patient ${patientObj.name} added to the Waiting Registry.`);
+        toast.success(`Patient ${patientObj.name} added to the Waiting Registry.`);
       }
 
       clearForm();
     } catch (error) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message}`);
     }
   };
 
   const handleModalBookConfirm = async (e) => {
     e.preventDefault();
-    if (!modalBookingData.doctor_id) return alert('Please assign a doctor.');
+    if (!modalBookingData.doctor_id) { toast.warn('Please assign a doctor.'); return; }
     try {
       const waitingAppt = appointments.find(a => (String(a.patientId || a.patient_id) === String(bookingModalPatient.id)) && a.status === 'Waiting');
       if (waitingAppt) {
         const updated = await updateAppointmentStatus(waitingAppt.id, 'Scheduled');
         setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
-        alert(`Appointment successfully scheduled for ${bookingModalPatient.name}!`);
+        toast.success(`Appointment successfully scheduled for ${bookingModalPatient.name}!`);
         setBookingModalPatient(null);
       }
     } catch (error) {
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message}`);
     }
   };
 
@@ -272,7 +273,7 @@ export default function ReceptionistView({
       const updated = await updateAppointmentStatus(apptId, 'Arrived');
       setAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
     } catch (error) {
-      alert('Check-in failed');
+      toast.error('Check-in failed');
     }
   };
 
@@ -281,7 +282,7 @@ export default function ReceptionistView({
       const updated = await updateAppointmentStatus(apptId, 'Cancelled');
       setAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
     } catch (error) {
-      alert('Cancellation failed');
+      toast.error('Cancellation failed');
     }
   };
 
@@ -291,7 +292,7 @@ export default function ReceptionistView({
       await deleteAppointment(apptId);
       setAppointments(prev => prev.filter(a => a.id !== apptId));
     } catch (error) {
-      alert('Delete failed');
+      toast.error('Delete failed');
     }
   };
 

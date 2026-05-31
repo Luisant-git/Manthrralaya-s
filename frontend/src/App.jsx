@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
@@ -102,15 +104,25 @@ export default function App() {
       setConsultations(normalizedConsultations);
 
       // Populate followups state from consultations for persistence after refresh
-      const derivedFollowups = normalizedConsultations
-        .filter(c => c.detox_recommended && c.followup_date)
-        .map(c => ({
-          id: `FUP-C-${c.id}`,
-          patient_id: c.patient_id,
-          scheduled_date: c.followup_date,
-          notes: c.followup_remarks || 'Detox follow-up recommended',
-          status: 'Pending'
-        }));
+      const patientLatestProcessed = new Set();
+      const derivedFollowups = [...normalizedConsultations]
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .map(c => {
+          const isLatestVisit = !patientLatestProcessed.has(String(c.patient_id));
+          if (isLatestVisit) patientLatestProcessed.add(String(c.patient_id));
+          
+          if (c.detox_recommended && c.followup_date) {
+            return {
+              id: `FUP-C-${c.id}`,
+              patient_id: c.patient_id,
+              scheduled_date: c.followup_date,
+              notes: c.followup_remarks || 'Detox follow-up recommended',
+              status: isLatestVisit ? 'Pending' : 'Completed'
+            };
+          }
+          return null;
+        })
+        .filter(Boolean);
       setFollowups(derivedFollowups);
 
       console.log('Consultations fetched successfully:', normalizedConsultations.length);
@@ -237,8 +249,7 @@ export default function App() {
         setCurrentUser(payload.email || payload.name);
         setIsAuthenticated(true);
 
-        if (payload.role.toLowerCase() === 'doctor') setActiveTab('consultations');
-        else setActiveTab('dashboard');
+        setActiveTab('dashboard');
       } catch (e) {
         console.error('Session restoration failed:', e.message);
         localStorage.removeItem('access_token');
@@ -266,13 +277,7 @@ export default function App() {
     
     console.log('✅ User logged in:', { role, email: email || username });
     
-    if (role === 'doctor') {
-      setActiveTab('consultations');
-    } else if (role === 'receptionist') {
-      setActiveTab('dashboard');
-    } else {
-      setActiveTab('dashboard');
-    }
+    setActiveTab('dashboard');
   };
 
   const handleLogout = () => {
@@ -316,7 +321,7 @@ export default function App() {
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'appointment_confirm'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
-    alert(`Appointment scheduled for ${patientObj.name}!\n\nAutomated WhatsApp confirmation dispatched.`);
+    toast.success(`Appointment scheduled for ${patientObj.name}! Automated WhatsApp confirmation dispatched.`);
   };
 
   const handleAddAppointment = async (newAppt, patientObj, doctorObj) => {
@@ -343,7 +348,7 @@ export default function App() {
       setWhatsappLogs(prev => [...prev, waLog]);
     } catch (error) {
       console.error('Error creating appointment:', error);
-      alert('Failed to create appointment');
+      toast.error('Failed to create appointment');
     }
   };
 
@@ -382,7 +387,7 @@ export default function App() {
       }
     } catch (error) {
       console.error('Error updating appointment status:', error);
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 
@@ -392,7 +397,7 @@ export default function App() {
       setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Cancelled' } : a)));
     } catch (error) {
       console.error('Error cancelling appointment:', error);
-      alert('Failed to cancel appointment');
+      toast.error('Failed to cancel appointment');
     }
   };
 
@@ -400,8 +405,8 @@ export default function App() {
     try {
       // Prepare data for API
       const consultationData = {
-        patientId: newCons.patient_id,
-        doctorId: doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id,
+        patientId: Number(newCons.patient_id),
+        doctorId: Number(newCons.doctor_id || doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id),
         appointmentId: apptId ? parseInt(apptId) : undefined,
         consultationNotes: newCons.consultation_notes,
         medicalHistoryNotes: newCons.medical_history,
@@ -428,14 +433,23 @@ export default function App() {
       // Update appointment status
       setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Completed' } : a)));
 
+      // Mark previous pending followups as Completed since a new consultation just occurred
+      setFollowups(prev => prev.map(f => 
+        (String(f.patient_id) === String(newCons.patient_id) && f.status === 'Pending') 
+        ? { ...f, status: 'Completed' } 
+        : f
+      ));
+
+      toast.success('Consultation saved successfully!');
+
       if (newCons.detox_recommended) {
-        const ptObj = patients.find(p => String(p.id) === String(newCons.patient_id)) || {};
+        const ptObj = patients.find(p => String(p.id) === String(newCons.patient_id)) || { id: newCons.patient_id, name: newCons.patient_name };
         const followupDateString = newCons.followup_date || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
         const newDtx = {
           id: `DTX-${400 + detoxSessions.length + 1}`,
           patient_id: newCons.patient_id,
-          consultation_id: createdConsultation.id,
+          consultation_id: createdConsultation.id || createdConsultation.data?.id,
           scheduled_date: followupDateString,
           type: newCons.detox_type,
           status: 'Scheduled',
@@ -455,9 +469,11 @@ export default function App() {
         };
         setFollowups(prev => [...prev, newFollowup]);
       }
+      return createdConsultation;
     } catch (error) {
       console.error('Error saving consultation:', error);
-      alert('Failed to save consultation. Please try again.');
+      toast.error('Failed to save consultation. Please try again.');
+      throw error;
     }
   };
 
@@ -492,7 +508,7 @@ export default function App() {
 
   const handleAdmitPatient = (newStay, roomId) => {
     setStayManagement(prev => [...prev, newStay]);
-    alert(`Patient admitted to room stay successfully! Checklist initialized.`);
+    toast.success(`Patient admitted to room stay successfully! Checklist initialized.`);
   };
 
   const handleUpdateNursingChecklist = (stayId, checklistKey) => {
@@ -533,7 +549,7 @@ export default function App() {
       template_name: 'feedback_review'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
-    alert(`Patient discharged!\n1. Room is now available.\n2. Next Review Followup created.\n3. WhatsApp rating review invite sent to patient.`);
+    toast.success(`Patient discharged! Room is available and Followup created.`);
   };
 
   const handleSendCustomMessage = (newLog) => setWhatsappLogs(prev => [...prev, newLog]);
@@ -546,7 +562,7 @@ export default function App() {
       setTimelinePatient(pt);
       setSearchQuery('');
     } else {
-      alert(`No patient found matching search: "${searchQuery}"`);
+      toast.warn(`No patient found matching search: "${searchQuery}"`);
     }
   };
 
@@ -668,6 +684,8 @@ export default function App() {
           onClose={() => setTimelinePatient(null)}
         />
       )}
+
+      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
     </div>
   );
 }

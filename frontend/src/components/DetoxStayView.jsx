@@ -176,7 +176,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
             Right
           </button>
         </div>
-      </div>
+      </div> 
       
       <div
         ref={editorRef}

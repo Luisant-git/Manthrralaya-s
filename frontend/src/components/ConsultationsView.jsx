@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stethoscope, Activity, ClipboardList, Save, CheckCircle } from 'lucide-react';
-import { createConsultation } from '../api/consultationApi';
+import { toast } from 'react-toastify';
 
 export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole, currentUser }) {
   const [selectedApptId, setSelectedApptId] = useState('');
   const [selectedTab, setSelectedTab] = useState('consultation');
   const [historyPage, setHistoryPage] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [historyAppended, setHistoryAppended] = useState(false);
   
   // Forms states
   const [consultationNotes, setConsultationNotes] = useState('');
@@ -149,7 +150,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   // Get today's appointments that are checked-in and ready for consultation
   const pendingConsults = appointments.filter(a => {
     const apptDate = a.date || (a.appointmentDate ? new Date(a.appointmentDate).toISOString().split('T')[0] : '');
-    const isReady = a.status === 'Checked-in' || a.status === 'Arrived';
+    const isReady = isDoctorView ? a.status === 'Checked-in' : (a.status === 'Checked-in' || a.status === 'Arrived');
     const isToday = apptDate === todayDate;
     const isNotDetox = !isDetoxAppointment(a);
     
@@ -189,11 +190,22 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     setHistoryPage(1);
   }, [activePt?.id, selectedTab]);
 
+  useEffect(() => {
+    setHistoryAppended(false);
+  }, [activeAppt?.id]);
+
   const appendLatestHistoryToCurrent = () => {
     if (!latestHistory) return;
+    if (historyAppended) {
+      toast.info('Latest history notes have already been added to this form.');
+      return;
+    }
     setConsultationNotes(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.consultation_notes || ''}`);
     setMedicalHistory(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.medical_history || ''}`);
     setDietPlanNote(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.diet_plan_note || ''}`);
+    setDetoxProcedure(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.detox_procedure || ''}`);
+    setHistoryAppended(true);
+    toast.success('Previous history notes appended.');
   };
 
   const handleCompleteConsultation = async () => {
@@ -202,40 +214,13 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     
     try {
       const doctorName = activeAppt.doctor_name || currentDoctor?.name || activeAppt.doctor?.user?.fullName || activeAppt.doctor?.name || 'Assigned Provider';
-      
-      // Get selected detox doctor name
+      const doctorId = activeAppt.doctor_id || activeAppt.doctorId || currentDoctorId;
       const selectedDetoxDoctor = availableDoctors.find(d => String(d.id) === String(detoxDoctorId));
       
-      // Prepare data for API
-      const rawDoctorId = activeAppt.doctor_id ?? activeAppt.doctorId ?? currentDoctorId ?? (doctors.length > 0 ? doctors[0]?.id : null);
-      const rawPatientId = activePt.id ?? activeAppt.patient_id ?? activeAppt.patientId;
-
-      const consultationData = {
-        patientId: rawPatientId ? parseInt(String(rawPatientId), 10) : 0,
-        doctorId: rawDoctorId ? parseInt(String(rawDoctorId), 10) : 0,
-        appointmentId: activeAppt.id ? parseInt(String(activeAppt.id), 10) : undefined,
-        consultationNotes: consultationNotes,
-        medicalHistoryNotes: medicalHistory,
-        detoxProcedureNotes: detoxProcedure,
-        dietPlanNotes: dietPlanNote,
-        homecareGuideliness: homeCare,
-        detoxRecommended: Boolean(detoxRecommended),
-        detoxDoctorId: detoxRecommended && detoxDoctorId ? parseInt(String(detoxDoctorId)) : null,
-        detoxDoctorName: detoxRecommended && selectedDetoxDoctor ? selectedDetoxDoctor.name : null,
-        followupDate: detoxRecommended && detoxFollowupDate ? detoxFollowupDate : null,
-        followupRemarks: detoxRecommended && detoxFollowupRemarks ? detoxFollowupRemarks : null
-      };
-      
-      console.log('Saving consultation:', consultationData);
-      
-      // Save to backend
-      const savedConsultation = await createConsultation(consultationData);
-      console.log('Consultation saved successfully:', savedConsultation);
-      
-      // Create local consultation object for state update
       const newCons = {
-        id: savedConsultation.id || `C-${300 + Math.floor(Math.random() * 100)}`,
-        patient_id: activePt.id,
+        patient_id: Number(activePt.id),
+        patient_name: activePt.name,
+        doctor_id: doctorId ? Number(doctorId) : null,
         doctor_name: doctorName,
         date: new Date().toISOString().split('T')[0],
         consultation_notes: consultationNotes,
@@ -250,22 +235,20 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         followup_remarks: detoxRecommended ? detoxFollowupRemarks : null
       };
 
-      // Save diet chart if provided
+      // Update parent state
+      const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
+
       if (diet.breakfast !== '') {
-        const newDiet = {
-          id: `DC-${600 + Math.floor(Math.random() * 100)}`,
-          consultation_id: newCons.id,
+        onAddDietChart({
+          id: `DC-${Date.now()}`,
+          consultation_id: savedConsultation?.id,
           patient_id: activePt.id,
           date: new Date().toISOString().split('T')[0],
           doctor_name: doctorName,
           meals: diet,
           remarks: diet.remarks
-        };
-        onAddDietChart(newDiet);
+        });
       }
-
-      // Update parent state
-      onAddConsultation(newCons, activeAppt.id);
       
       // Reset form
       setSelectedApptId('');
@@ -279,11 +262,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       setDetoxDoctorId('');
       setDetoxFollowupDate(new Date().toISOString().split('T')[0]);
       setDetoxFollowupRemarks('');
-      
-      alert('Consultation saved successfully!');
     } catch (error) {
       console.error('Error saving consultation:', error);
-      alert('Failed to save consultation. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -538,9 +518,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                             type="button"
                             onClick={appendLatestHistoryToCurrent}
                             disabled={!latestHistory}
-                            className="text-xs font-semibold text-emerald-600 disabled:text-slate-400 hover:text-emerald-700"
+                            className={`text-xs font-semibold ${historyAppended ? 'text-slate-400 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-700'} disabled:text-slate-400`}
                           >
-                            {latestHistory ? 'Add latest history notes' : 'No previous history available'}
+                            {latestHistory ? (historyAppended ? 'Latest history already added' : 'Add latest history notes') : 'No previous history available'}
                           </button>
                         </div>
                         <RichTextEditor 
@@ -674,14 +654,14 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     <p className="text-sm text-slate-500">{activePt ? `Showing history for ${activePt.name}.` : 'Showing all completed consultations.'}</p>
                     <div className="space-y-4">
                       {pagedHistory.map(record => {
-                        const pt = patients.find(p => p.id === record.patient_id) || {};
+                        const pt = (activePt && String(activePt.id) === String(record.patient_id)) ? activePt : (patients.find(p => String(p.id) === String(record.patient_id)) || {});
                         return (
                           <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
                             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
                               <div>
                                 <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
-                                <h4 className="text-xl font-bold text-slate-900 mt-1">{pt.name || 'Unknown Patient'}</h4>
-                                <div className="text-sm text-slate-600">Patient ID: {pt.id || 'N/A'} • {pt.age || '--'} yrs • {pt.gender || '--'}</div>
+                                <h4 className="text-xl font-bold text-slate-900 mt-1">{pt.name || pt.fullName || 'Unknown Patient'}</h4>
+                                <div className="text-sm text-slate-600">Patient ID: {pt.id || record.patient_id || 'N/A'} • {pt.age || '--'} yrs • {pt.gender || '--'}</div>
                               </div>
                               <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
                                 Provider: {record.doctor_name || 'Assigned Provider'}
@@ -706,6 +686,13 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                 </div>
                               </div>
                               <div className="space-y-4">
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Detox Procedure Note</div>
+                                  <div
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
+                                    dangerouslySetInnerHTML={{ __html: record.detox_procedure || '<p class="text-slate-500">No detox procedure notes recorded.</p>' }}
+                                  />
+                                </div>
                                 <div>
                                   <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Diet Plan Note</div>
                                   <div

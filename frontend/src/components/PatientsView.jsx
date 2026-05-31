@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, UserPlus, Activity, FileText, Eye, X, Loader2, RefreshCw } from 'lucide-react';
 import { getAllPatients, createPatient } from '../api/patientApi';
+import { toast } from 'react-toastify';
 
 export default function PatientsView({ appointments = [], followups = [], onAddPatient, onSelectPatient }) {
   const [isAdding, setIsAdding] = useState(false);
@@ -99,11 +100,11 @@ export default function PatientsView({ appointments = [], followups = [], onAddP
     e.preventDefault();
     
     // Validate required fields
-    if (!formData.name.trim()) return alert('Patient Name is required.');
-    if (!formData.age) return alert('Age is required.');
-    if (!formData.gender) return alert('Gender is required.');
-    if (!formData.location.trim()) return alert('Location is required.');
-    if (!formData.phone.trim()) return alert('Phone Number is required.');
+    if (!formData.name.trim()) { toast.warn('Patient Name is required.'); return; }
+    if (!formData.age) { toast.warn('Age is required.'); return; }
+    if (!formData.gender) { toast.warn('Gender is required.'); return; }
+    if (!formData.location.trim()) { toast.warn('Location is required.'); return; }
+    if (!formData.phone.trim()) { toast.warn('Phone Number is required.'); return; }
     
     setIsSubmitting(true);
     
@@ -137,10 +138,10 @@ export default function PatientsView({ appointments = [], followups = [], onAddP
         whatsapp: '',
         medical_conditions: ''
       });
-      alert('Patient registered successfully!');
+      toast.success('Patient registered successfully!');
     } catch (err) {
       console.error('Error creating patient:', err);
-      alert(err.message || 'Failed to register patient');
+      toast.error(err.message || 'Failed to register patient');
     } finally {
       setIsSubmitting(false);
     }

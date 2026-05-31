@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPlus } from 'lucide-react';
+import { toast } from 'react-toastify';
 
 export default function AppointmentsView({ appointments, patients, doctors, onAddAppointment, onCheckIn, onCancelAppointment }) {
   const [isBooking, setIsBooking] = useState(false);
@@ -33,8 +34,8 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.patient_id) return alert('Please select a patient.');
-    if (!formData.doctor_id) return alert('Please select a doctor.');
+    if (!formData.patient_id) { toast.warn('Please select a patient.'); return; }
+    if (!formData.doctor_id) { toast.warn('Please select a doctor.'); return; }
 
     const patientObj = patients.find(p => String(p.id) === String(formData.patient_id));
     const doctorObj = doctors.find(d => String(d.id) === String(formData.doctor_id));
