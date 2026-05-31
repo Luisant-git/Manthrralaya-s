@@ -18,68 +18,115 @@ export default function PatientTimeline({
 
   const timelineEvents = [];
 
-  phoneCalls.filter(c => c.phone === patient.phone).forEach(c => {
+  phoneCalls.filter(c => c.phone === patient.phone || c.phone === patient.whatsapp).forEach(c => {
     timelineEvents.push({
-      date: c.date, time: c.time, type: 'phone_call', title: 'Phone Intake Call',
-      icon: Phone, color: 'bg-emerald-500', description: `Logged incoming call. Status: ${c.status}. Notes: ${c.notes}`
+      date: c.date, 
+      time: c.time, 
+      type: 'phone_call', 
+      title: 'Phone Intake Call',
+      icon: Phone, 
+      color: 'bg-emerald-500', 
+      description: `Logged incoming call. Status: ${c.status}. Notes: ${c.notes}`
     });
   });
 
-  appointments.filter(a => a.patient_id === patient.id).forEach(a => {
+  appointments.filter(a => String(a.patient_id || a.patientId) === String(patient.id)).forEach(a => {
+    const timeDisplay = a.time || (a.session === 'FN' ? 'Forenoon' : 'Afternoon');
+    const sourceDisplay = a.source || 'Clinic Walk-in';
+    
     timelineEvents.push({
-      date: a.date, time: a.time, type: 'appointment', title: `Clinic Appointment Scheduled`,
-      icon: Calendar, color: 'bg-blue-500', description: `Acquisition source: ${a.source}. Status: ${a.status}. Intake Notes: ${a.notes}`
+      date: a.date, 
+      time: timeDisplay, 
+      type: 'appointment', 
+      title: `Clinic Appointment Scheduled`,
+      icon: Calendar, 
+      color: 'bg-blue-500', 
+      description: `Method: ${sourceDisplay}. Status: ${a.status}. Intake Notes: ${a.notes || 'No notes.'}`
     });
   });
 
-  consultations.filter(c => c.patient_id === patient.id).forEach(c => {
+  consultations.filter(c => String(c.patient_id || c.patientId) === String(patient.id)).forEach(c => {
     const detoxDetail = c.detox_recommended
-      ? `${c.detox_type || 'Detox recommended'} with ${c.detox_doctor_name || 'assigned doctor'}`
+      ? `Detox assignment: ${c.detox_type || 'Recommended'} with ${c.detox_doctor_name || 'Assigned Provider'}`
       : 'No detox recommended';
 
+    // Clean HTML from notes for preview
+    const cleanNotes = (c.consultation_notes || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim().substring(0, 150);
+
     timelineEvents.push({
-      date: c.date, time: 'Consult Time', type: 'consultation', title: 'Doctor Consultation',
-      icon: Stethoscope, color: 'bg-indigo-500',
-      description: `Diagnosis: ${c.diagnosis || 'Not yet entered'}. ${detoxDetail}`
+      date: c.date, 
+      time: 'Consult Time', 
+      type: 'consultation', 
+      title: 'Doctor Consultation',
+      icon: Stethoscope, 
+      color: 'bg-indigo-500',
+      description: `Clinical Notes: ${cleanNotes}${cleanNotes.length >= 150 ? '...' : ''}. ${detoxDetail}`
     });
   });
 
-  detoxSessions.filter(d => d.patient_id === patient.id).forEach(d => {
+  detoxSessions.filter(d => String(d.patient_id || d.patientId) === String(patient.id)).forEach(d => {
     timelineEvents.push({
-      date: d.scheduled_date, time: 'Session Date', type: 'detox', title: `Detox Procedure scheduled`,
-      icon: Activity, color: 'bg-cyan-500',
-      description: `Scheduled on ${d.scheduled_date}. Therapy: ${d.type}. Technician: ${d.technician}. Status: ${d.status}. Notes: ${d.notes || 'No additional notes.'}`
+      date: d.scheduled_date, 
+      time: 'Session Date', 
+      type: 'detox', 
+      title: `Detox Procedure scheduled`,
+      icon: Activity, 
+      color: 'bg-cyan-500',
+      description: `Scheduled ${d.type || 'Detox'}. Status: ${d.status}. Technician: ${d.technician || 'Not assigned'}. Notes: ${d.notes}`
     });
   });
 
-  stayManagement.filter(s => s.patient_id === patient.id).forEach(s => {
+  stayManagement.filter(s => String(s.patient_id || s.patientId) === String(patient.id)).forEach(s => {
+    // Add admission event
     timelineEvents.push({
-      date: s.check_in_time.split(' ')[0], time: s.check_in_time.split(' ')[1], type: 'stay_in', title: `Admitted for One-Day Stay`,
-      icon: Bed, color: 'bg-purple-500', description: `Assigned Room: ${s.room_name}. Status: ${s.status}. Directives: ${s.notes}`
+      date: s.check_in_time ? s.check_in_time.split(' ')[0] : s.check_in_date || 'Unknown',
+      time: s.check_in_time ? s.check_in_time.split(' ')[1] : 'Admission',
+      type: 'stay_in', 
+      title: `Admitted for One-Day Stay`,
+      icon: Bed, 
+      color: 'bg-purple-500', 
+      description: `Assigned Room: ${s.room_name}. Status: ${s.status}. Directives: ${s.notes}`
     });
-    if (s.status === 'Discharged') {
+    
+    // Add discharge event if discharged
+    if (s.status === 'Discharged' && s.check_out_time) {
       timelineEvents.push({
-        date: s.check_out_time.split(' ')[0], time: s.check_out_time.split(' ')[1], type: 'stay_out', title: `Discharged from Stay Room`,
-        icon: Home, color: 'bg-slate-500', description: `Discharged from Room ${s.room_name}. Program completed.`
+        date: s.check_out_time.split(' ')[0],
+        time: s.check_out_time.split(' ')[1],
+        type: 'stay_out', 
+        title: `Discharged from Stay Room`,
+        icon: Home, 
+        color: 'bg-slate-500', 
+        description: `Discharged from Room ${s.room_name}. Program completed.`
       });
     }
   });
 
-  followups.filter(f => f.patient_id === patient.id).forEach(f => {
+  followups.filter(f => String(f.patient_id || f.patientId) === String(patient.id)).forEach(f => {
     timelineEvents.push({
-      date: f.scheduled_date, time: 'Review Date', type: 'followup', title: `Next Review Reminder`,
-      icon: RefreshCw, color: 'bg-amber-500', description: `Followup instructions: ${f.notes}. Status: ${f.status}`
+      date: f.scheduled_date, 
+      time: 'Review Date', 
+      type: 'followup', 
+      title: `Next Review Reminder`,
+      icon: RefreshCw, 
+      color: 'bg-amber-500', 
+      description: `Followup instructions: ${f.notes}. Status: ${f.status}`
     });
   });
 
-  reviews.filter(r => r.patient_id === patient.id).forEach(r => {
+  reviews.filter(r => String(r.patient_id || r.patientId) === String(patient.id)).forEach(r => {
     timelineEvents.push({
-      date: r.date, time: 'Review Rating', type: 'review', title: `Client Feedback & Review`,
-      icon: Star, color: 'bg-orange-500', description: `Rating: ${r.rating} Stars. Comments: "${r.comments}"`
+      date: r.date, 
+      time: 'Review Rating', 
+      type: 'review', 
+      title: `Client Feedback & Review`,
+      icon: Star, 
+      color: 'bg-orange-500', 
+      description: `Rating: ${r.rating} Stars. Comments: "${r.comments}"`
     });
   });
 
-  const sortedEvents = timelineEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sortedEvents = timelineEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -89,7 +136,7 @@ export default function PatientTimeline({
           <div className="text-left">
             <span className="text-[10px] uppercase font-bold text-emerald-600 tracking-wider">Unified Lifecycle Profile</span>
             <h2 className="text-xl font-bold text-slate-800 mt-1">360° Timeline: {patient.name}</h2>
-            <p className="text-sm text-slate-500 mt-0.5">Phone: {patient.phone} • Email: {patient.email}</p>
+            <p className="text-sm text-slate-500 mt-0.5">Phone: {patient.phone} • ID: {patient.id}</p>
           </div>
           <button onClick={onClose} className="p-2 bg-white border border-slate-200 rounded-full text-slate-500 hover:text-slate-800 transition-colors shadow-sm">
             <X className="w-5 h-5" />
@@ -110,7 +157,7 @@ export default function PatientTimeline({
                       <div className="flex items-center justify-between">
                         <span className="text-sm font-bold text-slate-800">{evt.title}</span>
                         <span className="text-[10px] bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded font-mono font-bold uppercase">
-                          {evt.date} {evt.time !== 'Consult Time' && evt.time !== 'Session Date' && evt.time !== 'Review Date' && evt.time !== 'Review Rating' ? `• ${evt.time}` : ''}
+                          {evt.date} {evt.time !== 'Consult Time' && evt.time !== 'Session Date' && evt.time !== 'Review Date' && evt.time !== 'Review Rating' && evt.time !== 'Admission' ? `• ${evt.time}` : ''}
                         </span>
                       </div>
                       <p className="text-sm text-slate-600 leading-relaxed">{evt.description}</p>

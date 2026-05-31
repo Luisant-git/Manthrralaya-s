@@ -271,7 +271,7 @@ export default function DocumentPreview({
               <div>Verification Hash: SHA256-60199120B44</div>
             </div>
             <div className="text-right">
-              <div className="font-serif italic text-slate-800 text-lg font-bold">{activePrescription.doctor_name || 'Dr. Evelyn Carter'}</div>
+              <div className="font-serif italic text-slate-800 text-lg font-bold">{activePrescription.doctor_name || 'Assigned Provider'}</div>
               <div className="text-[10px] uppercase font-bold text-slate-500 mt-1">Authorized Clinic Physician</div>
             </div>
           </div>

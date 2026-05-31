@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus } from 'lucide-react';
+import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock } from 'lucide-react';
 
 export default function UnifiedPatientRecords({
   patients = [],
@@ -12,6 +12,7 @@ export default function UnifiedPatientRecords({
   followups = [],
   reviews = [],
   onAddPatient,
+  onSelectPatient,
   activeRole,
   currentUser,
   doctors = []
@@ -41,15 +42,69 @@ export default function UnifiedPatientRecords({
 
   // Identify current doctor and their relevant patients
   const isDoctor = activeRole === 'doctor';
-  const currentDoc = isDoctor 
-    ? doctors.find(d => d.name === currentUser || d.user?.fullName === currentUser || d.user?.email === currentUser) 
+  let currentDoc = isDoctor
+    ? doctors.find(d => {
+        const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
+        const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
+        const currentUserLower = String(currentUser || '').toLowerCase();
+        return doctorEmail === currentUserLower || doctorName === currentUserLower;
+      })
     : null;
+
+  // FALLBACK: Identify doctor from appointments or consultations if master list is empty (403 Error)
+  if (isDoctor && !currentDoc) {
+    // Check appointments first
+    const sourceAppt = appointments.find(a => {
+      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
+      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
+      const currentUserLower = String(currentUser || '').toLowerCase();
+      return dEmail === currentUserLower || dName === currentUserLower;
+    });
+    
+    if (sourceAppt && sourceAppt.doctor) {
+      currentDoc = { 
+        ...sourceAppt.doctor, 
+        name: sourceAppt.doctor.user?.fullName || sourceAppt.doctor.name 
+      };
+    } else {
+      // Try to find identity in consultations
+      const sourceCons = consultations.find(c => {
+        const dName = (c.doctor_name || '').toLowerCase();
+        const currentUserLower = String(currentUser || '').toLowerCase();
+        return dName === currentUserLower;
+      });
+      if (sourceCons) {
+        currentDoc = { id: sourceCons.doctor_id, name: sourceCons.doctor_name };
+      }
+    }
+  }
+
   const currentDocId = currentDoc?.id;
+
+  // Create a robust list of doctors for name lookups in history
+  let availableDoctors = [...doctors];
+  if (appointments && appointments.length > 0) {
+    appointments.forEach(a => {
+      const doc = a.doctor;
+      if (doc && doc.id) {
+        if (!availableDoctors.some(d => String(d.id) === String(doc.id))) {
+          availableDoctors.push({
+            ...doc,
+            name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`
+          });
+        }
+      }
+    });
+  }
 
   // Create a set of patient IDs assigned to this doctor
   const myPatientIds = isDoctor ? new Set([
-    ...appointments.filter(a => String(a.doctor_id || a.doctorId) === String(currentDocId)).map(a => String(a.patient_id || a.patientId)),
-    ...consultations.filter(c => String(c.doctor_id || c.doctorId) === String(currentDocId)).map(c => String(c.patient_id))
+    ...appointments
+      .filter(a => currentDocId && Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(currentDocId))
+      .map(a => String(a.patient_id || a.patientId)),
+    ...consultations
+      .filter(c => currentDocId && Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(currentDocId))
+      .map(c => String(c.patient_id || c.patientId))
   ]) : null;
 
   const appointmentTabs = [
@@ -75,9 +130,19 @@ export default function UnifiedPatientRecords({
   };
 
   const getNextFollowup = (patientId) => {
-    return followups
+    // Check dedicated followups state
+    const fromFollowups = followups
       .filter(f => String(f.patient_id) === String(patientId) && f.status === 'Pending')
-      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0] || null;
+      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
+
+    if (fromFollowups) return fromFollowups;
+
+    // Fallback: Check consultations directly if followups state isn't synced
+    const fromConsults = consultations
+      .filter(c => String(c.patient_id || c.patientId) === String(patientId) && c.detox_recommended && (c.followup_date || c.followupDate))
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+    return fromConsults ? { scheduled_date: fromConsults.followup_date || fromConsults.followupDate } : null;
   };
 
   const matchesTypeFilter = (patient) => {
@@ -85,15 +150,31 @@ export default function UnifiedPatientRecords({
     const tab = appointmentTabs.find(t => t.id === selectedTab);
     if (!tab) return true;
     if (tab.id === 'followup') {
-      return followups.some(f => String(f.patient_id) === String(patient.id) && f.status === 'Pending');
+      return getNextFollowup(patient.id) !== null;
     }
     return appointments.some(a => String(a.patient_id || a.patientId) === String(patient.id) && a.appointmentType === tab.type);
   };
 
-  // Filter patients: either ALL (for admin/receptionist) or only MY patients (for doctor)
-  const basePatients = isDoctor 
-    ? patients.filter(p => myPatientIds.has(String(p.id))) 
-    : patients;
+  // Create a robust list of patients (Master list + Extraction from Appointments)
+  // This ensures patients show up even if the master patient API returned 403 Forbidden
+  let allAvailablePatients = [...patients];
+  
+  if (appointments && appointments.length > 0) {
+    appointments.forEach(a => {
+      const pt = a.patient || a.Patient;
+      if (pt && pt.id && !allAvailablePatients.some(p => String(p.id) === String(pt.id))) {
+        allAvailablePatients.push({
+          ...pt,
+          name: pt.name || pt.fullName || 'Unknown Patient'
+        });
+      }
+    });
+  }
+
+  // Filter patients: either ALL (for admin) or only MY assigned patients (for doctor)
+  const basePatients = isDoctor
+    ? allAvailablePatients.filter(p => myPatientIds.has(String(p.id)))
+    : allAvailablePatients;
 
   const filteredPatients = basePatients.filter(pt => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -129,13 +210,13 @@ export default function UnifiedPatientRecords({
 
   const patientConsultations = selectedPatient 
     ? consultations
-        .filter(c => String(c.patient_id) === String(selectedPatient.id))
+        .filter(c => String(c.patient_id || c.patientId) === String(selectedPatient.id))
         .sort((a, b) => new Date(b.date) - new Date(a.date))
     : [];
 
   const patientDetoxSessions = selectedPatient
     ? detoxSessions
-        .filter(d => String(d.patient_id) === String(selectedPatient.id))
+        .filter(d => String(d.patient_id || d.patientId) === String(selectedPatient.id))
         .sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))
     : [];
   
@@ -147,6 +228,13 @@ export default function UnifiedPatientRecords({
     if (page >= 1 && page <= totalHistoryPages) {
       setHistoryPage(page);
     }
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'Not scheduled';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    return date.toISOString().split('T')[0];
   };
 
   const handlePhoneChange = (e) => {
@@ -484,20 +572,30 @@ export default function UnifiedPatientRecords({
                       </td>
                       <td className="py-4 px-4 align-top">
                         {nextFollowup ? (
-                          <div className="text-slate-600">{nextFollowup.scheduled_date}</div>
+                          <div className="text-slate-600">{formatDate(nextFollowup.scheduled_date)}</div>
                         ) : (
                           <span className="text-xs text-slate-400">None</span>
                         )}
                       </td>
                       <td className="py-4 px-4 align-top text-right">
-                        <button
-                          type="button"
-                          onClick={() => openModal(pt)}
-                          className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-emerald-600 text-white hover:bg-emerald-700"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          View
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openModal(pt)}
+                            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            History
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onSelectPatient && onSelectPatient(pt)}
+                            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-emerald-600 text-white hover:bg-emerald-700"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            Timeline
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -707,11 +805,19 @@ export default function UnifiedPatientRecords({
                             <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
                           </div>
                           <div className="space-y-2 text-sm text-slate-700">
-                            <div><span className="font-semibold text-slate-800">Doctor:</span> {currentConsultation.detox_doctor_name || 'Not assigned'}</div>
-                            {currentConsultation.followup_date && (
-                              <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {currentConsultation.followup_date}</div>
+                            <div>
+                              <span className="font-semibold text-slate-800">Doctor:</span> {
+                                currentConsultation.detox_doctor_name || 
+                                currentConsultation.detoxDoctorName || 
+                                availableDoctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
+                                doctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
+                                'Not assigned'
+                              }
+                            </div>
+                            {(currentConsultation.followup_date || currentConsultation.followupDate) && (
+                              <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {formatDate(currentConsultation.followup_date || currentConsultation.followupDate)}</div>
                             )}
-                            {currentConsultation.followup_remarks && (
+                            {(currentConsultation.followup_remarks || currentConsultation.followupRemarks) && (
                               <div><span className="font-semibold text-slate-800">Remarks:</span> {currentConsultation.followup_remarks}</div>
                             )}
                           </div>

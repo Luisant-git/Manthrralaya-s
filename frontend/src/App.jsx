@@ -20,6 +20,7 @@ import UserManagementView from './components/UserManagementView';
 import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
+import { getAllConsultations, createConsultation, updateConsultation, deleteConsultation } from './api/consultationApi';
 
 export default function App() {
   // Auth state
@@ -60,58 +61,111 @@ export default function App() {
     }
   };
 
-  const fetchDoctorsFromBackend = async () => {
-  try {
-    console.log('🟢 Fetching doctors from backend...');
-    const response = await userApi.getUsersByRole('DOCTOR');
-    console.log('🔍 Raw response for doctors:', response);
-    
-    let doctorsList = [];
-    
-    // Robustly extract the array from various possible response formats (NestJS, Axios, or Raw Array)
-    if (Array.isArray(response)) {
-      doctorsList = response;
-    } else if (response?.data && Array.isArray(response.data)) {
-      doctorsList = response.data;
-    } else if (response?.data?.data && Array.isArray(response.data.data)) {
-      doctorsList = response.data.data;
-    } else if (response?.success && Array.isArray(response.data)) {
-      doctorsList = response.data;
-    }
-    
-    if (doctorsList?.length > 0) {
-      const doctorsFromBackend = doctorsList.map(doc => ({
-        id: doc.id ? Number(doc.id) : null, // Ensure ID is numeric for strict matching
-        userId: doc.userId,
-        name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`,
-        email: doc.user?.email || doc.email,
-        specialization: doc.specialization,
-        status: doc.status,
-        user: doc.user
+  // Fetch consultations from backend
+  const fetchConsultationsFromBackend = async () => {
+    try {
+      console.log('Fetching consultations from backend...');
+      const response = await getAllConsultations();
+      console.log('Consultations response:', response);
+      
+      let consultationsData = [];
+      if (response && response.data) {
+        consultationsData = response.data;
+      } else if (response && Array.isArray(response)) {
+        consultationsData = response;
+      } else if (response && response.success && response.data) {
+        consultationsData = response.data;
+      }
+      
+      // Normalize consultation data to match frontend expected format
+      const normalizedConsultations = consultationsData.map(cons => ({
+        id: cons.id,
+        patient_id: cons.patientId,
+        doctor_id: cons.doctorId,
+        doctor_name: cons.doctor?.user?.fullName || cons.doctor?.name,
+        date: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        consultation_notes: cons.consultationNotes,
+        medical_history: cons.medicalHistoryNotes,
+        detox_procedure: cons.detoxProcedureNotes,
+        diet_plan_note: cons.dietPlanNotes,
+        home_care: cons.homecareGuideliness,
+        detox_recommended: cons.detoxRecommended,
+        detox_type: cons.detoxType,
+        detox_doctor_id: cons.detoxDoctorId,
+        detox_doctor_name: cons.detoxDoctor?.user?.fullName || cons.detoxDoctor?.name || cons.detoxDoctorName || cons.detox_doctor_name,
+        followup_date: cons.followupDate ? cons.followupDate.split('T')[0] : null,
+        followup_remarks: cons.followupRemarks,
+        created_at: cons.createdAt,
+        updated_at: cons.updatedAt
       }));
       
-      setDoctors(doctorsFromBackend);
-      console.log('✅ Doctors loaded successfully:', doctorsFromBackend.length);
-    } else {
-      console.warn('⚠️ No doctors found in any response structure');
+      setConsultations(normalizedConsultations);
+
+      // Populate followups state from consultations for persistence after refresh
+      const derivedFollowups = normalizedConsultations
+        .filter(c => c.detox_recommended && c.followup_date)
+        .map(c => ({
+          id: `FUP-C-${c.id}`,
+          patient_id: c.patient_id,
+          scheduled_date: c.followup_date,
+          notes: c.followup_remarks || 'Detox follow-up recommended',
+          status: 'Pending'
+        }));
+      setFollowups(derivedFollowups);
+
+      console.log('Consultations fetched successfully:', normalizedConsultations.length);
+    } catch (error) {
+      console.error('Error fetching consultations:', error);
+    }
+  };
+
+  const fetchDoctorsFromBackend = async () => {
+    try {
+      console.log('🟢 Fetching doctors from backend...');
+      const response = await userApi.getUsersByRole('DOCTOR');
+      console.log('🔍 Raw response for doctors:', response);
+      
+      let doctorsList = [];
+      
+      if (Array.isArray(response)) {
+        doctorsList = response;
+      } else if (response?.data && Array.isArray(response.data)) {
+        doctorsList = response.data;
+      } else if (response?.data?.data && Array.isArray(response.data.data)) {
+        doctorsList = response.data.data;
+      } else if (response?.success && Array.isArray(response.data)) {
+        doctorsList = response.data;
+      }
+      
+      if (doctorsList?.length > 0) {
+        const doctorsFromBackend = doctorsList.map(doc => ({
+          id: doc.id ? Number(doc.id) : null,
+          userId: doc.userId,
+          name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`,
+          email: doc.user?.email || doc.email,
+          specialization: doc.specialization,
+          status: doc.status,
+          user: doc.user
+        }));
+        
+        setDoctors(doctorsFromBackend);
+        console.log('✅ Doctors loaded successfully:', doctorsFromBackend.length);
+      } else {
+        console.warn('⚠️ No doctors found in any response structure');
+        setDoctors([]);
+      }
+    } catch (error) {
+      console.error('🔴 Error fetching doctors:', error);
       setDoctors([]);
     }
-  } catch (error) {
-    console.error('🔴 Error fetching doctors:', error);
-    setDoctors([]);
-  }
-};
-  // Helper to ensure all appointments have consistent property names for filtering/UI
+  };
+
   const normalizeAppointment = (apt) => {
     if (!apt) return null;
     
-    // Get patient ID from multiple possible sources
     const pid = apt.patientId || apt.patient_id || apt.patient?.id;
-    
-    // Get doctor ID from multiple possible sources
     const did = apt.doctorId || apt.doctor_id || apt.doctor?.id;
     
-    // Get YYYY-MM-DD in local time consistently
     let dateStr = '';
     const rawDateSource = apt.appointmentDate || apt.date;
     if (rawDateSource) {
@@ -127,7 +181,7 @@ export default function App() {
       ...apt,
       id: apt.id,
       patient_id: pid !== undefined && pid !== null ? String(pid) : null,
-      doctor_id: did !== undefined && did !== null ? Number(did) : null, // Ensure numeric
+      doctor_id: did !== undefined && did !== null ? Number(did) : null,
       appointmentDate: apt.appointmentDate || apt.date,
       appointmentType: apt.appointmentType,
       session: apt.session || 'FN',
@@ -138,7 +192,6 @@ export default function App() {
     };
   };
 
-  // In fetchAppointmentsFromBackend function
   const fetchAppointmentsFromBackend = async () => {
     try {
       console.log('Fetching appointments from backend...');
@@ -159,12 +212,12 @@ export default function App() {
     }
   };
 
-  // Fetch all data when authenticated
   const fetchAllData = async () => {
     await Promise.all([
       fetchPatientsFromBackend(),
       fetchDoctorsFromBackend(),
-      fetchAppointmentsFromBackend()
+      fetchAppointmentsFromBackend(),
+      fetchConsultationsFromBackend()
     ]);
   };
 
@@ -181,7 +234,7 @@ export default function App() {
         }
 
         setActiveRole(payload.role.toLowerCase());
-        setCurrentUser(payload.email || payload.name); // Use email from token
+        setCurrentUser(payload.email || payload.name);
         setIsAuthenticated(true);
 
         if (payload.role.toLowerCase() === 'doctor') setActiveTab('consultations');
@@ -196,7 +249,6 @@ export default function App() {
     setIsLoading(false);
   }, []);
 
-  // Fetch data when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       fetchAllData();
@@ -344,36 +396,68 @@ export default function App() {
     }
   };
 
-  const handleAddConsultation = (newCons, apptId) => {
-    setConsultations(prev => [...prev, newCons]);
-    setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Completed' } : a)));
-
-    if (newCons.detox_recommended) {
-      const ptObj = patients.find(p => String(p.id) === String(newCons.patient_id)) || {};
-      const followupDateString = newCons.followup_date || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-      const newDtx = {
-        id: `DTX-${400 + detoxSessions.length + 1}`, patient_id: newCons.patient_id, consultation_id: newCons.id,
-        scheduled_date: followupDateString, type: newCons.detox_type, status: 'Scheduled', cost: 7500, technician: 'Nolan Ross', notes: newCons.detox_procedure || `Recommended during consultation ${newCons.id}`
+  const handleAddConsultation = async (newCons, apptId) => {
+    try {
+      // Prepare data for API
+      const consultationData = {
+        patientId: newCons.patient_id,
+        doctorId: doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id,
+        appointmentId: apptId ? parseInt(apptId) : undefined,
+        consultationNotes: newCons.consultation_notes,
+        medicalHistoryNotes: newCons.medical_history,
+        detoxProcedureNotes: newCons.detox_procedure,
+        dietPlanNotes: newCons.diet_plan_note,
+        homecareGuideliness: newCons.home_care,
+        detoxRecommended: newCons.detox_recommended || false,
+        detoxDoctorId: newCons.detox_doctor_id,
+        detoxDoctorName: newCons.detox_doctor_name,
+        followupDate: newCons.followup_date,
+        followupRemarks: newCons.followup_remarks
       };
-      setDetoxSessions(prev => [...prev, newDtx]);
+      
+      // Save to backend
+      const createdConsultation = await createConsultation(consultationData);
+      console.log('Consultation saved to backend:', createdConsultation);
+      
+      // Update local state
+      setConsultations(prev => [...prev, {
+        ...newCons,
+        id: createdConsultation.id
+      }]);
+      
+      // Update appointment status
+      setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Completed' } : a)));
 
-      const newFollowup = {
-        id: `FUP-${800 + followups.length + 1}`,
-        patient_id: ptObj.id,
-        scheduled_date: followupDateString,
-        notes: newCons.followup_remarks || `Follow up with receptionist to confirm detox session with ${newCons.detox_doctor_name || 'the assigned doctor'} and prepare the patient for ${newCons.detox_type}.`,
-        status: 'Pending',
-        created_at: new Date().toISOString().split('T')[0]
-      };
-      setFollowups(prev => [...prev, newFollowup]);
+      if (newCons.detox_recommended) {
+        const ptObj = patients.find(p => String(p.id) === String(newCons.patient_id)) || {};
+        const followupDateString = newCons.followup_date || new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const waLog = {
-        id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-        type: 'Session Reminder', message_text: `Hello ${ptObj.name}, your recommended ${newCons.detox_type} is scheduled for ${followupDateString}. Please begin fasting. - Manthrralaya's Wellness`,
-        sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Sent', template_name: 'detox_prep_reminder'
-      };
-      setWhatsappLogs(prev => [...prev, waLog]);
+        const newDtx = {
+          id: `DTX-${400 + detoxSessions.length + 1}`,
+          patient_id: newCons.patient_id,
+          consultation_id: createdConsultation.id,
+          scheduled_date: followupDateString,
+          type: newCons.detox_type,
+          status: 'Scheduled',
+          cost: 7500,
+          technician: 'Nolan Ross',
+          notes: newCons.detox_procedure || `Recommended during consultation ${createdConsultation.id}`
+        };
+        setDetoxSessions(prev => [...prev, newDtx]);
+
+        const newFollowup = {
+          id: `FUP-${800 + followups.length + 1}`,
+          patient_id: ptObj.id,
+          scheduled_date: followupDateString,
+          notes: newCons.followup_remarks || 'Follow up with receptionist to confirm detox session.',
+          status: 'Pending',
+          created_at: new Date().toISOString().split('T')[0]
+        };
+        setFollowups(prev => [...prev, newFollowup]);
+      }
+    } catch (error) {
+      console.error('Error saving consultation:', error);
+      alert('Failed to save consultation. Please try again.');
     }
   };
 
@@ -382,7 +466,7 @@ export default function App() {
     const ptObj = patients.find(p => String(p.id) === String(newPresc.patient_id)) || {};
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-      type: 'PDF Delivery', message_text: `Dear ${ptObj.name}, here is your customized prescription PDF: https://manthrralayas.co/shared/docs/presc_${newPresc.id}. Please download. - Manthrralaya's Wellness`,
+      type: 'PDF Delivery', message_text: `Dear ${ptObj.name}, here is your customized prescription PDF. Please download. - Manthrralaya's Wellness`,
       sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'document_delivery_pdf'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
@@ -428,18 +512,28 @@ export default function App() {
     setStayManagement(prev => prev.map(s => (s.id === stayId ? { ...s, status: 'Discharged', check_out_time: new Date().toISOString().replace('T', ' ').substring(0, 16) } : s)));
 
     const newFollowup = {
-      id: `FUP-${800 + followups.length + 1}`, patient_id: ptObj.id, scheduled_date: '2026-05-27',
-      notes: `Review follow-up on recovery post discharge from room ${stayObj.room_name}. Check diet adherence.`, status: 'Pending', created_at: new Date().toISOString().split('T')[0]
+      id: `FUP-${800 + followups.length + 1}`,
+      patient_id: ptObj.id,
+      scheduled_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      notes: `Review follow-up on recovery post discharge from room ${stayObj.room_name}. Check diet adherence.`,
+      status: 'Pending',
+      created_at: new Date().toISOString().split('T')[0]
     };
     setFollowups(prev => [...prev, newFollowup]);
 
     const waLog = {
-      id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: ptObj.id, patient_name: ptObj.name, phone: ptObj.phone,
-      type: 'Review Request', message_text: `Hello ${ptObj.name}, we hope you had a rejuvenating stay with us. Please share your rating feedback: https://manthrralayas.co/leave-review - Manthrralaya's Wellness`,
-      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'feedback_review'
+      id: `WA-${900 + whatsappLogs.length + 1}`,
+      patient_id: ptObj.id,
+      patient_name: ptObj.name,
+      phone: ptObj.phone,
+      type: 'Review Request',
+      message_text: `Hello ${ptObj.name}, we hope you had a rejuvenating stay with us. Please share your rating feedback. - Manthrralaya's Wellness`,
+      sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'Delivered',
+      template_name: 'feedback_review'
     };
     setWhatsappLogs(prev => [...prev, waLog]);
-    alert(`Patient discharged!\n1. Room is now available.\n2. Next Review Followup created for May 27.\n3. WhatsApp rating review invite sent to patient.`);
+    alert(`Patient discharged!\n1. Room is now available.\n2. Next Review Followup created.\n3. WhatsApp rating review invite sent to patient.`);
   };
 
   const handleSendCustomMessage = (newLog) => setWhatsappLogs(prev => [...prev, newLog]);
@@ -474,15 +568,15 @@ export default function App() {
       case 'dashboard':
         return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} doctors={doctors} />;
       case 'patients':
-        return <PatientsView appointments={appointments} patients={patients} followups={followups} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
+        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':
         return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment} />;
       case 'consultations':
-        return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} />;
+        return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} currentUser={currentUser} />;
       case 'my-patient-records':
-        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} />;
+        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
       case 'detox':
       case 'stay':
         return <DetoxStayView

@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stethoscope, Activity, ClipboardList, Save, CheckCircle } from 'lucide-react';
+import { createConsultation } from '../api/consultationApi';
 
-export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole }) {
+export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole, currentUser }) {
   const [selectedApptId, setSelectedApptId] = useState('');
   const [selectedTab, setSelectedTab] = useState('consultation');
   const [historyPage, setHistoryPage] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Forms states
   const [consultationNotes, setConsultationNotes] = useState('');
@@ -76,21 +78,99 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   
   // Detox Recommended flag
   const [detoxRecommended, setDetoxRecommended] = useState(false);
-  const [detoxType, setDetoxType] = useState('Deep Tissue Cell Detox');
-  const [detoxDoctorId, setDetoxDoctorId] = useState(doctors[0]?.id || '');
+  const [detoxDoctorId, setDetoxDoctorId] = useState('');
   const [detoxFollowupDate, setDetoxFollowupDate] = useState(new Date().toISOString().split('T')[0]);
-  const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('Call patient later to confirm detox preparation and next steps.');
+  const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('');
   const todayDate = new Date().toISOString().split('T')[0];
 
   const isDetoxAppointment = (appt) => {
     return String(appt?.appointmentType || '').toLowerCase().includes('detox');
   };
 
-  // Only show today's "Checked-in" appointments for doctor to consult
-  // Exclude Detox appointments so those patients appear only on the detox page.
-  const pendingConsults = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate && !isDetoxAppointment(a));
-  const activeAppt = pendingConsults.find(a => a.id === selectedApptId);
-  const activePt = activeAppt ? patients.find(p => p.id === activeAppt.patient_id) : null;
+  const isDoctorView = activeRole === 'doctor';
+
+  // Find current doctor - Match from doctors list or fallback to appointments data
+  let currentDoctor = isDoctorView
+    ? doctors.find(d => {
+        const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
+        const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
+        const currentUserLower = String(currentUser || '').toLowerCase();
+        return doctorEmail === currentUserLower || doctorName === currentUserLower;
+      })
+    : null;
+
+  // FALLBACK: Identify doctor from appointments if doctors list is empty
+  if (isDoctorView && !currentDoctor && appointments && appointments.length > 0) {
+    const aptWithDoctor = appointments.find(a => {
+      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
+      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
+      const currentUserLower = String(currentUser || '').toLowerCase();
+      return dEmail === currentUserLower || dName === currentUserLower;
+    });
+    if (aptWithDoctor && aptWithDoctor.doctor) {
+      currentDoctor = { ...aptWithDoctor.doctor, name: aptWithDoctor.doctor.user?.fullName || aptWithDoctor.doctor.name };
+    }
+  }
+
+  const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor.id) : null;
+
+  // Create a robust list of doctors for assignment (Master list + Extraction from Appointments)
+  // Filter to show only 'Available' doctors
+  let availableDoctors = doctors ? doctors.filter(d => d.status === 'Available') : [];
+  
+  // FALLBACK: If master list is empty (403 error) or incomplete,
+  // extract all unique available doctors from the appointments data.
+  if (appointments && appointments.length > 0) {
+    appointments.forEach(a => {
+      const doc = a.doctor;
+      if (doc && doc.id && doc.status === 'Available') {
+        if (!availableDoctors.some(d => String(d.id) === String(doc.id))) {
+          availableDoctors.push({
+            ...doc,
+            name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`
+          });
+        }
+      }
+    });
+  }
+
+  // Ensure current doctor is included if not found yet
+  if (currentDoctor && !availableDoctors.some(d => String(d.id) === String(currentDoctor.id))) {
+    availableDoctors.push(currentDoctor);
+  }
+
+  // Automatically default the detox doctor to the current doctor if nothing is selected
+  useEffect(() => {
+    if (detoxRecommended && !detoxDoctorId && currentDoctorId) {
+      setDetoxDoctorId(String(currentDoctorId));
+    }
+  }, [detoxRecommended, currentDoctorId]);
+
+  // Get today's appointments that are checked-in and ready for consultation
+  const pendingConsults = appointments.filter(a => {
+    const apptDate = a.date || (a.appointmentDate ? new Date(a.appointmentDate).toISOString().split('T')[0] : '');
+    const isReady = a.status === 'Checked-in' || a.status === 'Arrived';
+    const isToday = apptDate === todayDate;
+    const isNotDetox = !isDetoxAppointment(a);
+    
+    if (!isReady || !isToday || !isNotDetox) return false;
+
+    // Strict doctor filtering for doctor role
+    if (isDoctorView) {
+      if (!currentDoctorId) return false;
+      const appointmentDoctorIdNum = Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id);
+      return appointmentDoctorIdNum === currentDoctorId;
+    }
+
+    return true;
+  });
+  
+  const activeAppt = pendingConsults.find(a => String(a.id) === String(selectedApptId)) || pendingConsults[0];
+  const activePt = activeAppt 
+    ? (patients.find(p => String(p.id) === String(activeAppt.patient_id || activeAppt.patientId)) || 
+       activeAppt.patient || 
+       activeAppt.Patient) 
+    : null;
   const patientHistory = activePt ? consultations.filter(c => c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
 
   useEffect(() => {
@@ -98,9 +178,10 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       setSelectedApptId(pendingConsults[0].id);
     }
   }, [pendingConsults, selectedApptId]);
+  
   const latestHistory = patientHistory[0] || null;
   const historyPageSize = 1;
-  const historyRecords = consultations.filter(c => !activePt || c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+  const historyRecords = consultations.filter(c => !activePt || String(c.patient_id) === String(activePt.id)).sort((a, b) => new Date(b.date) - new Date(a.date));
   const totalHistoryPages = Math.max(1, Math.ceil(historyRecords.length / historyPageSize));
   const pagedHistory = historyRecords.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
 
@@ -115,57 +196,97 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     setDietPlanNote(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.diet_plan_note || ''}`);
   };
 
-  const handleCompleteConsultation = () => {
-    if (!activeAppt) return;
+  const handleCompleteConsultation = async () => {
+    if (!activeAppt || !activePt) return;
+    setIsSaving(true);
     
-    const doctorName = activeAppt.doctor_name || 'Dr. Evelyn Carter';
-    const detoxDoctor = doctors.find(d => d.id === detoxDoctorId);
+    try {
+      const doctorName = activeAppt.doctor_name || currentDoctor?.name || activeAppt.doctor?.user?.fullName || activeAppt.doctor?.name || 'Assigned Provider';
+      
+      // Get selected detox doctor name
+      const selectedDetoxDoctor = availableDoctors.find(d => String(d.id) === String(detoxDoctorId));
+      
+      // Prepare data for API
+      const rawDoctorId = activeAppt.doctor_id ?? activeAppt.doctorId ?? currentDoctorId ?? (doctors.length > 0 ? doctors[0]?.id : null);
+      const rawPatientId = activePt.id ?? activeAppt.patient_id ?? activeAppt.patientId;
 
-    const newCons = {
-      id: `C-${300 + Math.floor(Math.random() * 100)}`,
-      patient_id: activePt.id,
-      doctor_name: doctorName,
-      date: new Date().toISOString().split('T')[0],
-      consultation_notes: consultationNotes,
-      medical_history: medicalHistory,
-      detox_procedure: detoxProcedure,
-      diet_plan_note: dietPlanNote,
-      home_care: homeCare,
-      detox_recommended: detoxRecommended,
-      detox_type: detoxRecommended ? detoxType : null,
-      detox_doctor_id: detoxRecommended ? detoxDoctorId : null,
-      detox_doctor_name: detoxRecommended ? detoxDoctor?.name : null,
-      followup_date: detoxRecommended ? detoxFollowupDate : null,
-      followup_remarks: detoxRecommended ? detoxFollowupRemarks : null
-    };
-
-    if (diet.breakfast !== '') {
-      const newDiet = {
-        id: `DC-${600 + Math.floor(Math.random() * 100)}`,
-        consultation_id: newCons.id,
-        patient_id: activePt.id,
-        date: new Date().toISOString().split('T')[0],
-        doctor_name: doctorName,
-        meals: diet,
-        remarks: diet.remarks
+      const consultationData = {
+        patientId: rawPatientId ? parseInt(String(rawPatientId), 10) : 0,
+        doctorId: rawDoctorId ? parseInt(String(rawDoctorId), 10) : 0,
+        appointmentId: activeAppt.id ? parseInt(String(activeAppt.id), 10) : undefined,
+        consultationNotes: consultationNotes,
+        medicalHistoryNotes: medicalHistory,
+        detoxProcedureNotes: detoxProcedure,
+        dietPlanNotes: dietPlanNote,
+        homecareGuideliness: homeCare,
+        detoxRecommended: Boolean(detoxRecommended),
+        detoxDoctorId: detoxRecommended && detoxDoctorId ? parseInt(String(detoxDoctorId)) : null,
+        detoxDoctorName: detoxRecommended && selectedDetoxDoctor ? selectedDetoxDoctor.name : null,
+        followupDate: detoxRecommended && detoxFollowupDate ? detoxFollowupDate : null,
+        followupRemarks: detoxRecommended && detoxFollowupRemarks ? detoxFollowupRemarks : null
       };
-      onAddDietChart(newDiet);
-    }
+      
+      console.log('Saving consultation:', consultationData);
+      
+      // Save to backend
+      const savedConsultation = await createConsultation(consultationData);
+      console.log('Consultation saved successfully:', savedConsultation);
+      
+      // Create local consultation object for state update
+      const newCons = {
+        id: savedConsultation.id || `C-${300 + Math.floor(Math.random() * 100)}`,
+        patient_id: activePt.id,
+        doctor_name: doctorName,
+        date: new Date().toISOString().split('T')[0],
+        consultation_notes: consultationNotes,
+        medical_history: medicalHistory,
+        detox_procedure: detoxProcedure,
+        diet_plan_note: dietPlanNote,
+        home_care: homeCare,
+        detox_recommended: detoxRecommended,
+        detox_doctor_id: detoxRecommended && detoxDoctorId ? parseInt(detoxDoctorId) : null,
+        detox_doctor_name: detoxRecommended && selectedDetoxDoctor ? selectedDetoxDoctor.name : null,
+        followup_date: detoxRecommended ? detoxFollowupDate : null,
+        followup_remarks: detoxRecommended ? detoxFollowupRemarks : null
+      };
 
-    onAddConsultation(newCons, activeAppt.id);
-    setSelectedApptId('');
-    
-    setConsultationNotes('');
-    setMedicalHistory('');
-    setDetoxProcedure('');
-    setDietPlanNote('');
-    setHomeCare('');
-    setDiet({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
-    setDetoxRecommended(false);
-    setDetoxType('Deep Tissue Cell Detox');
-    setDetoxDoctorId(doctors[0]?.id || '');
-    setDetoxFollowupDate(new Date().toISOString().split('T')[0]);
-    setDetoxFollowupRemarks('Call patient later to confirm detox preparation and next steps.');
+      // Save diet chart if provided
+      if (diet.breakfast !== '') {
+        const newDiet = {
+          id: `DC-${600 + Math.floor(Math.random() * 100)}`,
+          consultation_id: newCons.id,
+          patient_id: activePt.id,
+          date: new Date().toISOString().split('T')[0],
+          doctor_name: doctorName,
+          meals: diet,
+          remarks: diet.remarks
+        };
+        onAddDietChart(newDiet);
+      }
+
+      // Update parent state
+      onAddConsultation(newCons, activeAppt.id);
+      
+      // Reset form
+      setSelectedApptId('');
+      setConsultationNotes('');
+      setMedicalHistory('');
+      setDetoxProcedure('');
+      setDietPlanNote('');
+      setHomeCare('');
+      setDiet({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
+      setDetoxRecommended(false);
+      setDetoxDoctorId('');
+      setDetoxFollowupDate(new Date().toISOString().split('T')[0]);
+      setDetoxFollowupRemarks('');
+      
+      alert('Consultation saved successfully!');
+    } catch (error) {
+      console.error('Error saving consultation:', error);
+      alert('Failed to save consultation. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const fontSizeOptions = [
@@ -215,7 +336,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           ))}
         </select>
         
-        {/* Word-style List Buttons */}
         <button 
           type="button" 
           onClick={() => applyEditorCommand('insertUnorderedList', null, editorRef, setContent)} 
@@ -233,7 +353,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           <span className="text-xs font-bold">1.</span> Numbers
         </button>
         
-        {/* Word-style Alignment Buttons */}
         <div className="flex gap-1 ml-1 border-l border-slate-200 pl-2">
           <button 
             type="button" 
@@ -297,59 +416,25 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   return (
     <>
       <style>{`
-        /* Global styles for lists and editor content */
-        .editor-content ul,
-        .editor-content ol {
+        .editor-content ul, .editor-content ol {
           margin-top: 0.5rem;
           margin-bottom: 0.5rem;
           padding-left: 1.5rem;
         }
-        
-        .editor-content ul {
-          list-style-type: disc;
-        }
-        
-        .editor-content ol {
-          list-style-type: decimal;
-        }
-        
-        .editor-content li {
-          margin-bottom: 0.25rem;
-        }
-        
-        /* Style for the contenteditable editor */
-        [contenteditable="true"] ul,
-        [contenteditable="true"] ol {
-          padding-left: 1.5rem;
-        }
-        
-        [contenteditable="true"] ul {
-          list-style-type: disc;
-        }
-        
-        [contenteditable="true"] ol {
-          list-style-type: decimal;
-        }
-        
-        /* History view list styles */
-        .history-list ul,
-        .history-list ol {
+        .editor-content ul { list-style-type: disc; }
+        .editor-content ol { list-style-type: decimal; }
+        .editor-content li { margin-bottom: 0.25rem; }
+        [contenteditable="true"] ul, [contenteditable="true"] ol { padding-left: 1.5rem; }
+        [contenteditable="true"] ul { list-style-type: disc; }
+        [contenteditable="true"] ol { list-style-type: decimal; }
+        .history-list ul, .history-list ol {
           margin-top: 0.5rem;
           margin-bottom: 0.5rem;
           padding-left: 1.5rem;
         }
-        
-        .history-list ul {
-          list-style-type: disc;
-        }
-        
-        .history-list ol {
-          list-style-type: decimal;
-        }
-        
-        .history-list li {
-          margin-bottom: 0.25rem;
-        }
+        .history-list ul { list-style-type: disc; }
+        .history-list ol { list-style-type: decimal; }
+        .history-list li { margin-bottom: 0.25rem; }
       `}</style>
       
       <div className="space-y-6">
@@ -368,30 +453,34 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           {/* Left Column: Waiting Queue */}
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm h-fit">
             <h3 className="font-bold text-slate-800 text-base mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-             <CheckCircle className="w-5 h-5 text-emerald-600" /> Waiting Room Queue
+              <CheckCircle className="w-5 h-5 text-emerald-600" /> Waiting Room Queue
             </h3>
             <p className="text-sm text-slate-500 mb-4">These patients are checked in and ready for consultation.</p>
             <div className="space-y-3">
               {pendingConsults.map(appt => {
-                const pt = patients.find(p => p.id === appt.patient_id) || {};
+                const pt = patients.find(p => String(p.id) === String(appt.patient_id || appt.patientId)) || 
+                           appt.patient || 
+                           appt.Patient || 
+                           {};
                 return (
                   <button
                     key={appt.id}
                     onClick={() => setSelectedApptId(appt.id)}
                     className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
-                      selectedApptId === appt.id
+                      String(selectedApptId) === String(appt.id)
                         ? 'bg-emerald-50 border-emerald-300 shadow-sm'
-                        : 'bg-white border-slate-200 hover:border-emerald-200 hover:bg-slate-50'
+                        : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-emerald-200'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="font-bold text-slate-800 text-sm">{pt.name}</div>
-                        <div className="text-xs text-slate-500 mt-1">{appt.time} • {pt.age} yrs, {pt.gender}</div>
+                        <div className="font-bold text-slate-800 text-sm">{pt.name || pt.fullName || 'Unknown Patient'}</div>
+                        <div className="text-xs text-slate-500 mt-1">{pt.age} yrs, {pt.gender}</div>
                       </div>
-                    
                     </div>
-                    <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">Assigned to: {appt.doctor_name || 'Dr. Evelyn Carter'}</div>
+                    <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">
+                      Assigned to: {appt.doctor_name || 'Assigned Provider'}
+                    </div>
                   </button>
                 );
               })}
@@ -407,12 +496,11 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             {activeAppt && activePt ? (
               <div className="divide-y divide-slate-100">
-                
                 {/* Header Info */}
                 <div className="p-5 bg-slate-50 flex justify-between items-center">
                   <div>
                     <h2 className="text-lg font-bold text-slate-800">{activePt.name}</h2>
-                    <span className="text-sm text-slate-500">ID: {activePt.id} • Conditions: {activePt.medical_conditions}</span>
+                    <span className="text-sm text-slate-500">ID: {activePt.id} • Phone: {activePt.phone}</span>
                   </div>
                   <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">
                     Consultation in Progress
@@ -463,7 +551,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         />
                       </div>
 
-
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label>
                         <RichTextEditor 
@@ -508,37 +595,52 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     <div className="p-5 bg-emerald-50 border-y border-emerald-100">
                       <div className="flex items-center gap-3">
                         <input type="checkbox" id="detoxCheck" checked={detoxRecommended} onChange={e => setDetoxRecommended(e.target.checked)} className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500" />
-                        <label htmlFor="detoxCheck" className="font-bold text-slate-800 text-sm">Recommend Detox Doctor</label>
+                        <label htmlFor="detoxCheck" className="font-bold text-slate-800 text-sm">Recommend Detox Program</label>
                       </div>
                       {detoxRecommended && (
                         <div className="mt-3 ml-8 space-y-3">
-                          
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            {/* Detox Doctor Dropdown - From Master */}
                             <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-slate-600">Choose Follow-up Date</label>
+                              <label className="block text-xs font-semibold text-slate-600">Assign Detox Doctor</label>
+                              <select 
+                                value={detoxDoctorId} 
+                                onChange={e => setDetoxDoctorId(e.target.value)} 
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              >
+                                <option value="">Select Detox Doctor</option>
+                                {availableDoctors.length > 0 ? (
+                                  availableDoctors.map(doc => (
+                                    <option key={doc.id} value={doc.id}>
+                                      Dr. {doc.name || doc.user?.fullName} — {doc.specialization || 'General'}
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option disabled>No doctors available</option>
+                                )}
+                              </select>
+                            </div>
+                            
+                            {/* Follow-up Date */}
+                            <div className="space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600">Follow-up Date</label>
                               <input
                                 type="date"
                                 value={detoxFollowupDate}
                                 onChange={e => setDetoxFollowupDate(e.target.value)}
-                                className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                               />
                             </div>
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-slate-600">Detox Doctor</label>
-                              <select value={detoxDoctorId} onChange={e => setDetoxDoctorId(e.target.value)} className="w-full max-w-md bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                                {doctors.map(doc => (
-                                  <option key={doc.id} value={doc.id}>{doc.name} — {doc.designation}</option>
-                                ))}
-                              </select>
-                            </div>
                           </div>
+                          
                           <div className="mt-3">
                             <label className="block text-xs font-semibold text-slate-600">Remarks for Receptionist</label>
                             <textarea
                               value={detoxFollowupRemarks}
                               onChange={e => setDetoxFollowupRemarks(e.target.value)}
                               rows={3}
-                              className="w-full max-w-2xl bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              placeholder="Enter any special instructions for the receptionist..."
                             />
                           </div>
                           <p className="text-xs text-emerald-700 mt-1.5 font-medium">These follow-up details will be sent to reception so they can call the patient later.</p>
@@ -550,9 +652,19 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     <div className="p-5 bg-slate-50 flex justify-end">
                       <button
                         onClick={handleCompleteConsultation}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
+                        disabled={isSaving}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Save className="w-4 h-4" /> Save & Finalize Consultation
+                        {isSaving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" /> Save & Finalize Consultation
+                          </>
+                        )}
                       </button>
                     </div>
                   </>
@@ -563,8 +675,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     <div className="space-y-4">
                       {pagedHistory.map(record => {
                         const pt = patients.find(p => p.id === record.patient_id) || {};
-                        const detoxDoc = doctors.find(d => d.id === record.detox_doctor_id);
-                        const linkedDiet = dietCharts.find(d => d.consultation_id === record.id);
                         return (
                           <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
                             <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
@@ -574,7 +684,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                 <div className="text-sm text-slate-600">Patient ID: {pt.id || 'N/A'} • {pt.age || '--'} yrs • {pt.gender || '--'}</div>
                               </div>
                               <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                                Provider: {record.doctor_name || 'Dr. Evelyn Carter'}
+                                Provider: {record.doctor_name || 'Assigned Provider'}
                               </div>
                             </div>
 
@@ -608,8 +718,17 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                   <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800">
                                     {record.detox_recommended ? (
                                       <>
-                                        <div className="font-semibold">Type: {record.detox_type}</div>
-                                        <div>Doctor: {detoxDoc ? detoxDoc.name : record.detox_doctor_name || 'Not assigned'}</div>
+                                        <div>
+                                          Detox Doctor: {
+                                            record.detox_doctor_name || 
+                                            record.detoxDoctorName ||
+                                            availableDoctors.find(d => Number(d.id) === Number(record.detox_doctor_id ?? record.detoxDoctorId))?.name ||
+                                            doctors.find(d => Number(d.id) === Number(record.detox_doctor_id ?? record.detoxDoctorId))?.name ||
+                                            'Not assigned'
+                                          }
+                                        </div>
+                                        <div className="mt-1">Follow-up Date: {record.followup_date ? record.followup_date.split('T')[0] : 'Not scheduled'}</div>
+                                        <div className="mt-1">Remarks: {record.followup_remarks || 'No remarks'}</div>
                                       </>
                                     ) : (
                                       <div className="text-slate-500">No detox recommended.</div>
@@ -618,20 +737,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                 </div>
                               </div>
                             </div>
-
-                            {linkedDiet && (
-                              <div className="mt-4 rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800">
-                                <div className="font-semibold mb-2">Diet Chart from Consultation</div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-700">
-                                  <div><span className="font-semibold">Morning:</span> {linkedDiet.meals.morning}</div>
-                                  <div><span className="font-semibold">Breakfast:</span> {linkedDiet.meals.breakfast}</div>
-                                  <div><span className="font-semibold">Lunch:</span> {linkedDiet.meals.lunch}</div>
-                                  <div><span className="font-semibold">Evening:</span> {linkedDiet.meals.evening}</div>
-                                  <div><span className="font-semibold">Dinner:</span> {linkedDiet.meals.dinner}</div>
-                                  <div className="md:col-span-2"><span className="font-semibold">Remarks:</span> {linkedDiet.remarks}</div>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       })}
@@ -670,7 +775,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     )}
                   </div>
                 )}
-
               </div>
             ) : (
               <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-400 space-y-3">

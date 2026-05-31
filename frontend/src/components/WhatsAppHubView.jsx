@@ -16,7 +16,7 @@ export default function WhatsAppHubView({
     {
       id: 'appointment_confirm',
       name: 'Booking Confirmation',
-      text: `Dear {{name}}, your appointment with Dr. Evelyn Carter is confirmed for Today at 11:30 AM. Reply HELP for queries. - Manthrralaya's Wellness`
+      text: `Dear {{name}}, your appointment is confirmed for Today. Reply HELP for queries. - Manthrralaya's Wellness`
     },
     {
       id: 'detox_prep_reminder',
@@ -26,7 +26,7 @@ export default function WhatsAppHubView({
     {
       id: 'document_delivery_pdf',
       name: 'PDF Document Delivery',
-      text: `Dear {{name}}, here is your customized Diet Chart and Prescription from Dr. Evelyn Carter. Please download and follow the instructions. - Manthrralaya's Wellness`
+      text: `Dear {{name}}, here is your customized Diet Chart and Prescription. Please download and follow the instructions. - Manthrralaya's Wellness`
     },
     {
       id: 'feedback_review',

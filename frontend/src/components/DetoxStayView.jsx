@@ -248,7 +248,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
   const handleSaveDetoxSession = () => {
     if (!activeAppt || !activePt) return;
     
-    const doctorName = activeAppt.doctor_name || 'Dr. Evelyn Carter';
+    const doctorName = activeAppt.doctor_name || 'Assigned Provider';
     const sessionNumber = sessionCount + 1;
     const sessionTypeDisplay = getSessionTypeDisplay(sessionType);
     
@@ -422,7 +422,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                         </div>
                       </div>
                       <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">
-                        Assigned to: {appt.doctor_name || 'Dr. Evelyn Carter'}
+                        Assigned to: {appt.doctor_name || 'Assigned Provider'}
                       </div>
                       {!canStartSession && (
                         <div className="text-[10px] text-amber-600 font-bold mt-1">
@@ -669,7 +669,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                                   </div>
                                 </div>
                                 <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                                  Provider: {record.doctor_name || 'Dr. Evelyn Carter'}
+                                  Provider: {record.doctor_name || 'Assigned Provider'}
                                 </div>
                               </div>
 
@@ -692,8 +692,12 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                                     <div className="mt-4 pt-3 border-t border-slate-200">
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="text-sm">
-                                          <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Follow-up Date</span>
-                                          <div className="text-slate-700 font-medium mt-1">{record.followup_date}</div>
+                                          <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">
+                                            Follow-up Date
+                                          </span>
+                                          <div className="text-slate-700 font-medium mt-1">
+                                            {record.followup_date ? record.followup_date.split('T')[0] : 'Not scheduled'}
+                                          </div>
                                         </div>
                                         <div className="text-sm">
                                           <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>

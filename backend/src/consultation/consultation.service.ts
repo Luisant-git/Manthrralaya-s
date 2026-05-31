@@ -1,0 +1,294 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateConsultationDto } from './dto/create-consultation.dto';
+import { UpdateConsultationDto } from './dto/update-consultation.dto';
+
+@Injectable()
+export class ConsultationService {
+  constructor(private prisma: PrismaService) {}
+
+  async create(createConsultationDto: CreateConsultationDto) {
+    // Check if patient exists
+    const patient = await this.prisma.patient.findUnique({
+      where: { id: createConsultationDto.patientId }
+    });
+    if (!patient) {
+      throw new NotFoundException(`Patient with ID ${createConsultationDto.patientId} not found`);
+    }
+
+    // Check if doctor exists
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { id: createConsultationDto.doctorId }
+    });
+    if (!doctor) {
+      throw new NotFoundException(`Doctor with ID ${createConsultationDto.doctorId} not found`);
+    }
+
+    // If detox doctor is provided, check if exists
+    if (createConsultationDto.detoxDoctorId) {
+      const detoxDoctor = await this.prisma.doctor.findUnique({
+        where: { id: createConsultationDto.detoxDoctorId }
+      });
+      if (!detoxDoctor) {
+        throw new NotFoundException(`Detox doctor with ID ${createConsultationDto.detoxDoctorId} not found`);
+      }
+    }
+
+    // If appointmentId is provided, check if appointment exists
+    if (createConsultationDto.appointmentId) {
+      const appointment = await this.prisma.appointment.findUnique({
+        where: { id: createConsultationDto.appointmentId }
+      });
+      if (!appointment) {
+        throw new NotFoundException(`Appointment with ID ${createConsultationDto.appointmentId} not found`);
+      }
+    }
+
+    const consultation = await this.prisma.consultation.create({
+      data: {
+        patientId: createConsultationDto.patientId,
+        doctorId: createConsultationDto.doctorId,
+        appointmentId: createConsultationDto.appointmentId,
+        consultationNotes: createConsultationDto.consultationNotes,
+        medicalHistoryNotes: createConsultationDto.medicalHistoryNotes,
+        detoxProcedureNotes: createConsultationDto.detoxProcedureNotes,
+        dietPlanNotes: createConsultationDto.dietPlanNotes,
+        homecareGuideliness: createConsultationDto.homecareGuideliness,
+        detoxRecommended: createConsultationDto.detoxRecommended || false,
+        detoxDoctorId: createConsultationDto.detoxDoctorId || null,
+        followupDate: createConsultationDto.followupDate ? new Date(createConsultationDto.followupDate) : null,
+        followupRemarks: createConsultationDto.followupRemarks,
+      },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    // Update appointment status to Completed if appointment exists
+    if (createConsultationDto.appointmentId) {
+      await this.prisma.appointment.update({
+        where: { id: createConsultationDto.appointmentId },
+        data: { status: 'Completed' }
+      });
+    }
+
+    return consultation;
+  }
+
+  async findAll() {
+    return this.prisma.consultation.findMany({
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: { consultationDate: 'desc' }
+    });
+  }
+
+  async findOne(id: number) {
+    const consultation = await this.prisma.consultation.findUnique({
+      where: { id },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    if (!consultation) {
+      throw new NotFoundException(`Consultation with ID ${id} not found`);
+    }
+
+    return consultation;
+  }
+
+  async findByPatient(patientId: number) {
+    return this.prisma.consultation.findMany({
+      where: { patientId },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: { consultationDate: 'desc' }
+    });
+  }
+
+  async findByDoctor(doctorId: number) {
+    return this.prisma.consultation.findMany({
+      where: { doctorId },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: { consultationDate: 'desc' }
+    });
+  }
+
+  async findByDateRange(startDate: Date, endDate: Date) {
+    return this.prisma.consultation.findMany({
+      where: {
+        consultationDate: {
+          gte: startDate,
+          lte: endDate
+        }
+      },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: { consultationDate: 'desc' }
+    });
+  }
+
+  async getPendingFollowups() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const consultations = await this.prisma.consultation.findMany({
+      where: {
+        detoxRecommended: true,
+        followupDate: {
+          gte: today
+        }
+      },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      },
+      orderBy: { followupDate: 'asc' }
+    });
+
+    return consultations.map(c => ({
+      id: c.id,
+      patientId: c.patientId,
+      patientName: c.patient.name,
+      patientPhone: c.patient.phone,
+      followupDate: c.followupDate,
+      followupRemarks: c.followupRemarks,
+      consultationDate: c.consultationDate,
+      doctorName: c.doctor.user?.fullName,
+      detoxDoctorName: c.detoxDoctor?.user?.fullName || null,
+      detoxDoctorId: c.detoxDoctorId
+    }));
+  }
+
+  async update(id: number, updateConsultationDto: UpdateConsultationDto) {
+    await this.findOne(id);
+
+    // If detox doctor is being updated, check if exists
+    if (updateConsultationDto.detoxDoctorId) {
+      const detoxDoctor = await this.prisma.doctor.findUnique({
+        where: { id: updateConsultationDto.detoxDoctorId }
+      });
+      if (!detoxDoctor) {
+        throw new NotFoundException(`Detox doctor with ID ${updateConsultationDto.detoxDoctorId} not found`);
+      }
+    }
+
+    return this.prisma.consultation.update({
+      where: { id },
+      data: {
+        consultationNotes: updateConsultationDto.consultationNotes,
+        medicalHistoryNotes: updateConsultationDto.medicalHistoryNotes,
+        detoxProcedureNotes: updateConsultationDto.detoxProcedureNotes,
+        dietPlanNotes: updateConsultationDto.dietPlanNotes,
+        homecareGuideliness: updateConsultationDto.homecareGuideliness,
+        detoxRecommended: updateConsultationDto.detoxRecommended,
+        detoxDoctorId: updateConsultationDto.detoxDoctorId,
+        followupDate: updateConsultationDto.followupDate ? new Date(updateConsultationDto.followupDate) : undefined,
+        followupRemarks: updateConsultationDto.followupRemarks,
+      },
+      include: {
+        patient: true,
+        doctor: {
+          include: {
+            user: true
+          }
+        },
+        appointment: true,
+        detoxDoctor: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+  }
+
+  async remove(id: number) {
+    await this.findOne(id);
+
+    return this.prisma.consultation.delete({
+      where: { id }
+    });
+  }
+}
