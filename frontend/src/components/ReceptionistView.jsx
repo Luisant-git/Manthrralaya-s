@@ -448,6 +448,15 @@ export default function ReceptionistView({
           )}
 
           <div className="space-y-4 text-left">
+
+             <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                <input type="tel" required placeholder="+91 XXXXX XXXXX" value={formData.phone} onChange={handlePhoneChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
+              </div>
+            </div>
+            
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                 Patient Name <span className="text-rose-500">*</span>
@@ -488,13 +497,7 @@ export default function ReceptionistView({
               <input type="text" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
-              <div className="relative">
-                <Phone className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                <input type="tel" required placeholder="+91 XXXXX XXXXX" value={formData.phone} onChange={handlePhoneChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
-              </div>
-            </div>
+           
 
             <div className="flex items-center space-x-2.5 py-1">
               <input id="phoneAsWhatsapp" type="checkbox" checked={formData.phoneAsWhatsapp} onChange={handleCheckboxChange} className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer" />

@@ -26,6 +26,7 @@ export class AuthService {
    
     const result = await this.adminService.createUser(dto.role, {
       email: dto.email,
+      username: dto.username,
       pin: dto.pin,  // Pass plain pin
       fullName: dto.fullName,
       phone: dto.phone,
@@ -38,7 +39,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.adminService.findByEmail(dto.email);
+    const user = await this.adminService.findByUsername(dto.username);
 
     if (!user) {
       throw new UnauthorizedException('User not found');
@@ -58,6 +59,7 @@ export class AuthService {
 
     const payload = {
       sub: user.id,
+      username: user.username,
       email: user.email,
       role: user.role,
       name: user.fullName,
@@ -68,6 +70,7 @@ export class AuthService {
       role: user.role,
       name: user.fullName,
       email: user.email,
+      username: user.username,
       userId: user.id,
     };
   }

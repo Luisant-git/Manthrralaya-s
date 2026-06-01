@@ -396,13 +396,14 @@ export default function DetoxView({
         diet_plan_note: '',
         home_care: '',
         detox_recommended: true,
-        detox_doctor_id: doctorId,
-        detox_doctor_name: doctorName,
+        detox_doctor_id: doctorId || currentDoctorId,
+        detox_doctor_name: doctorName || 'Assigned Provider',
         detox_type: sessionTypeDisplay,
         detox_session_type: sessionType,
         followup_date: followupDate,
         followup_remarks: followupRemarks,
-        session_number: 1
+        session_number: 1,
+        doctor_name: doctorName || 'Assigned Provider' // Ensure top-level mapping for history consistency
       };
 
       // Save consultation - this will mark appointment as Completed

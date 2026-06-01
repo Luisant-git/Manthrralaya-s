@@ -11,7 +11,9 @@ import {
   Users,
   UserPlus,
   Star,
-  ClipboardList
+  ClipboardList,
+  Key,
+  Lock
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
@@ -22,11 +24,12 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
     { id: 'doctor-master', name: 'Doctor Master', icon: Stethoscope, roles: ['receptionist', 'admin'] },
     { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist'] },
     { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin'] },
+    { id: 'change-my-pin', name: 'Change My PIN', icon: Lock, roles: ['admin', 'doctor', 'receptionist'] },
+    { id: 'reset-pin', name: 'Manage Staff PINs', icon: Key, roles: ['admin'] },
     { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin'] },
     { id: 'consultations', name: 'Consultations', icon: Stethoscope, roles: ['admin', 'doctor'] },
     { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin'] },
     { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor'] },
-    // { id: 'stay', name: 'One-Day Stay', icon: BedDouble, roles: ['admin', 'doctor'] },
     { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin'] },
     { id: 'reports', name: 'Reports & Analytics', icon: FileBarChart, roles: ['admin'] },
     { id: 'reviews', name: 'Patient Feedback', icon: Star, roles: ['admin'] }
@@ -46,7 +49,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
               const isAllowed = item.roles.includes(activeRole);
               const isActive = activeTab === item.id;
               
-              if (!isAllowed) return null; // Hide unauthorized tabs entirely
+              if (!isAllowed) return null;
 
               return (
                 <button

@@ -77,9 +77,20 @@ export default function PatientTimeline({
 
   detoxSessions.filter(d => String(d.patient_id || d.patientId) === String(patient.id)).forEach(d => {
     const cleanNotes = cleanHtml(d.notes || d.detoxNotes);
-    // Fallback to linked consultation remarks if session remarks are empty
-    const fRemarks = d.followup_remarks || d.followupRemarks || d.consultation?.followup_remarks || d.consultation?.followupRemarks;
-    const fDate = d.followupDate || d.followup_date || d.consultation?.followupDate || d.consultation?.followup_date;
+    
+    // Helper to extract numeric ID from strings like "A-201"
+    const normalizeId = (id) => String(id || '').replace(/^\D+/g, '');
+
+    // Robust lookup for linked consultation data
+    const linkedCons = consultations.find(c => 
+      (c.appointment_id && d.appointment_id && normalizeId(c.appointment_id) === normalizeId(d.appointment_id)) ||
+      (c.appointmentId && d.appointmentId && normalizeId(c.appointmentId) === normalizeId(d.appointmentId)) ||
+      String(c.id) === String(d.consultationId || d.consultation_id)
+    );
+
+    const fRemarks = d.followup_remarks || d.followupRemarks || linkedCons?.followup_remarks || linkedCons?.followupRemarks;
+    const rawFDate = d.followupDate || d.followup_date || linkedCons?.followupDate || linkedCons?.followup_date;
+    const fDate = rawFDate ? (typeof rawFDate === 'string' ? rawFDate.split('T')[0] : new Date(rawFDate).toISOString().split('T')[0]) : null;
 
     timelineEvents.push({
       date: d.scheduled_date || d.sessionDate?.split('T')[0] || 'Unknown Date', 
@@ -88,7 +99,7 @@ export default function PatientTimeline({
       title: `Detox Therapy Session`,
       icon: Activity, 
       color: 'bg-cyan-500',
-      description: `Session: ${d.type || d.sessionType || 'Detox'}. Status: ${d.status || 'Active'}. Clinical Notes: ${cleanNotes}${fRemarks ? `. Follow-up Instructions: ${cleanHtml(fRemarks)}` : ''}${fDate ? `. Review Scheduled: ${fDate.split('T')[0]}` : ''}`
+      description: `Session: ${d.type || d.sessionType || 'Detox'}. Status: ${d.status || 'Active'}. Clinical Notes: ${cleanNotes}${fRemarks ? `. Follow-up Instructions: ${cleanHtml(fRemarks)}` : ''}${fDate ? `. Remainder Follow-up Date: ${fDate}` : ''}`
     });
   });
 

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { userApi } from '../api/userApi';
 
-export default function UserManagementView() {
+export default function UserManagementView({ activeRole, activeTab, currentUser }) {
     const [staff, setStaff] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('all');
@@ -27,6 +27,7 @@ export default function UserManagementView() {
 
     const [formData, setFormData] = useState({
         fullName: '',
+        username: '',
         email: '',
         role: 'RECEPTIONIST',
         pin: '',
@@ -42,13 +43,26 @@ export default function UserManagementView() {
 
     const loadStaff = async () => {
         try {
-            if (activeFilter === 'all') {
+            if (activeFilter === 'all' || activeFilter === 'pin-reset' || activeFilter === 'my-account') {
                 // Load both receptionists and doctors
                 const [receptionists, doctors] = await Promise.all([
                     userApi.getUsersByRole('RECEPTIONIST'),
                     userApi.getUsersByRole('DOCTOR')
                 ]);
-                const allStaff = [...(receptionists.data || []), ...(doctors.data || [])];
+                let allStaff = [...(receptionists.data || []), ...(doctors.data || [])];
+                
+                // Filter for "My Account" if requested
+                if (activeFilter === 'my-account' && currentUser) {
+                    const currentUserId = currentUser.userId || currentUser.id;
+                    allStaff = allStaff.filter(item => (item.user?.id || item.id) === currentUserId);
+                }
+
+                // Sort current user to top for visibility
+                if (activeFilter !== 'my-account' && currentUser) {
+                    const currentUserId = currentUser.userId || currentUser.id;
+                    allStaff.sort((a, b) => (a.user?.id || a.id) === currentUserId ? -1 : 1);
+                }
+                
                 setStaff(allStaff);
             } else {
                 const response = await userApi.getUsersByRole(activeFilter);
@@ -78,6 +92,7 @@ export default function UserManagementView() {
         const user = staffItem.user || staffItem;
         setFormData({
             fullName: user.fullName || '',
+            username: user.username || '',
             email: user.email || '',
             role: user.role || 'RECEPTIONIST',
             pin: '',
@@ -101,8 +116,8 @@ export default function UserManagementView() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.fullName.trim() || !formData.email.trim()) {
-            return setStatus({ ...status, error: 'Name and Email are required.' });
+        if (!formData.fullName.trim() || !formData.username.trim() || !formData.email.trim()) {
+            return setStatus({ ...status, error: 'Name, Username and Email are required.' });
         }
 
         if (!editingId && !formData.pin.trim()) {
@@ -118,7 +133,7 @@ export default function UserManagementView() {
             }
             
             setStatus({ loading: false, error: '', success: true, message: editingId ? 'Staff updated' : 'Staff created' });
-            setFormData({ fullName: '', email: '', role: 'RECEPTIONIST', pin: '', phone: '', specialization: '' });
+            setFormData({ fullName: '', username: '', email: '', role: 'RECEPTIONIST', pin: '', phone: '', specialization: '' });
             setEditingId(null);
             setShowAddForm(false);
             loadStaff();
@@ -163,6 +178,7 @@ export default function UserManagementView() {
     const filteredStaff = staff.filter(s => {
         const user = s.user || s;
         return user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+               user.username?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                user.email?.toLowerCase().includes(searchQuery.toLowerCase());
     });
 
@@ -272,6 +288,10 @@ export default function UserManagementView() {
                                                     </div>
                                                     <div>
                                                         <div className="text-sm font-bold text-slate-800">{user.fullName}</div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[10px] text-slate-500 font-bold lowercase">Login ID: @{user.username || 'no-username'}</span>
+                                                            {activeFilter === 'my-account' && <span className="text-[10px] text-slate-400 lowercase">Email: {user.email}</span>}
+                                                        </div>
                                                         <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">{user.role}</div>
                                                     </div>
                                                 </div>
@@ -298,7 +318,7 @@ export default function UserManagementView() {
                                                     <button 
                                                         onClick={() => setResetPinUser(user)}
                                                         className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
-                                                        title="Reset PIN"
+                                                        title="Reset Access PIN"
                                                     >
                                                         <Key className="w-4 h-4" />
                                                     </button>
@@ -314,6 +334,7 @@ export default function UserManagementView() {
                                                     <button 
                                                         onClick={() => handleDeleteStaff(user.id)}
                                                         className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        title="Delete Staff"
                                                     >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
@@ -422,6 +443,22 @@ export default function UserManagementView() {
                                 />
                             </div>
 
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                                    Login Username <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="username"
+                                    required
+                                    placeholder="e.g. sarah_j"
+                                    value={formData.username}
+                                    onChange={handleChange}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">This will be used for login instead of email</p>
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
@@ -486,23 +523,22 @@ export default function UserManagementView() {
                                 </div>
                             )}
 
-                            {!editingId && (
-                                <div className="pt-2">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
-                                        Security Access PIN (4 Digits) <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input 
-                                        type="password" 
-                                        name="pin" 
-                                        required 
-                                        maxLength={4} 
-                                        placeholder="••••" 
-                                        value={formData.pin} 
-                                        onChange={handleChange} 
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-lg text-slate-800 text-center tracking-widest focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
-                                    />
-                                </div>
-                            )}
+                            <div className="pt-2">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                                    Security Access PIN (4 Digits) {editingId ? '(Optional)' : <span className="text-rose-500">*</span>}
+                                </label>
+                                <input 
+                                    type="password" 
+                                    name="pin" 
+                                    required={!editingId}
+                                    maxLength={4} 
+                                    placeholder={editingId ? "•••• (Leave blank to keep current)" : "••••"}
+                                    value={formData.pin} 
+                                    onChange={handleChange} 
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-lg text-slate-800 text-center tracking-widest focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
+                                />
+                                {editingId && <p className="text-[10px] text-slate-400 mt-1">Only enter a value if you wish to change the existing PIN.</p>}
+                            </div>
 
                             <div className="flex justify-end pt-4 gap-3">
                                 <button 
@@ -534,10 +570,14 @@ export default function UserManagementView() {
                                 <div className="flex-1">
                                     <h3 className="font-extrabold text-lg m-0 font-outfit">Reset Access PIN</h3>
                                     <p className="text-white-100 text-xs mt-1">
-                                        Security credentials update for{' '}
-                                        <span className="font-bold text-white">
-                                            {resetPinUser.role}: {resetPinUser.fullName}
-                                        </span>
+                                        Security update for <span className="font-bold text-white">{resetPinUser.fullName}</span>
+                                    </p>
+                                    <p className="text-white/70 text-[10px] uppercase font-bold tracking-widest mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                        <span>Role: <span className="text-white">{resetPinUser.role}</span></span>
+                                        <span>•</span>
+                                        <span>Login ID: <span className="text-white">@{resetPinUser.username || 'no-username'}</span></span>
+                                        <span>•</span>
+                                        <span>Email: <span className="text-white">{resetPinUser.email}</span></span>
                                     </p>
                                 </div>
                                 <button 

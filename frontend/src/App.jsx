@@ -19,6 +19,7 @@ import LoginView from './components/LoginView';
 import ReceptionistView from './components/ReceptionistView';
 import DoctorMasterView from './components/DoctorMasterView';
 import UserManagementView from './components/UserManagementView';
+import ChangeMyPin from './components/ChangeMyPin';
 import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
@@ -29,6 +30,7 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activeRole, setActiveRole] = useState('');
   const [currentUser, setCurrentUser] = useState('');
+  const [currentUserId, setCurrentUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -48,6 +50,8 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [timelinePatient, setTimelinePatient] = useState(null);
+
+  
 
   // Fetch patients from backend
   const fetchPatientsFromBackend = async () => {
@@ -255,6 +259,7 @@ export default function App() {
 
         setActiveRole(payload.role.toLowerCase());
         setCurrentUser(payload.email || payload.name);
+        setCurrentUserId(payload.sub || payload.userId);
         setIsAuthenticated(true);
 
         setActiveTab('dashboard');
@@ -277,13 +282,14 @@ export default function App() {
   const handleLogin = ({ role, username, displayName, email, userId }) => {
     setActiveRole(role);
     setCurrentUser(email || username);
+    setCurrentUserId(userId);
     setIsAuthenticated(true);
     
     localStorage.setItem('user_email', email || username);
     localStorage.setItem('user_display_name', displayName || username);
     localStorage.setItem('user_role', role);
     
-    console.log('✅ User logged in:', { role, email: email || username });
+    console.log('✅ User logged in:', { role, email: email || username, userId });
     
     setActiveTab('dashboard');
   };
@@ -296,6 +302,7 @@ export default function App() {
     setIsAuthenticated(false);
     setActiveRole('');
     setCurrentUser('');
+    setCurrentUserId(null);
     setActiveTab('dashboard');
   };
 
@@ -604,6 +611,15 @@ export default function App() {
     return <LoginView onLogin={handleLogin} />;
   }
 
+  // Create currentUser object for components
+  const currentUserObj = {
+    id: currentUserId,
+    email: currentUser,
+    username: currentUser,
+    fullName: currentUser,
+    role: activeRole.toUpperCase()
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -659,9 +675,17 @@ export default function App() {
         );
       case 'doctor-master':
         return <DoctorMasterView doctors={doctors} setDoctors={setDoctors} />;
+     case 'change-my-pin':
+  return (
+    <ChangeMyPin 
+      currentUser={currentUserObj} 
+      onLogout={handleLogout}
+      onCancel={() => setActiveTab('dashboard')}
+    />
+  );
       case 'user-management':
         return activeRole === 'admin' ? (
-          <UserManagementView />
+          <UserManagementView activeRole={activeRole} activeTab={activeTab} currentUser={currentUserObj} />
         ) : (
           <div className="text-center py-12 text-slate-500">Access Denied. Admin privileges required.</div>
         );

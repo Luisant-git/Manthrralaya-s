@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -26,6 +26,15 @@ export class AdminService {
       throw new ConflictException('Email already exists');
     }
 
+    if (dto.username) {
+      const existingUsername = await this.prisma.user.findUnique({
+        where: { username: dto.username }
+      });
+      if (existingUsername) {
+        throw new ConflictException('Username already exists');
+      }
+    }
+
     const existingPhoneUser = await this.prisma.user.findFirst({
       where: { phone: dto.phone }
     });
@@ -39,6 +48,7 @@ export class AdminService {
       const user = await prisma.user.create({
         data: {
           email: dto.email,
+          username: dto.username,
           pin: hashedPin,
           role: role,
           fullName: dto.fullName,
@@ -76,6 +86,13 @@ export class AdminService {
     });
   }
 
+  // ========== FIND USER BY USERNAME (for auth) ==========
+  async findByUsername(username: string) {
+    return await this.prisma.user.findUnique({
+      where: { username },
+    });
+  }
+
   // ========== FIND USER BY ROLE (for admin check) ==========
   async findByRole(role: UserRole) {
     return await this.prisma.user.findFirst({
@@ -108,6 +125,7 @@ export class AdminService {
             select: {
               id: true,
               email: true,
+              username: true,
               fullName: true,
               phone: true,
               isActive: true,
@@ -125,6 +143,7 @@ export class AdminService {
       select: {
         id: true,
         email: true,
+        username: true,
         fullName: true,
         phone: true,
         role: true,
@@ -243,8 +262,18 @@ async getUserById(id: number) {
       if (existingPhoneUser) throw new ConflictException('Phone number already in use by another staff member');
     }
 
+    if (dto.username && dto.username !== user.username) {
+      const existingUsername = await this.prisma.user.findUnique({
+        where: { username: dto.username }
+      });
+      if (existingUsername) {
+        throw new ConflictException('Username already in use by another staff member');
+      }
+    }
+
     const updateData: any = {
       email: dto.email,
+      username: dto.username,
       fullName: dto.fullName,
       phone: dto.phone,
     };
@@ -282,13 +311,22 @@ async getUserById(id: number) {
   }
 
   // ========== RESET USER PIN ==========
-  async resetUserPin(userId: number, newPin: string) {
+  async resetUserPin(userId: number, newPin: string, requestingUserRole: UserRole, requestingUserId: number) {
+    // Security: Only ADMINs can reset other users' PINs. Non-admins can only reset their own.
+    if (requestingUserRole !== UserRole.ADMIN && Number(requestingUserId) !== Number(userId)) {
+      throw new ForbiddenException('You are only authorized to reset your own security PIN.');
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId }
     });
 
     if (!user) throw new NotFoundException('User not found');
-    if (user.role === UserRole.ADMIN) throw new ConflictException('Cannot reset ADMIN pin here');
+    
+    // Block resetting OTHER admins, but allow self-reset
+    if (user.role === UserRole.ADMIN && Number(requestingUserId) !== Number(userId)) {
+        throw new ConflictException('Security Policy: You cannot reset another Administrator\'s PIN.');
+    }
 
     const hashedPin = await bcrypt.hash(newPin, 10);
 

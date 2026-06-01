@@ -19,12 +19,12 @@ export default function LoginView({ onLogin }) {
     e.preventDefault();
     setError('');
     const trimmedUsername = username.trim();
-    if (!trimmedUsername) return alert('Please enter your staff email.');
+    if (!trimmedUsername) return alert('Please enter your staff username.');
     if (!pin) return alert('Please enter your staff PIN code.');
 
     setIsLoading(true);
     try {
-      const response = await authApi.login({ email: trimmedUsername, pin });
+      const response = await authApi.login({ username: trimmedUsername, pin });
 
       // Ensure the selected role in the UI matches the user's actual role in the database
       if (selectedRole.toUpperCase() !== response.role) {
@@ -120,12 +120,12 @@ export default function LoginView({ onLogin }) {
 
             <div>
               <label className="block text-sm font-bold text-slate-600 mb-2 flex items-center gap-2">
-                <User className="w-4 h-4" /> Email
+                <User className="w-4 h-4" /> Username
               </label>
               <input
                 type="text"
                 required
-                placeholder="Enter your Email"
+                placeholder="Enter your Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-center font-bold text-lg placeholder:text-sm placeholder:font-medium focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
