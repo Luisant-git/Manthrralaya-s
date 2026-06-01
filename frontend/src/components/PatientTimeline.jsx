@@ -153,8 +153,39 @@ export default function PatientTimeline({
     });
   });
 
- // Sort events by date in DESCENDING order (newest/latest first)
-const sortedEvents = timelineEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+  const parseTimelineDate = (rawDate) => {
+    if (!rawDate) return new Date(0);
+    if (rawDate instanceof Date) return rawDate;
+    if (typeof rawDate !== 'string') return new Date(rawDate);
+
+    const isoDate = rawDate.match(/^\d{4}-\d{2}-\d{2}/);
+    if (isoDate) return new Date(rawDate);
+
+    const parts = rawDate.split(/[\/\-]/).map(part => part.trim());
+    if (parts.length === 3) {
+      let [p1, p2, p3] = parts;
+      if (p1.length === 4) {
+        return new Date(`${p1}-${p2.padStart(2, '0')}-${p3.padStart(2, '0')}`);
+      }
+      if (p3.length === 4) {
+        return new Date(`${p3}-${p2.padStart(2, '0')}-${p1.padStart(2, '0')}`);
+      }
+    }
+
+    return new Date(rawDate);
+  };
+
+  const compareEventDate = (a, b) => {
+    const dateA = parseTimelineDate(a.date);
+    const dateB = parseTimelineDate(b.date);
+    const timeA = typeof a.time === 'string' && a.time.match(/^(\d{1,2}):(\d{2})/) ? Number(a.time.split(':')[0]) * 60 + Number(a.time.split(':')[1]) : 0;
+    const timeB = typeof b.time === 'string' && b.time.match(/^(\d{1,2}):(\d{2})/) ? Number(b.time.split(':')[0]) * 60 + Number(b.time.split(':')[1]) : 0;
+    const valueA = dateA.getTime() + timeA * 60000;
+    const valueB = dateB.getTime() + timeB * 60000;
+    return valueB - valueA;
+  };
+
+  const sortedEvents = [...timelineEvents].sort(compareEventDate);
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

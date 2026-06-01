@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock } from 'lucide-react';
+import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock, Droplets } from 'lucide-react';
+import { Sun, Moon, SunMoon } from 'lucide-react';
 
 export default function UnifiedPatientRecords({
   patients = [],
@@ -25,6 +26,7 @@ export default function UnifiedPatientRecords({
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
+  const [historySubTab, setHistorySubTab] = useState('consultations');
   const historyItemsPerPage = 1;
 
   // New Patient Form State
@@ -51,9 +53,8 @@ export default function UnifiedPatientRecords({
       })
     : null;
 
-  // FALLBACK: Identify doctor from appointments or consultations if master list is empty (403 Error)
+  // FALLBACK: Identify doctor from appointments or consultations if master list is empty
   if (isDoctor && !currentDoc) {
-    // Check appointments first
     const sourceAppt = appointments.find(a => {
       const dEmail = (a.doctor?.user?.email || '').toLowerCase();
       const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
@@ -67,7 +68,6 @@ export default function UnifiedPatientRecords({
         name: sourceAppt.doctor.user?.fullName || sourceAppt.doctor.name 
       };
     } else {
-      // Try to find identity in consultations
       const sourceCons = consultations.find(c => {
         const dName = (c.doctor_name || '').toLowerCase();
         const currentUserLower = String(currentUser || '').toLowerCase();
@@ -81,7 +81,7 @@ export default function UnifiedPatientRecords({
 
   const currentDocId = currentDoc?.id;
 
-  // Create a robust list of doctors for name lookups in history
+  // Create a robust list of doctors for name lookups
   let availableDoctors = [...doctors];
   if (appointments && appointments.length > 0) {
     appointments.forEach(a => {
@@ -130,14 +130,12 @@ export default function UnifiedPatientRecords({
   };
 
   const getNextFollowup = (patientId) => {
-    // Check dedicated followups state
     const fromFollowups = followups
       .filter(f => String(f.patient_id) === String(patientId) && f.status === 'Pending')
       .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
 
     if (fromFollowups) return fromFollowups;
 
-    // Fallback: Check clinical context from ABSOLUTE LATEST visit only
     const latestCons = consultations
       .filter(c => String(c.patient_id || c.patientId) === String(patientId))
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
@@ -159,8 +157,7 @@ export default function UnifiedPatientRecords({
     return appointments.some(a => String(a.patient_id || a.patientId) === String(patient.id) && a.appointmentType === tab.type);
   };
 
-  // Create a robust list of patients (Master list + Extraction from Appointments)
-  // This ensures patients show up even if the master patient API returned 403 Forbidden
+  // Create a robust list of patients
   let allAvailablePatients = [...patients];
   
   if (appointments && appointments.length > 0) {
@@ -175,7 +172,6 @@ export default function UnifiedPatientRecords({
     });
   }
 
-  // Filter patients: either ALL (for admin) or only MY assigned patients (for doctor)
   const basePatients = isDoctor
     ? allAvailablePatients.filter(p => myPatientIds.has(String(p.id)))
     : allAvailablePatients;
@@ -203,6 +199,7 @@ export default function UnifiedPatientRecords({
   const openModal = (patient) => {
     setSelectedPatient(patient);
     setHistoryPage(1);
+    setHistorySubTab('consultations');
     setIsModalOpen(true);
   };
 
@@ -220,13 +217,17 @@ export default function UnifiedPatientRecords({
 
   const patientDetoxSessions = selectedPatient
     ? detoxSessions
-        .filter(d => String(d.patient_id || d.patientId) === String(selectedPatient.id))
-        .sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))
+        .filter(d => String(d.patientId || d.patient_id) === String(selectedPatient.id))
+        .sort((a, b) => new Date(b.sessionDate || b.scheduled_date) - new Date(a.sessionDate || a.scheduled_date))
     : [];
   
-  const totalHistoryPages = Math.ceil(patientConsultations.length / historyItemsPerPage);
+  const totalHistoryPages = historySubTab === 'consultations' 
+    ? Math.max(1, Math.ceil(patientConsultations.length / historyItemsPerPage))
+    : Math.max(1, Math.ceil(patientDetoxSessions.length / historyItemsPerPage));
+    
   const historyStartIndex = (historyPage - 1) * historyItemsPerPage;
   const currentConsultation = patientConsultations[historyStartIndex];
+  const currentDetoxSession = patientDetoxSessions[historyStartIndex];
 
   const goToHistoryPage = (page) => {
     if (page >= 1 && page <= totalHistoryPages) {
@@ -239,6 +240,23 @@ export default function UnifiedPatientRecords({
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
     return date.toISOString().split('T')[0];
+  };
+
+  const getSessionTypeIcon = (type) => {
+    if (!type) return <Activity className="w-4 h-4" />;
+    const lowerType = type.toLowerCase();
+    if (lowerType === 'morning') return <Sun className="w-4 h-4" />;
+    if (lowerType === 'evening') return <Moon className="w-4 h-4" />;
+    return <SunMoon className="w-4 h-4" />;
+  };
+
+  const getSessionTypeDisplay = (type) => {
+    if (!type) return 'Session';
+    const lowerType = type.toLowerCase();
+    if (lowerType === 'morning') return 'Morning Session';
+    if (lowerType === 'evening') return 'Evening Session';
+    if (lowerType === 'fullday') return 'Full Day Session';
+    return 'Session';
   };
 
   const handlePhoneChange = (e) => {
@@ -361,9 +379,8 @@ export default function UnifiedPatientRecords({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Records</h1>
-          <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation histor.</p>
+          <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation history.</p>
         </div>
-       
       </div>
 
       {isAdding ? (
@@ -611,7 +628,7 @@ export default function UnifiedPatientRecords({
           {filteredPatients.length === 0 ? (
             <div className="py-12 text-center text-slate-500">No patient records match your search.</div>
           ) : (
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6">
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6 px-4 pb-4">
               <p className="text-sm text-slate-500">
                 Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredPatients.length)}</span> of <span className="font-semibold text-slate-800">{filteredPatients.length}</span> patients
               </p>
@@ -710,160 +727,260 @@ export default function UnifiedPatientRecords({
                 </div>
               </div>
 
+              {/* Sub Tabs */}
+              <div className="border-b border-slate-200 px-6 pt-4">
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => { setHistorySubTab('consultations'); setHistoryPage(1); }}
+                    className={`pb-3 px-2 text-sm font-semibold transition-colors border-b-2 ${
+                      historySubTab === 'consultations'
+                        ? 'border-emerald-600 text-emerald-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Stethoscope className="w-4 h-4" />
+                      Consultations ({patientConsultations.length})
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { setHistorySubTab('detox'); setHistoryPage(1); }}
+                    className={`pb-3 px-2 text-sm font-semibold transition-colors border-b-2 ${
+                      historySubTab === 'detox'
+                        ? 'border-emerald-600 text-emerald-700'
+                        : 'border-transparent text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Droplets className="w-4 h-4" />
+                      Detox Sessions ({patientDetoxSessions.length})
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               {/* Scrollable Content */}
-              <div className="modal-content-scroll overflow-y-auto" style={{ maxHeight: 'calc(85vh - 160px)' }}>
+              <div className="modal-content-scroll overflow-y-auto" style={{ maxHeight: 'calc(85vh - 200px)' }}>
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-emerald-600" />
-                      <h3 className="text-base font-bold text-slate-800">Consultation Notes</h3>
+                      {historySubTab === 'consultations' ? (
+                        <>
+                          <FileText className="w-5 h-5 text-emerald-600" />
+                          <h3 className="text-base font-bold text-slate-800">Consultation Notes</h3>
+                        </>
+                      ) : (
+                        <>
+                          <Droplets className="w-5 h-5 text-emerald-600" />
+                          <h3 className="text-base font-bold text-slate-800">Detox Session Details</h3>
+                        </>
+                      )}
                     </div>
                     <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                      {patientConsultations.length} total
+                      {historySubTab === 'consultations' ? `${patientConsultations.length} total` : `${patientDetoxSessions.length} total`}
                     </div>
                   </div>
 
-                  {currentConsultation ? (
-                    <div className="space-y-5">
-                      <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                            <Stethoscope className="w-5 h-5 text-emerald-600" />
+                  {/* Consultation History */}
+                  {historySubTab === 'consultations' && (
+                    <>
+                      {currentConsultation ? (
+                        <div className="space-y-5">
+                          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                                <Stethoscope className="w-5 h-5 text-emerald-600" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-bold text-slate-800">{currentConsultation.doctor_name || 'Assigned Doctor'}</div>
+                                <div className="text-xs text-emerald-600 font-medium">Clinical Consultant</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                                {currentConsultation.date}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-1">Visit Date</div>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-sm font-bold text-slate-800">{currentConsultation.doctor_name || 'Assigned Doctor'}</div>
-                            <div className="text-xs text-emerald-600 font-medium">Clinical Consultant</div>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                            {currentConsultation.date}
-                          </div>
-                          <div className="text-[10px] text-slate-400 mt-1">Visit Date</div>
-                        </div>
-                      </div>
 
-                      {(currentConsultation.consultation_notes || currentConsultation.consultationNotes) && (currentConsultation.consultation_notes || currentConsultation.consultationNotes) !== '<br>' && (
-                        <div>
-                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                            <Activity className="w-3.5 h-3.5" /> Consultation Notes
-                          </div>
-                          <div 
-                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                            dangerouslySetInnerHTML={{ __html: currentConsultation.consultation_notes || currentConsultation.consultationNotes }}
-                          />
-                        </div>
-                      )}
-
-                      {(currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) && (currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) !== '<br>' && (
-                        <div>
-                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                            <ClipboardList className="w-3.5 h-3.5" /> Medical History
-                          </div>
-                          <div 
-                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                            dangerouslySetInnerHTML={{ __html: currentConsultation.medical_history || currentConsultation.medicalHistoryNotes }}
-                          />
-                        </div>
-                      )}
-
-                      {(currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) && (currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) !== '<br>' && (
-                        <div>
-                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                            <ClipboardList className="w-3.5 h-3.5" /> Diet Plan
-                          </div>
-                          <div 
-                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                            dangerouslySetInnerHTML={{ __html: currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes }}
-                          />
-                        </div>
-                      )}
-
-                      {(currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) && (currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) !== '<br>' && (
-                        <div>
-                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                            <RefreshCw className="w-3.5 h-3.5" /> Detox Procedure
-                          </div>
-                          <div 
-                            className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                            dangerouslySetInnerHTML={{ __html: currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes }}
-                          />
-                        </div>
-                      )}
-
-                      {(currentConsultation.home_care || currentConsultation.homecareGuideliness) && (
-                        <div>
-                          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                            <Bed className="w-3.5 h-3.5" /> Home Care Guidelines
-                          </div>
-                          <div className="text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
-                            {currentConsultation.home_care || currentConsultation.homecareGuideliness}
-                          </div>
-                        </div>
-                      )}
-
-                      {(currentConsultation.detox_recommended || currentConsultation.detoxRecommended) && (
-                        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Star className="w-4 h-4 text-emerald-600" />
-                            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
-                          </div>
-                          <div className="space-y-2 text-sm text-slate-700">
+                          {(currentConsultation.consultation_notes || currentConsultation.consultationNotes) && (currentConsultation.consultation_notes || currentConsultation.consultationNotes) !== '<br>' && (
                             <div>
-                              <span className="font-semibold text-slate-800">Doctor:</span> {
-                                currentConsultation.detox_doctor_name || 
-                                currentConsultation.detoxDoctorName || 
-                                currentConsultation.doctor_name ||
-                                currentConsultation.doctor?.user?.fullName ||
-                                availableDoctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
-                                doctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
-                                'Assigned Provider'
-                              }
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <Activity className="w-3.5 h-3.5" /> Consultation Notes
+                              </div>
+                              <div 
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.consultation_notes || currentConsultation.consultationNotes }}
+                              />
                             </div>
-                            {(currentConsultation.followup_date || currentConsultation.followupDate) && (
-                              <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {formatDate(currentConsultation.followup_date || currentConsultation.followupDate)}</div>
-                            )}
-                            {(currentConsultation.followup_remarks || currentConsultation.followupRemarks) && (
-                              <div><span className="font-semibold text-slate-800">Remarks:</span> {currentConsultation.followup_remarks || currentConsultation.followupRemarks}</div>
-                            )}
-                          </div>
+                          )}
+
+                          {(currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) && (currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) !== '<br>' && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <ClipboardList className="w-3.5 h-3.5" /> Medical History
+                              </div>
+                              <div 
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.medical_history || currentConsultation.medicalHistoryNotes }}
+                              />
+                            </div>
+                          )}
+
+                          {(currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) && (currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) !== '<br>' && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <ClipboardList className="w-3.5 h-3.5" /> Diet Plan
+                              </div>
+                              <div 
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes }}
+                              />
+                            </div>
+                          )}
+
+                          {(currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) && (currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) !== '<br>' && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <RefreshCw className="w-3.5 h-3.5" /> Detox Procedure
+                              </div>
+                              <div 
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes }}
+                              />
+                            </div>
+                          )}
+
+                          {(currentConsultation.home_care || currentConsultation.homecareGuideliness) && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <Bed className="w-3.5 h-3.5" /> Home Care Guidelines
+                              </div>
+                              <div className="text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
+                                {currentConsultation.home_care || currentConsultation.homecareGuideliness}
+                              </div>
+                            </div>
+                          )}
+
+                          {(currentConsultation.detox_recommended || currentConsultation.detoxRecommended) && (
+                            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Star className="w-4 h-4 text-emerald-600" />
+                                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
+                              </div>
+                              <div className="space-y-2 text-sm text-slate-700">
+                                <div>
+                                  <span className="font-semibold text-slate-800">Doctor:</span> {
+                                    currentConsultation.detox_doctor_name || 
+                                    currentConsultation.detoxDoctorName || 
+                                    currentConsultation.doctor_name ||
+                                    currentConsultation.doctor?.user?.fullName ||
+                                    availableDoctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
+                                    'Assigned Provider'
+                                  }
+                                </div>
+                                {(currentConsultation.followup_date || currentConsultation.followupDate) && (
+                                  <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {formatDate(currentConsultation.followup_date || currentConsultation.followupDate)}</div>
+                                )}
+                                {(currentConsultation.followup_remarks || currentConsultation.followupRemarks) && (
+                                  <div><span className="font-semibold text-slate-800">Remarks:</span> {currentConsultation.followup_remarks || currentConsultation.followupRemarks}</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="py-12 text-center">
+                          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                          <p className="text-slate-500">No consultation records found</p>
+                          <p className="text-xs text-slate-400 mt-1">Complete a consultation to see notes here</p>
                         </div>
                       )}
-
-                      {(() => {
-                        const linkedDiet = dietCharts.find(d => d.consultation_id === currentConsultation.id);
-                        return linkedDiet && (
-                          <div className="bg-white border border-slate-200 rounded-xl p-4">
-                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                              <ClipboardList className="w-3.5 h-3.5" /> Diet Chart Details
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 text-sm">
-                              <div><span className="font-semibold text-slate-800">Morning:</span> <span className="text-slate-600">{linkedDiet.meals.morning || '—'}</span></div>
-                              <div><span className="font-semibold text-slate-800">Breakfast:</span> <span className="text-slate-600">{linkedDiet.meals.breakfast || '—'}</span></div>
-                              <div><span className="font-semibold text-slate-800">Lunch:</span> <span className="text-slate-600">{linkedDiet.meals.lunch || '—'}</span></div>
-                              <div><span className="font-semibold text-slate-800">Evening:</span> <span className="text-slate-600">{linkedDiet.meals.evening || '—'}</span></div>
-                              <div><span className="font-semibold text-slate-800">Dinner:</span> <span className="text-slate-600">{linkedDiet.meals.dinner || '—'}</span></div>
-                              {linkedDiet.remarks && (
-                                <div className="col-span-2"><span className="font-semibold text-slate-800">Remarks:</span> <span className="text-slate-600">{linkedDiet.remarks}</span></div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  ) : (
-                    <div className="py-12 text-center">
-                      <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      <p className="text-slate-500">No consultation records found</p>
-                      <p className="text-xs text-slate-400 mt-1">Complete a consultation to see notes here</p>
-                    </div>
+                    </>
                   )}
 
+                  {/* Detox Sessions History */}
+                  {historySubTab === 'detox' && (
+                    <>
+                      {currentDetoxSession ? (
+                        <div className="space-y-5">
+                          <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
+                                <Droplets className="w-5 h-5 text-teal-600" />
+                              </div>
+                              <div>
+                                <div className="text-sm font-bold text-slate-800">Detox Session {currentDetoxSession.sessionNumber || 1}</div>
+                                <div className="text-xs text-teal-600 font-medium">{getSessionTypeDisplay(currentDetoxSession.sessionType)}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                                {formatDate(currentDetoxSession.sessionDate || currentDetoxSession.scheduled_date)}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-1">Session Date</div>
+                            </div>
+                          </div>
+
+                          {/* Provider Info */}
+                          <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-slate-500" />
+                              <span className="text-sm text-slate-600">Provider:</span>
+                              <span className="text-sm font-semibold text-slate-800">
+                                {currentDetoxSession.doctor?.user?.fullName || currentDetoxSession.doctorName || 'Assigned Provider'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Detox Notes */}
+                          {(currentDetoxSession.detoxNotes || currentDetoxSession.notes) && (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <Activity className="w-3.5 h-3.5" /> Detox Procedure Notes
+                              </div>
+                              <div 
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentDetoxSession.detoxNotes || currentDetoxSession.notes || '<p class="text-slate-500">No notes recorded.</p>' }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Follow-up Details */}
+                          {(currentDetoxSession.followupDate || currentDetoxSession.followup_date) && (
+                            <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Calendar className="w-4 h-4 text-amber-600" />
+                                <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Follow-up Details</span>
+                              </div>
+                              <div className="space-y-2 text-sm text-slate-700">
+                                <div>
+                                  <span className="font-semibold text-slate-800">Follow-up Date:</span> {formatDate(currentDetoxSession.followupDate || currentDetoxSession.followup_date)}
+                                </div>
+                                {(currentDetoxSession.followupRemarks || currentDetoxSession.followup_remarks) && (
+                                  <div><span className="font-semibold text-slate-800">Remarks:</span> {currentDetoxSession.followupRemarks || currentDetoxSession.followup_remarks}</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="py-12 text-center">
+                          <Droplets className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                          <p className="text-slate-500">No detox session records found</p>
+                          <p className="text-xs text-slate-400 mt-1">Complete a detox session to see details here</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Pagination */}
                   {totalHistoryPages > 1 && (
                     <div className="mt-6 pt-4 border-t border-slate-100">
                       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="text-sm text-slate-600">
-                          Consultation <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalHistoryPages}</span>
+                          {historySubTab === 'consultations' ? 'Consultation' : 'Session'} <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalHistoryPages}</span>
                         </div>
                         
                         <div className="flex items-center gap-3">

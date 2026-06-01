@@ -24,6 +24,7 @@ import { getAllAppointments, createAppointment as apiCreateAppointment, updateAp
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
 import { getAllConsultations, createConsultation, updateConsultation, deleteConsultation } from './api/consultationApi';
+import { getAllDetoxSessions } from './api/detoxSessionApi';
 
 export default function App() {
   // Auth state
@@ -50,8 +51,6 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [timelinePatient, setTimelinePatient] = useState(null);
-
-  
 
   // Fetch patients from backend
   const fetchPatientsFromBackend = async () => {
@@ -83,7 +82,6 @@ export default function App() {
         consultationsData = response.data;
       }
       
-      // Normalize consultation data to match frontend expected format
       const normalizedConsultations = consultationsData.map(cons => ({
         id: cons.id,
         patient_id: cons.patientId,
@@ -107,7 +105,6 @@ export default function App() {
       
       setConsultations(normalizedConsultations);
 
-      // Populate followups state from consultations for persistence after refresh
       const patientLatestProcessed = new Set();
       const derivedFollowups = [...normalizedConsultations]
         .sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -135,11 +132,45 @@ export default function App() {
     }
   };
 
+  // Fetch detox sessions from backend
+  const fetchDetoxSessionsFromBackend = async () => {
+    try {
+      console.log('🟢 Fetching detox sessions from backend...');
+      const response = await getAllDetoxSessions();
+      console.log('🔍 Detox sessions response:', response);
+      
+      let sessionsData = [];
+      if (response && response.data) {
+        sessionsData = response.data;
+      } else if (response && Array.isArray(response)) {
+        sessionsData = response;
+      }
+      
+      const normalizedSessions = sessionsData.map(session => ({
+        id: session.id,
+        patientId: session.patientId || session.patient_id,
+        patient_id: session.patientId || session.patient_id,
+        doctorId: session.doctorId || session.doctor_id,
+        doctorName: session.doctor?.user?.fullName || session.doctor?.name,
+        sessionNumber: session.sessionNumber,
+        sessionType: session.sessionType,
+        sessionDate: session.sessionDate,
+        detoxNotes: session.detoxNotes,
+        followupDate: session.followupDate,
+        followupRemarks: session.followupRemarks,
+        doctor: session.doctor
+      }));
+      
+      setDetoxSessions(normalizedSessions);
+      console.log('✅ Detox sessions fetched successfully:', normalizedSessions.length);
+    } catch (error) {
+      console.error('🔴 Error fetching detox sessions:', error);
+      setDetoxSessions([]);
+    }
+  };
+
   const fetchDoctorsFromBackend = async () => {
     try {
-      // Only admins and receptionists are authorized to fetch the full directory of doctors.
-      // Skip this call for other roles (like doctors themselves) to prevent 403 errors 
-      // since they use the appointments extraction fallback instead.
       if (activeRole !== 'admin' && activeRole !== 'receptionist' && activeRole !== 'doctor') {
         console.log('ℹ️ Skipping staff list fetch for this role to avoid 403.');
         setDoctors([]);
@@ -241,7 +272,8 @@ export default function App() {
       fetchPatientsFromBackend(),
       fetchDoctorsFromBackend(),
       fetchAppointmentsFromBackend(),
-      fetchConsultationsFromBackend()
+      fetchConsultationsFromBackend(),
+      fetchDetoxSessionsFromBackend()
     ]);
   };
 
@@ -377,7 +409,6 @@ export default function App() {
 
     const newStatus = doctorInitiated ? 'Checked-in' : 'Arrived';
     
-    // Optimistic UI update: Immediately reflect arrival/check-in in local state
     setAppointments(prev => prev.map(a => 
       (String(a.id) === String(apptId)) ? { ...a, status: newStatus } : a
     ));
@@ -414,88 +445,79 @@ export default function App() {
     }
   };
 
- const handleAddConsultation = async (newCons, apptId) => {
-  try {
-    // If this is just an appointment status update (no consultation data)
-    if (!newCons) {
+  const handleAddConsultation = async (newCons, apptId) => {
+    try {
+      if (!newCons) {
+        if (apptId) {
+          await apiUpdateStatus(apptId, 'Completed');
+          setAppointments(prev => prev.map(a => 
+            (String(a.id) === String(apptId)) ? { ...a, status: 'Completed' } : a
+          ));
+        }
+        return { id: null };
+      }
+      
+      const patientId = Number(String(newCons.patient_id).replace(/^\D+/g, ''));
+      const doctorIdValue = newCons.doctor_id || doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id || 0;
+      const doctorId = Number(String(doctorIdValue).replace(/^\D+/g, ''));
+      const appointmentId = apptId ? parseInt(String(apptId).replace(/^\D+/g, ''), 10) : undefined;
+
+      const consultationData = {
+        patientId,
+        doctorId,
+        appointmentId: isNaN(appointmentId) ? undefined : appointmentId,
+        consultationNotes: newCons.consultation_notes,
+        medicalHistoryNotes: newCons.medical_history,
+        detoxProcedureNotes: newCons.detox_procedure,
+        dietPlanNotes: newCons.diet_plan_note,
+        homecareGuideliness: newCons.home_care,
+        detoxRecommended: newCons.detox_recommended || false,
+        detoxDoctorId: newCons.detox_doctor_id,
+        detoxDoctorName: newCons.detox_doctor_name,
+        followupDate: newCons.followup_date,
+        followupRemarks: newCons.followup_remarks
+      };
+
+      if (isNaN(patientId)) throw new Error("Invalid Patient ID format.");
+      if (isNaN(doctorId) || doctorId === 0) throw new Error("A valid Doctor must be assigned to save history.");
+      
+      const existingConsultation = consultations.find(c => c.appointment_id === appointmentId);
+      if (existingConsultation) {
+        console.log('⚠️ Consultation already exists for this appointment, updating instead of creating new');
+        const updatedConsultation = await updateConsultation(existingConsultation.id, consultationData);
+        setConsultations(prev => prev.map(c => 
+          c.id === existingConsultation.id ? { ...updatedConsultation, ...newCons } : c
+        ));
+        toast.success('Consultation updated successfully!');
+        return updatedConsultation;
+      }
+      
       if (apptId) {
-        await apiUpdateStatus(apptId, 'Completed');
         setAppointments(prev => prev.map(a => 
           (String(a.id) === String(apptId)) ? { ...a, status: 'Completed' } : a
         ));
       }
-      return { id: null };
-    }
-    
-    // Prepare data for API
-    const patientId = Number(String(newCons.patient_id).replace(/^\D+/g, ''));
-    const doctorIdValue = newCons.doctor_id || doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id || 0;
-    const doctorId = Number(String(doctorIdValue).replace(/^\D+/g, ''));
-    const appointmentId = apptId ? parseInt(String(apptId).replace(/^\D+/g, ''), 10) : undefined;
 
-    const consultationData = {
-      patientId,
-      doctorId,
-      appointmentId: isNaN(appointmentId) ? undefined : appointmentId,
-      consultationNotes: newCons.consultation_notes,
-      medicalHistoryNotes: newCons.medical_history,
-      detoxProcedureNotes: newCons.detox_procedure,
-      dietPlanNotes: newCons.diet_plan_note,
-      homecareGuideliness: newCons.home_care,
-      detoxRecommended: newCons.detox_recommended || false,
-      detoxDoctorId: newCons.detox_doctor_id,
-      detoxDoctorName: newCons.detox_doctor_name,
-      followupDate: newCons.followup_date,
-      followupRemarks: newCons.followup_remarks
-    };
-
-    if (isNaN(patientId)) throw new Error("Invalid Patient ID format.");
-    if (isNaN(doctorId) || doctorId === 0) throw new Error("A valid Doctor must be assigned to save history.");
-    
-    // CHECK if consultation already exists for this appointment
-    const existingConsultation = consultations.find(c => c.appointment_id === appointmentId);
-    if (existingConsultation) {
-      console.log('⚠️ Consultation already exists for this appointment, updating instead of creating new');
-      // Update existing consultation instead of creating new
-      const updatedConsultation = await updateConsultation(existingConsultation.id, consultationData);
-      setConsultations(prev => prev.map(c => 
-        c.id === existingConsultation.id ? { ...updatedConsultation, ...newCons } : c
-      ));
-      toast.success('Consultation updated successfully!');
-      return updatedConsultation;
-    }
-    
-    // Optimistic UI update
-    if (apptId) {
-      setAppointments(prev => prev.map(a => 
-        (String(a.id) === String(apptId)) ? { ...a, status: 'Completed' } : a
-      ));
-    }
-
-    // Save to backend
-    const createdConsultation = await createConsultation(consultationData);
-    console.log('✅ Consultation saved to backend:', createdConsultation);
-    
-    // Update appointment status
-    if (apptId) {
-      try {
-        await apiUpdateStatus(apptId, 'Completed');
-      } catch (statusError) {
-        console.error('⚠️ API Status update failed:', statusError);
+      const createdConsultation = await createConsultation(consultationData);
+      console.log('✅ Consultation saved to backend:', createdConsultation);
+      
+      if (apptId) {
+        try {
+          await apiUpdateStatus(apptId, 'Completed');
+        } catch (statusError) {
+          console.error('⚠️ API Status update failed:', statusError);
+        }
       }
+
+      setConsultations(prev => [...prev, { ...newCons, id: createdConsultation.id }]);
+      toast.success('Consultation saved successfully!');
+      return createdConsultation;
+    } catch (error) {
+      console.error('Error saving consultation:', error);
+      toast.error('Failed to save consultation. Please try again.');
+      throw error;
     }
-
-    // Update consultations list
-    setConsultations(prev => [...prev, { ...newCons, id: createdConsultation.id }]);
-
-    toast.success('Consultation saved successfully!');
-    return createdConsultation;
-  } catch (error) {
-    console.error('Error saving consultation:', error);
-    toast.error('Failed to save consultation. Please try again.');
-    throw error;
-  }
-};
+  };
 
   const handleAddPrescription = (newPresc) => {
     setPrescriptions(prev => [...prev, newPresc]);
@@ -599,7 +621,6 @@ export default function App() {
     return <LoginView onLogin={handleLogin} />;
   }
 
-  // Create currentUser object for components
   const currentUserObj = {
     id: currentUserId,
     email: currentUser,
@@ -663,14 +684,14 @@ export default function App() {
         );
       case 'doctor-master':
         return <DoctorMasterView doctors={doctors} setDoctors={setDoctors} />;
-     case 'change-my-pin':
-  return (
-    <ChangeMyPin 
-      currentUser={currentUserObj} 
-      onLogout={handleLogout}
-      onCancel={() => setActiveTab('dashboard')}
-    />
-  );
+      case 'change-my-pin':
+        return (
+          <ChangeMyPin 
+            currentUser={currentUserObj} 
+            onLogout={handleLogout}
+            onCancel={() => setActiveTab('dashboard')}
+          />
+        );
       case 'user-management':
         return activeRole === 'admin' ? (
           <UserManagementView activeRole={activeRole} activeTab={activeTab} currentUser={currentUserObj} />
