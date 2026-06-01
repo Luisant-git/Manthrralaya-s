@@ -153,7 +153,8 @@ export default function PatientTimeline({
     });
   });
 
-  const sortedEvents = timelineEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
+ // Sort events by date in DESCENDING order (newest/latest first)
+const sortedEvents = timelineEvents.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">

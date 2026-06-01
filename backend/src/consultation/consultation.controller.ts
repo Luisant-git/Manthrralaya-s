@@ -88,4 +88,10 @@ export class ConsultationController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.consultationService.remove(id);
   }
+
+  @Delete('cleanup-duplicates')
+@Roles('ADMIN')
+async cleanupDuplicates() {
+  return this.consultationService.cleanupDuplicates();
+}
 }

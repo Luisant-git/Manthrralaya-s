@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon } from 'lucide-react';
-import { createDetoxSession, getDetoxSessionsByPatient, getPatientDetoxProgress } from '../api/detoxSessionApi';
+import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp } from 'lucide-react';
+import { createDetoxSession, getAllDetoxSessions } from '../api/detoxSessionApi';
+import { getAllConsultations } from '../api/consultationApi';
 import { toast } from 'react-toastify';
 
 export default function DetoxView({ 
@@ -16,8 +17,11 @@ export default function DetoxView({
 }) {
   const [selectedApptId, setSelectedApptId] = useState('');
   const [selectedTab, setSelectedTab] = useState('detox');
+  const [historySubTab, setHistorySubTab] = useState('detox');
   const [historyPage, setHistoryPage] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [localDetoxSessions, setLocalDetoxSessions] = useState([]);
+  const [localConsultations, setLocalConsultations] = useState([]);
   
   // Detox Notes state
   const [detoxNotes, setDetoxNotes] = useState('');
@@ -32,6 +36,17 @@ export default function DetoxView({
   const detoxEditorRef = useRef(null);
   const todayDate = new Date().toLocaleDateString('en-CA');
 
+  // Function to get session count for a patient
+  const getPatientSessionCount = (patientId) => {
+    const sessions = localDetoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+    return {
+      completed: sessions.length,
+      total: 3,
+      remaining: 3 - sessions.length
+    };
+  };
+
+  // Editor functions
   const applyEditorCommand = (command, value, editorRef, setter) => {
     if (!editorRef?.current) return;
     editorRef.current.focus();
@@ -208,6 +223,73 @@ export default function DetoxView({
     </div>
   );
 
+  // Fetch detox sessions and consultations directly from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const detoxResponse = await getAllDetoxSessions();
+        let sessionsData = [];
+        if (detoxResponse && detoxResponse.data) {
+          sessionsData = detoxResponse.data;
+        } else if (detoxResponse && Array.isArray(detoxResponse)) {
+          sessionsData = detoxResponse;
+        }
+        
+        const normalizedSessions = sessionsData.map(session => ({
+          id: session.id,
+          patientId: session.patientId || session.patient_id,
+          patient_id: session.patientId || session.patient_id,
+          doctorId: session.doctorId || session.doctor_id,
+          doctorName: session.doctor?.user?.fullName || session.doctor?.name,
+          sessionNumber: session.sessionNumber,
+          sessionType: session.sessionType,
+          sessionDate: session.sessionDate,
+          detoxNotes: session.detoxNotes,
+          followupDate: session.followupDate,
+          followupRemarks: session.followupRemarks,
+          doctor: session.doctor
+        }));
+        
+        setLocalDetoxSessions(normalizedSessions);
+        
+        const consResponse = await getAllConsultations();
+        let consultationsData = [];
+        if (consResponse && consResponse.data) {
+          consultationsData = consResponse.data;
+        } else if (consResponse && Array.isArray(consResponse)) {
+          consultationsData = consResponse;
+        }
+        
+        const normalizedConsultations = consultationsData.map(cons => ({
+          id: cons.id,
+          patient_id: cons.patientId,
+          doctor_id: cons.doctorId,
+          doctor_name: cons.doctor?.user?.fullName || cons.doctor?.name,
+          date: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          consultation_notes: cons.consultationNotes,
+          medical_history: cons.medicalHistoryNotes,
+          detox_procedure: cons.detoxProcedureNotes,
+          diet_plan_note: cons.dietPlanNotes,
+          home_care: cons.homecareGuideliness,
+          detox_recommended: cons.detoxRecommended,
+          detox_type: cons.detoxType,
+          detox_doctor_id: cons.detoxDoctorId,
+          detox_doctor_name: cons.detoxDoctor?.user?.fullName || cons.detoxDoctor?.name,
+          followup_date: cons.followupDate,
+          followup_remarks: cons.followupRemarks,
+          consultation_notes_html: cons.consultationNotes,
+          medical_history_html: cons.medicalHistoryNotes
+        }));
+        
+        setLocalConsultations(normalizedConsultations);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    };
+    
+    fetchData();
+  }, []);
+
   // Check if appointment is detox type
   const isDetoxAppointment = (appt) => {
     return String(appt?.appointmentType || '').toLowerCase().includes('detox');
@@ -240,7 +322,7 @@ export default function DetoxView({
     }
   }
 
-  // CRITICAL: Filter appointments - EXCLUDE appointments that already have a consultation
+  // Filter appointments
   const pendingConsults = appointments.filter(a => {
     const rawDate = a.appointmentDate || a.date;
     let apptDateStr = '';
@@ -256,21 +338,14 @@ export default function DetoxView({
     const isCheckedIn = a.status === 'Checked-in';
     const isDetox = isDetoxAppointment(a);
     
-    // CRITICAL: Check if this appointment already has a consultation
-    const hasConsultation = consultations.some(c => 
+    const hasConsultation = localConsultations.some(c => 
       c.appointment_id === a.id || 
       String(c.appointment_id) === String(a.id) ||
       (c.appointment_id && Number(c.appointment_id) === Number(a.id))
     );
     
-    // Only show if: today, checked-in, detox, NO existing consultation
     const shouldShow = isToday && isCheckedIn && isDetox && !hasConsultation;
     
-    if (!shouldShow && isToday && isCheckedIn && isDetox && hasConsultation) {
-      console.log(`🚫 Appointment ${a.id} hidden - already has consultation`);
-    }
-    
-    // Filter by doctor
     if (shouldShow && isDoctorView && currentDoctorId) {
       const appointmentDoctorId = Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id);
       return appointmentDoctorId === currentDoctorId;
@@ -279,12 +354,6 @@ export default function DetoxView({
     return shouldShow;
   });
 
-  console.log('📋 Pending Consults:', pendingConsults.map(a => ({ 
-    id: a.id, 
-    status: a.status, 
-    hasConsultation: consultations.some(c => c.appointment_id === a.id)
-  })));
-
   const activeAppt = pendingConsults.find(a => String(a.id) === String(selectedApptId)) || pendingConsults[0];
   const activePt = activeAppt 
     ? (patients.find(p => String(p.id) === String(activeAppt.patient_id || activeAppt.patientId)) || 
@@ -292,25 +361,22 @@ export default function DetoxView({
        activeAppt.Patient) 
     : null;
 
-  // Check if this specific appointment already has a detox consultation
-  const appointmentHasDetox = activeAppt 
-    ? consultations.some(c => 
-        (c.appointment_id === activeAppt.id || String(c.appointment_id) === String(activeAppt.id)) && 
-        c.detox_recommended === true
-      )
-    : false;
-
   const appointmentHasAnyConsultation = activeAppt 
-    ? consultations.some(c => c.appointment_id === activeAppt.id || String(c.appointment_id) === String(activeAppt.id))
+    ? localConsultations.some(c => c.appointment_id === activeAppt.id || String(c.appointment_id) === String(activeAppt.id))
     : false;
 
-  // Can only add session if appointment has NO consultation at all
   const canAddSession = !appointmentHasAnyConsultation;
 
   // Get consultation history for this patient
   const consHistory = activePt 
-    ? consultations.filter(c => String(c.patient_id) === String(activePt.id))
+    ? localConsultations.filter(c => String(c.patient_id) === String(activePt.id))
         .sort((a, b) => new Date(b.date) - new Date(a.date))
+    : [];
+
+  // Get detox session history for this patient
+  const detoxHistory = activePt 
+    ? localDetoxSessions.filter(d => String(d.patientId || d.patient_id) === String(activePt.id))
+        .sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate))
     : [];
 
   useEffect(() => {
@@ -321,7 +387,7 @@ export default function DetoxView({
 
   useEffect(() => {
     setHistoryPage(1);
-  }, [activePt?.id, selectedTab]);
+  }, [activePt?.id, selectedTab, historySubTab]);
 
   const getSessionTypeDisplay = (type) => {
     switch(type) {
@@ -365,66 +431,63 @@ export default function DetoxView({
       const doctorId = Number(activeAppt.doctor_id || activeAppt.doctorId || currentDoctorId || 0);
       const sessionTypeDisplay = getSessionTypeDisplay(sessionType);
       
-      // Save detox session to backend
-     const detoxData = {
-  patientId: activePt.id,
-  doctorId: doctorId || null,
-  appointmentId: activeAppt.id ? parseInt(String(activeAppt.id).replace(/^\D+/g, ''), 10) : null,
-  sessionNumber: 1,  // Always 1, not sessionCount + 1
-  sessionType: sessionType,
-  sessionDate: new Date().toISOString(),
-  detoxNotes: detoxNotes,
-  followupDate: followupDate,
-  followupRemarks: followupRemarks
-};
+      const detoxData = {
+        patientId: activePt.id,
+        doctorId: doctorId || null,
+        appointmentId: activeAppt.id ? parseInt(String(activeAppt.id).replace(/^\D+/g, ''), 10) : null,
+        sessionNumber: detoxHistory.length + 1, // Increment session number
+        sessionType: sessionType,
+        sessionDate: new Date().toISOString(),
+        detoxNotes: detoxNotes,
+        followupDate: followupDate,
+        followupRemarks: followupRemarks
+      };
       
       console.log('💾 Saving detox session:', detoxData);
       const savedSession = await createDetoxSession(detoxData);
       console.log('✅ Detox session saved:', savedSession);
       
-      // Create consultation record for this detox session
-      const newDetoxConsultation = {
-        id: savedSession.id || `DETOX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        patient_id: activePt.id,
-        doctor_id: doctorId,
-        doctor_name: doctorName,
-        appointment_id: activeAppt.id,
-        date: new Date().toISOString().split('T')[0],
-        consultation_notes: '',
-        medical_history: '',
-        detox_procedure: detoxNotes,
-        diet_plan_note: '',
-        home_care: '',
-        detox_recommended: true,
-        detox_doctor_id: doctorId || currentDoctorId,
-        detox_doctor_name: doctorName || 'Assigned Provider',
-        detox_type: sessionTypeDisplay,
-        detox_session_type: sessionType,
-        followup_date: followupDate,
-        followup_remarks: followupRemarks,
-        session_number: 1,
-        doctor_name: doctorName || 'Assigned Provider' // Ensure top-level mapping for history consistency
-      };
-
-      // Save consultation - this will mark appointment as Completed
       if (onAddConsultation) {
-        await onAddConsultation(newDetoxConsultation, currentApptId);
+        await onAddConsultation(null, currentApptId);
       }
       
       if (onAddDetoxSession) {
         onAddDetoxSession(savedSession, activePt);
       }
       
-      // Clear the selected appointment to remove it from UI
-      setSelectedApptId('');
+      // Refresh local data
+      const [detoxResponse] = await Promise.all([
+        getAllDetoxSessions()
+      ]);
       
-      // Reset form
+      let sessionsData = [];
+      if (detoxResponse && detoxResponse.data) {
+        sessionsData = detoxResponse.data;
+      } else if (detoxResponse && Array.isArray(detoxResponse)) {
+        sessionsData = detoxResponse;
+      }
+      setLocalDetoxSessions(sessionsData.map(session => ({
+        id: session.id,
+        patientId: session.patientId || session.patient_id,
+        patient_id: session.patientId || session.patient_id,
+        doctorId: session.doctorId || session.doctor_id,
+        doctorName: session.doctor?.user?.fullName || session.doctor?.name,
+        sessionNumber: session.sessionNumber,
+        sessionType: session.sessionType,
+        sessionDate: session.sessionDate,
+        detoxNotes: session.detoxNotes,
+        followupDate: session.followupDate,
+        followupRemarks: session.followupRemarks,
+        doctor: session.doctor
+      })));
+      
+      setSelectedApptId('');
       setDetoxNotes('');
       setSessionType('morning');
       setFollowupDate(new Date().toISOString().split('T')[0]);
       setFollowupRemarks('Call patient later to confirm detox preparation and next steps.');
       
-      toast.success(`Detox ${sessionTypeDisplay} completed successfully!`);
+      toast.success(`Detox ${sessionTypeDisplay} (Session ${detoxHistory.length + 1}/3) completed successfully!`);
     } catch (error) {
       console.error('❌ Error saving detox session:', error);
       toast.error(error.message || 'Failed to save detox session. Please try again.');
@@ -433,30 +496,12 @@ export default function DetoxView({
     }
   };
 
-  // Pagination for history
+  // Pagination
   const historyPageSize = 3;
-  const totalHistoryPages = Math.max(1, Math.ceil(consHistory.length / historyPageSize));
-  const pagedHistory = consHistory.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
-
-  const getConsultationTypeBadge = (consultation) => {
-    if (consultation.detox_recommended) {
-      const sessionType = consultation.detox_session_type || 
-        (consultation.detox_type?.toLowerCase().includes('morning') ? 'morning' :
-         consultation.detox_type?.toLowerCase().includes('evening') ? 'evening' : 'fullDay');
-      return (
-        <div className="flex items-center gap-1">
-          <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-semibold flex items-center gap-1">
-            {getSessionTypeIcon(sessionType)}
-            Detox Session
-          </span>
-          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">
-            {consultation.detox_type || getSessionTypeDisplay(sessionType)}
-          </span>
-        </div>
-      );
-    }
-    return <span className="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 text-[10px] font-semibold">Regular Consultation</span>;
-  };
+  const totalDetoxPages = Math.max(1, Math.ceil(detoxHistory.length / historyPageSize));
+  const pagedDetoxHistory = detoxHistory.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
+  const totalConsultationPages = Math.max(1, Math.ceil(consHistory.length / historyPageSize));
+  const pagedConsultationHistory = consHistory.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
 
   return (
     <>
@@ -489,7 +534,7 @@ export default function DetoxView({
               Detox Therapy Sessions
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Manage detox procedures for patients. Each appointment allows one detox session.
+              Manage detox procedures for patients. Each patient can complete up to 3 sessions.
             </p>
           </div>
         </div>
@@ -498,7 +543,7 @@ export default function DetoxView({
           {/* Left Column: Waiting Queue */}
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm h-fit">
             <h3 className="font-bold text-slate-800 text-base mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
-              <CheckCircle className="w-5 h-5 text-emerald-600" /> Detox Queue
+              <CheckCircle className="w-5 h-5 text-emerald-600" /> Detox Queue ({pendingConsults.length})
             </h3>
             <p className="text-sm text-slate-500 mb-4">Checked-in patients ready for detox session.</p>
             <div className="space-y-3">
@@ -508,6 +553,9 @@ export default function DetoxView({
                              appt.patient || 
                              appt.Patient || 
                              {};
+                  const sessionCount = getPatientSessionCount(pt.id);
+                  const progressPercentage = (sessionCount.completed / sessionCount.total) * 100;
+                  
                   return (
                     <button
                       key={appt.id}
@@ -523,10 +571,26 @@ export default function DetoxView({
                           <div className="font-bold text-slate-800 text-sm">{pt.name ?? pt.fullName ?? 'Unknown Patient'}</div>
                           <div className="text-xs text-slate-500 mt-1">{pt.age ?? '--'} yrs, {pt.gender ?? '--'}</div>
                         </div>
-                        <div className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
-                          Detox
-                        </div>
+                        {/* Session Progress Capsule - Same location as Detox badge */}
+<div className={`text-[13px] font-bold px-2 py-1 rounded-full flex items-center gap-1 ${
+  sessionCount.completed === 3 
+    ? 'bg-emerald-100 text-emerald-700'
+    : sessionCount.completed === 2
+    ? 'bg-amber-100 text-amber-700'
+    : 'bg-blue-100 text-blue-700'
+}`}>
+  {sessionCount.completed === 3 ? (
+    <CheckCircle className="w-3 h-3" />
+  ) : (
+    <Activity className="w-3 h-3" />
+  )}
+  <span>{sessionCount.completed}/{sessionCount.total}</span>
+</div>
                       </div>
+                      
+                      {/* Session Progress Indicator */}
+                      
+                      
                       <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">
                         Assigned to: {appt.doctor_name || 'Assigned Provider'}
                       </div>
@@ -546,7 +610,7 @@ export default function DetoxView({
             {activeAppt && activePt ? (
               <div className="divide-y divide-slate-100">
                 
-                {/* Header Info */}
+                {/* Header Info with Session Progress */}
                 <div className="p-5 bg-slate-50 flex justify-between items-center flex-wrap gap-3">
                   <div>
                     <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -560,10 +624,23 @@ export default function DetoxView({
                       <span>Conditions: {activePt.medical_conditions || 'None'}</span>
                     </div>
                   </div>
-                  <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">
-                    Detox Session
+                  <div className="text-right">
+                    <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">
+                      Detox Session
+                    </div>
+                    <div className="mt-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <TrendingUp className="w-3 h-3 text-emerald-600" />
+                        <span className="text-slate-600">Progress:</span>
+                        <span className="font-bold text-emerald-700">
+                          {getPatientSessionCount(activePt.id).completed}/3 Sessions
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
+
+               
 
                 <div className="p-5 flex flex-wrap items-center gap-3 bg-white border-b border-slate-100">
                   <button
@@ -588,12 +665,27 @@ export default function DetoxView({
                     }`}
                   >
                     <ClipboardList className="w-4 h-4" />
-                    History ({consHistory.length})
+                    History
                   </button>
                 </div>
 
                 {selectedTab === 'detox' ? (
                   <>
+                    {/* Show current session info */}
+                    <div className="px-5 pt-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-blue-600" />
+                            <span className="text-sm font-semibold text-blue-800">Current Session</span>
+                          </div>
+                          <span className="text-sm font-bold text-blue-800">
+                            Session {getPatientSessionCount(activePt.id).completed + 1}/3
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Session Type Selection */}
                     <div className="p-5 space-y-4">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
@@ -659,7 +751,17 @@ export default function DetoxView({
                         Detox Session Notes
                       </h3>
                       
-                      {!canAddSession ? (
+                      {getPatientSessionCount(activePt.id).completed >= 3 ? (
+                        <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
+                          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                          <div className="text-green-700 font-semibold mb-2">
+                            Treatment Complete!
+                          </div>
+                          <p className="text-sm text-green-600">
+                            This patient has completed all 3 detox sessions. No more sessions can be added.
+                          </p>
+                        </div>
+                      ) : !canAddSession ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
                           <div className="text-amber-700 font-semibold mb-2">
                             This appointment already has a completed session.
@@ -673,13 +775,13 @@ export default function DetoxView({
                           editorRef={detoxEditorRef}
                           content={detoxNotes}
                           setContent={setDetoxNotes}
-                          placeholder="Enter detox procedure notes, observations, recommendations..."
+                          placeholder={`Enter detox procedure notes for Session ${getPatientSessionCount(activePt.id).completed + 1}/3...`}
                         />
                       )}
                     </div>
 
                     {/* Followup Section */}
-                    {canAddSession && (
+                    {canAddSession && getPatientSessionCount(activePt.id).completed < 3 && (
                       <div className="p-5 bg-emerald-50 border-y border-emerald-100">
                         <div className="flex items-center gap-3">
                           <Calendar className="w-5 h-5 text-emerald-600" />
@@ -723,9 +825,9 @@ export default function DetoxView({
                     <div className="p-5 bg-slate-50 flex justify-end">
                       <button
                         onClick={handleSaveDetoxSession}
-                        disabled={!canAddSession || !detoxNotes.trim() || isSaving}
+                        disabled={!canAddSession || !detoxNotes.trim() || isSaving || getPatientSessionCount(activePt.id).completed >= 3}
                         className={`bg-emerald-600 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm ${
-                          (!canAddSession || !detoxNotes.trim() || isSaving) 
+                          (!canAddSession || !detoxNotes.trim() || isSaving || getPatientSessionCount(activePt.id).completed >= 3) 
                             ? 'opacity-50 cursor-not-allowed' 
                             : 'hover:bg-emerald-700'
                         }`}
@@ -738,7 +840,7 @@ export default function DetoxView({
                         ) : (
                           <>
                             <Save className="w-4 h-4" /> 
-                            Save Detox Session
+                            Save Session {getPatientSessionCount(activePt.id).completed + 1}/3
                           </>
                         )}
                       </button>
@@ -748,158 +850,323 @@ export default function DetoxView({
                   <div className="p-5 space-y-4 consultation-history">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                       <FileText className="w-5 h-5 text-emerald-600" />
-                      Detox Procedure History
+                      Patient History - {activePt.name}
                     </h3>
-                    <p className="text-sm text-slate-500">
-                      Showing procedure logs and clinical notes for {activePt.name} ({consHistory.length} total records)
-                    </p>
                     
-                    <div className="space-y-4">
-                      {pagedHistory.length > 0 ? (
-                        pagedHistory.map((record) => {
-                          const isDetox = record.detox_recommended === true;
-                          return (
+                    {/* History Sub Tabs */}
+                    <div className="flex flex-wrap gap-3 border-b border-slate-200 pb-3">
+                      <button
+                        type="button"
+                        onClick={() => { setHistorySubTab('detox'); setHistoryPage(1); }}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
+                          historySubTab === 'detox' 
+                            ? 'bg-emerald-600 text-white shadow-sm' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Droplets className="w-4 h-4" />
+                        Detox Sessions ({detoxHistory.length}/3)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setHistorySubTab('consultations'); setHistoryPage(1); }}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
+                          historySubTab === 'consultations' 
+                            ? 'bg-emerald-600 text-white shadow-sm' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Stethoscope className="w-4 h-4" />
+                        Medical Consultations ({consHistory.length})
+                      </button>
+                    </div>
+
+                {/* Detox Sessions History with Progress */}
+{historySubTab === 'detox' && (
+  <div className="space-y-4">
+    {pagedDetoxHistory.length > 0 ? (
+      pagedDetoxHistory.map((session) => (
+        <div key={session.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+            <div>
+              <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold flex items-center gap-2">
+                <Calendar className="w-3 h-3" />
+                {session.sessionDate ? new Date(session.sessionDate).toLocaleDateString('en-CA') : new Date().toLocaleDateString('en-CA')}
+              </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <h4 className="text-xl font-bold text-slate-900">Detox Session {session.sessionNumber}</h4>
+                <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-semibold flex items-center gap-1">
+                  {getSessionTypeIcon(session.sessionType)}
+                  {getSessionTypeDisplay(session.sessionType)}
+                </span>
+              </div>
+              <div className="text-sm text-slate-600 mt-1">
+                Patient: {activePt.name} • ID: {activePt.id}
+              </div>
+            </div>
+            <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+              Provider: {session.doctorName || 'Assigned Provider'}
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+              <Activity className="w-3 h-3" />
+              Detox Procedure Notes
+            </div>
+            <div
+              className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
+              dangerouslySetInnerHTML={{ 
+                __html: session.detoxNotes || '<p class="text-slate-500">No detox notes recorded.</p>' 
+              }}
+            />
+          </div>
+
+          {session.followupDate && (
+            <div className="mt-4 pt-3 border-t border-slate-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="text-sm">
+                  <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">
+                    Follow-up Date
+                  </span>
+                  <div className="text-slate-700 font-medium mt-1">
+                    {new Date(session.followupDate).toLocaleDateString('en-CA')}
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>
+                  <div className="text-slate-700 mt-1">{session.followupRemarks || 'No specific follow-up instructions.'}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 pt-3 border-t border-slate-200">
+            <div className="text-xs text-slate-400">
+              Session #{session.sessionNumber} • Record ID: {session.id}
+            </div>
+          </div>
+
+          
+        </div>
+      ))
+    ) : (
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
+        <Droplets className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+        No detox session history found for this patient.
+      </div>
+    )}
+    
+    {/* Pagination */}
+    {detoxHistory.length > 0 && totalDetoxPages > 1 && (
+      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="text-sm text-slate-500">
+          Showing {Math.min(detoxHistory.length, historyPageSize)} of {detoxHistory.length} records
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+            disabled={historyPage <= 1}
+            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+              historyPage <= 1 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            ← Previous
+          </button>
+          <span className="text-sm font-medium text-slate-600">
+            Page {historyPage} of {totalDetoxPages}
+          </span>
+          <button
+            onClick={() => setHistoryPage(prev => Math.min(totalDetoxPages, prev + 1))}
+            disabled={historyPage >= totalDetoxPages}
+            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+              historyPage >= totalDetoxPages 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Next →
+          </button>
+        </div>
+      </div>
+    )}
+
+    {/* Overall Progress Summary - at the bottom after pagination */}
+    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-4 border border-emerald-200 mt-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-semibold text-emerald-800">Overall Detox Progress</span>
+        <span className="text-sm font-bold text-emerald-800">{detoxHistory.length}/3 Sessions</span>
+      </div>
+      <div className="w-full bg-slate-200 rounded-full h-2.5">
+        <div 
+          className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500"
+          style={{ width: `${(detoxHistory.length / 3) * 100}%` }}
+        />
+      </div>
+      {detoxHistory.length === 3 && (
+        <div className="mt-2 text-xs text-emerald-700 font-semibold flex items-center gap-1">
+          <CheckCircle className="w-3 h-3" />
+          Patient has completed all 3 detox sessions!
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+                    {/* Medical Consultations History */}
+                    {historySubTab === 'consultations' && (
+                      <div className="space-y-4">
+                        {pagedConsultationHistory.length > 0 ? (
+                          pagedConsultationHistory.map((record) => (
                             <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
                               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
                                 <div>
-                                  <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold flex items-center gap-2">
-                                    <Calendar className="w-3 h-3" />
-                                    {record.date}
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <h4 className="text-xl font-bold text-slate-900">
-                                      {isDetox ? 'Detox Session' : 'Medical Consultation'}
-                                    </h4>
-                                    {getConsultationTypeBadge(record)}
-                                  </div>
-                                  <div className="text-sm text-slate-600 mt-1">
-                                    Patient: {activePt.name} • ID: {activePt.id}
-                                  </div>
+                                  <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
+                                  <h4 className="text-xl font-bold text-slate-900 mt-1">{activePt.name}</h4>
+                                  <div className="text-sm text-slate-600">Patient ID: P-{activePt.id}</div>
                                 </div>
                                 <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
                                   Provider: {record.doctor_name || 'Assigned Provider'}
                                 </div>
                               </div>
 
-                              {isDetox ? (
-                                <>
-                                  <div className="mt-3">
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                      <Activity className="w-3 h-3" />
-                                      Detox Procedure Notes
-                                    </div>
-                                    <div
-                                      className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                      dangerouslySetInnerHTML={{ 
-                                        __html: record.detox_procedure || '<p class="text-slate-500">No detox notes recorded.</p>' 
-                                      }}
-                                    />
+                              {/* Row 1: Consultation Notes & Medical History */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                    <Activity className="w-3 h-3" /> Consultation Notes
                                   </div>
+                                  <div 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px]" 
+                                    dangerouslySetInnerHTML={{ 
+                                      __html: record.consultation_notes || '<p class="text-slate-500 italic">No notes recorded.</p>' 
+                                    }} 
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                    <FileText className="w-3 h-3" /> Medical History
+                                  </div>
+                                  <div 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px]" 
+                                    dangerouslySetInnerHTML={{ 
+                                      __html: record.medical_history || '<p class="text-slate-500 italic">No medical history recorded.</p>' 
+                                    }} 
+                                  />
+                                </div>
+                              </div>
 
-                                  {record.followup_date && (
-                                    <div className="mt-4 pt-3 border-t border-slate-200">
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="text-sm">
-                                          <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">
-                                            Follow-up Date
-                                          </span>
-                                          <div className="text-slate-700 font-medium mt-1">
-                                            {record.followup_date}
-                                          </div>
-                                        </div>
-                                        <div className="text-sm">
-                                          <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>
-                                          <div className="text-slate-700 mt-1">
-                                            {record.followup_remarks || 
-                                             record.followupRemarks || 
-                                             record.consultation_notes || 
-                                             record.consultationNotes || 
-                                             'No specific follow-up instructions.'}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                  <div>
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Consultation Notes</div>
-                                    <div
-                                      className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                      dangerouslySetInnerHTML={{ 
-                                        __html: record.consultation_notes || '<p class="text-slate-500">No notes recorded.</p>' 
-                                      }}
-                                    />
+                              {/* Row 2: Detox Procedure Note & Diet Plan Note */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                    <Droplets className="w-3 h-3" /> Detox Procedure Note
                                   </div>
-                                  <div>
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Medical History</div>
-                                    <div
-                                      className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                      dangerouslySetInnerHTML={{ 
-                                        __html: record.medical_history || '<p class="text-slate-500">No history recorded.</p>' 
-                                      }}
-                                    />
+                                  <div 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px]" 
+                                    dangerouslySetInnerHTML={{ 
+                                      __html: record.detox_procedure || '<p class="text-slate-500 italic">No detox procedure notes recorded.</p>' 
+                                    }} 
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                    <ClipboardList className="w-3 h-3" /> Diet Plan Note
+                                  </div>
+                                  <div 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px]" 
+                                    dangerouslySetInnerHTML={{ 
+                                      __html: record.diet_plan_note || '<p class="text-slate-500 italic">No diet plan note recorded.</p>' 
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Row 3: Home Care Guidelines & Detox Recommendation */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                    <MessageSquare className="w-3 h-3" /> Home Care Guidelines
+                                  </div>
+                                  <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm text-slate-700 min-h-[100px]">
+                                    {record.home_care || <span className="text-slate-500 italic">No home care guidelines recorded.</span>}
                                   </div>
                                 </div>
-                              )}
-
-                              <div className="mt-4 pt-3 border-t border-slate-200">
-                                <div className="text-xs text-slate-400">
-                                  Record ID: {record.id}
+                                <div>
+                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                    <Calendar className="w-3 h-3" /> Detox Recommendation
+                                  </div>
+                                  <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm min-h-[100px]">
+                                    {record.detox_recommended ? (
+                                      <div className="space-y-2">
+                                        <div className="flex items-start gap-2">
+                                          <span className="font-semibold text-slate-700 min-w-[100px]">Detox Doctor:</span>
+                                          <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                          <span className="font-semibold text-slate-700 min-w-[100px]">Follow-up Date:</span>
+                                          <span className="text-slate-600">{record.followup_date || 'Not scheduled'}</span>
+                                        </div>
+                                        <div className="flex items-start gap-2">
+                                          <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                                          <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-500 italic">No detox recommendation.</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          );
-                        })
-                      ) : (
-                        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-                          <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                          No consultation history found for this patient.
-                          <div className="text-sm mt-1">Complete a consultation to see it here.</div>
-                        </div>
-                      )}
-                    </div>
-
-                    {consHistory.length > 0 && (
-                      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="text-sm text-slate-500">
-                          Showing {Math.min(consHistory.length, historyPageSize)} of {consHistory.length} records
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-                            disabled={historyPage <= 1}
-                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                              historyPage <= 1 
-                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            ← Previous
-                          </button>
-                          <span className="text-sm font-medium text-slate-600">
-                            Page {historyPage} of {totalHistoryPages}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setHistoryPage(prev => Math.min(totalHistoryPages, prev + 1))}
-                            disabled={historyPage >= totalHistoryPages}
-                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                              historyPage >= totalHistoryPages 
-                                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                            }`}
-                          >
-                            Next →
-                          </button>
-                        </div>
+                          ))
+                        ) : (
+                          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
+                            <Stethoscope className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                            No medical consultation history found for this patient.
+                          </div>
+                        )}
+                        
+                        {consHistory.length > 0 && totalConsultationPages > 1 && (
+                          <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="text-sm text-slate-500">
+                              Showing {Math.min(consHistory.length, historyPageSize)} of {consHistory.length} records
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+                                disabled={historyPage <= 1}
+                                className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                                  historyPage <= 1 
+                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                ← Previous
+                              </button>
+                              <span className="text-sm font-medium text-slate-600">
+                                Page {historyPage} of {totalConsultationPages}
+                              </span>
+                              <button
+                                onClick={() => setHistoryPage(prev => Math.min(totalConsultationPages, prev + 1))}
+                                disabled={historyPage >= totalConsultationPages}
+                                className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+                                  historyPage >= totalConsultationPages 
+                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                Next →
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 )}
-
               </div>
             ) : (
               <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-400 space-y-3">

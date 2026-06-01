@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stethoscope, Activity, ClipboardList, Save, CheckCircle } from 'lucide-react';
+import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { getAllDetoxSessions } from '../api/detoxSessionApi';
 
 export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole, currentUser }) {
   const [selectedApptId, setSelectedApptId] = useState('');
   const [selectedTab, setSelectedTab] = useState('consultation');
+  const [historySubTab, setHistorySubTab] = useState('consultations');
   const [historyPage, setHistoryPage] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
   const [historyAppended, setHistoryAppended] = useState(false);
+  const [detoxSessions, setDetoxSessions] = useState([]);
   
   // Forms states
   const [consultationNotes, setConsultationNotes] = useState('');
@@ -20,6 +23,42 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const medicalHistoryEditorRef = useRef(null);
   const detoxProcedureEditorRef = useRef(null);
   const dietPlanEditorRef = useRef(null);
+
+  // Fetch detox sessions directly from API
+  useEffect(() => {
+    const fetchDetoxSessions = async () => {
+      try {
+        const response = await getAllDetoxSessions();
+        let sessionsData = [];
+        if (response && response.data) {
+          sessionsData = response.data;
+        } else if (response && Array.isArray(response)) {
+          sessionsData = response;
+        }
+        
+        const normalizedSessions = sessionsData.map(session => ({
+          id: session.id,
+          patientId: session.patientId || session.patient_id,
+          patient_id: session.patientId || session.patient_id,
+          doctorId: session.doctorId || session.doctor_id,
+          doctorName: session.doctor?.user?.fullName || session.doctor?.name,
+          sessionNumber: session.sessionNumber,
+          sessionType: session.sessionType,
+          sessionDate: session.sessionDate,
+          detoxNotes: session.detoxNotes,
+          followupDate: session.followupDate,
+          followupRemarks: session.followupRemarks,
+          doctor: session.doctor
+        }));
+        
+        setDetoxSessions(normalizedSessions);
+      } catch (error) {
+        console.error('Error fetching detox sessions:', error);
+      }
+    };
+    
+    fetchDetoxSessions();
+  }, []);
 
   const applyEditorCommand = (command, value, editorRef, setter) => {
     if (!editorRef?.current) return;
@@ -84,6 +123,16 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('');
   const todayDate = new Date().toLocaleDateString('en-CA');
 
+  const fontSizeOptions = [
+    { label: '12px', value: '12px' },
+    { label: '14px', value: '14px' },
+    { label: '16px', value: '16px' },
+    { label: '18px', value: '18px' },
+    { label: '20px', value: '20px' },
+    { label: '24px', value: '24px' },
+    { label: '32px', value: '32px' },
+  ];
+
   const isDetoxAppointment = (appt) => {
     const type = String(appt?.appointmentType || appt?.appointment_type || '').toLowerCase();
     return type.includes('detox');
@@ -93,7 +142,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const currentUserEmail = (currentUser?.email || (typeof currentUser === 'string' ? currentUser : '')).toLowerCase();
   const currentUserId = currentUser?.userId || currentUser?.id;
 
-  // Find current doctor - Match from doctors list or fallback to appointments data
+  // Find current doctor
   let currentDoctor = isDoctorView
     ? doctors.find(d => {
         const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
@@ -106,7 +155,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       })
     : null;
 
-  // FALLBACK: Identify doctor from appointments if doctors list is empty
+  // FALLBACK: Identify doctor from appointments
   if (isDoctorView && !currentDoctor && appointments && appointments.length > 0) {
     const aptWithDoctor = appointments.find(a => {
       const doc = a.doctor || a.Doctor || {};
@@ -126,12 +175,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
   const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor.id) : null;
 
-  // Create a robust list of doctors for assignment (Master list + Extraction from Appointments)
-  // Filter to show only 'Available' doctors
+  // Create a robust list of doctors for assignment
   let availableDoctors = doctors ? doctors.filter(d => d.status === 'Available') : [];
   
-  // FALLBACK: If master list is empty (403 error) or incomplete,
-  // extract all unique available doctors from the appointments data.
   if (appointments && appointments.length > 0) {
     appointments.forEach(a => {
       const doc = a.doctor;
@@ -146,19 +192,17 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     });
   }
 
-  // Ensure current doctor is included if not found yet
   if (currentDoctor && !availableDoctors.some(d => String(d.id) === String(currentDoctor.id))) {
     availableDoctors.push(currentDoctor);
   }
 
-  // Automatically default the detox doctor to the current doctor if nothing is selected
   useEffect(() => {
     if (detoxRecommended && !detoxDoctorId && currentDoctorId) {
       setDetoxDoctorId(String(currentDoctorId));
     }
   }, [detoxRecommended, currentDoctorId]);
 
-  // Get today's appointments that are checked-in and ready for consultation
+  // Get today's appointments that are checked-in
   const pendingConsults = appointments.filter(a => {
     const rawDate = a.appointmentDate || a.date;
     let apptDateStr = '';
@@ -175,7 +219,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     
     if (!isReady || !isToday || !isNotDetox) return false;
 
-    // Strict doctor filtering for doctor role
     if (isDoctorView) {
       if (!currentDoctorId) return false;
       const appointmentDoctorIdNum = Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id);
@@ -191,7 +234,21 @@ export default function ConsultationsView({ appointments, patients, doctors, con
        activeAppt.patient || 
        activeAppt.Patient) 
     : null;
-  const patientHistory = activePt ? consultations.filter(c => c.patient_id === activePt.id).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+  
+  // Filter histories for current patient
+  const patientConsultations = activePt ? consultations.filter(c => String(c.patient_id) === String(activePt.id)).sort((a, b) => new Date(b.date) - new Date(a.date)) : [];
+  const patientDetoxSessions = activePt ? detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(activePt.id)).sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate)) : [];
+  
+  const latestHistory = patientConsultations[0] || null;
+  const historyPageSize = 3;
+  
+  // Pagination for consultations
+  const totalConsultationPages = Math.max(1, Math.ceil(patientConsultations.length / historyPageSize));
+  const pagedConsultations = patientConsultations.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
+  
+  // Pagination for detox sessions
+  const totalDetoxPages = Math.max(1, Math.ceil(patientDetoxSessions.length / historyPageSize));
+  const pagedDetoxSessions = patientDetoxSessions.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
 
   useEffect(() => {
     if (!selectedApptId && pendingConsults.length > 0) {
@@ -199,15 +256,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     }
   }, [pendingConsults, selectedApptId]);
   
-  const latestHistory = patientHistory[0] || null;
-  const historyPageSize = 1;
-  const historyRecords = consultations.filter(c => !activePt || String(c.patient_id) === String(activePt.id)).sort((a, b) => new Date(b.date) - new Date(a.date));
-  const totalHistoryPages = Math.max(1, Math.ceil(historyRecords.length / historyPageSize));
-  const pagedHistory = historyRecords.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
-
   useEffect(() => {
     setHistoryPage(1);
-  }, [activePt?.id, selectedTab]);
+  }, [activePt?.id, selectedTab, historySubTab]);
 
   useEffect(() => {
     setHistoryAppended(false);
@@ -254,7 +305,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         followup_remarks: detoxRecommended ? detoxFollowupRemarks : null
       };
 
-      // Update parent state
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
 
       if (diet.breakfast !== '') {
@@ -269,7 +319,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         });
       }
       
-      // Reset form
       setSelectedApptId('');
       setConsultationNotes('');
       setMedicalHistory('');
@@ -288,149 +337,54 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     }
   };
 
-  const fontSizeOptions = [
-    { label: '12px', value: '12px' },
-    { label: '14px', value: '14px' },
-    { label: '16px', value: '16px' },
-    { label: '18px', value: '18px' },
-    { label: '20px', value: '20px' },
-    { label: '24px', value: '24px' },
-    { label: '32px', value: '32px' },
-  ];
+  const getSessionTypeIcon = (type) => {
+    switch(type) {
+      case 'morning': return <Sun className="w-4 h-4" />;
+      case 'evening': return <Moon className="w-4 h-4" />;
+      case 'fullDay': return <SunMoon className="w-4 h-4" />;
+      default: return <Sun className="w-4 h-4" />;
+    }
+  };
 
-  // Reusable Editor Component with Word-style icons
+  const getSessionTypeDisplay = (type) => {
+    switch(type) {
+      case 'morning': return 'Morning Session';
+      case 'evening': return 'Evening Session';
+      case 'fullDay': return 'Full Day Session';
+      default: return 'Morning Session';
+    }
+  };
+
+  // Reusable Editor Component
   const RichTextEditor = ({ editorRef, content, setContent, placeholder }) => (
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 flex flex-wrap gap-2">
-        <button 
-          type="button" 
-          onClick={() => applyEditorCommand('bold', null, editorRef, setContent)} 
-          className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50"
-        >
-          Bold
-        </button>
-        <button 
-          type="button" 
-          onClick={() => applyEditorCommand('italic', null, editorRef, setContent)} 
-          className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50"
-        >
-          Italic
-        </button>
-        <button 
-          type="button" 
-          onClick={() => applyEditorCommand('underline', null, editorRef, setContent)} 
-          className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50"
-        >
-          Underline
-        </button>
-        
-        <select
-          onChange={(e) => handleFontSizeChange(e, editorRef, setContent)}
-          className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
-          defaultValue=""
-        >
+        <button type="button" onClick={() => applyEditorCommand('bold', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Bold</button>
+        <button type="button" onClick={() => applyEditorCommand('italic', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Italic</button>
+        <button type="button" onClick={() => applyEditorCommand('underline', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Underline</button>
+        <select onChange={(e) => handleFontSizeChange(e, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer" defaultValue="">
           <option value="" disabled>Font Size</option>
-          {fontSizeOptions.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
+          {fontSizeOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
         </select>
-        
-        <button 
-          type="button" 
-          onClick={() => applyEditorCommand('insertUnorderedList', null, editorRef, setContent)} 
-          className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1"
-          title="Bullet List"
-        >
-          <span className="text-base">•</span> Bullets
-        </button>
-        <button 
-          type="button" 
-          onClick={() => applyEditorCommand('insertOrderedList', null, editorRef, setContent)} 
-          className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1"
-          title="Numbered List"
-        >
-          <span className="text-xs font-bold">1.</span> Numbers
-        </button>
-        
-        <div className="flex gap-1 ml-1 border-l border-slate-200 pl-2">
-          <button 
-            type="button" 
-            onClick={() => applyEditorCommand('justifyLeft', null, editorRef, setContent)} 
-            className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1"
-            title="Align Left"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="15" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-            Left
-          </button>
-          <button 
-            type="button" 
-            onClick={() => applyEditorCommand('justifyCenter', null, editorRef, setContent)} 
-            className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1"
-            title="Align Center"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="6" y1="12" x2="18" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-            Center
-          </button>
-          <button 
-            type="button" 
-            onClick={() => applyEditorCommand('justifyRight', null, editorRef, setContent)} 
-            className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1"
-            title="Align Right"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="9" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-            Right
-          </button>
-        </div>
+        <button type="button" onClick={() => applyEditorCommand('insertUnorderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Bullet List"><span className="text-base">•</span> Bullets</button>
+        <button type="button" onClick={() => applyEditorCommand('insertOrderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Numbered List"><span className="text-xs font-bold">1.</span> Numbers</button>
       </div>
-      
-      <div
-        ref={editorRef}
-        contentEditable
-        tabIndex={0}
-        suppressContentEditableWarning
-        onBlur={e => setContent(e.currentTarget.innerHTML)}
-        className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-        dangerouslySetInnerHTML={{ __html: content }}
-      />
-      {(!content || content === '<br>') && (
-        <div className="text-slate-400 text-sm -mt-8 ml-3 pointer-events-none">
-          {placeholder}
-        </div>
-      )}
+      <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setContent(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" dangerouslySetInnerHTML={{ __html: content }} />
+      {(!content || content === '<br>') && (<div className="text-slate-400 text-sm -mt-8 ml-3 pointer-events-none">{placeholder}</div>)}
     </div>
   );
 
   return (
     <>
       <style>{`
-        .editor-content ul, .editor-content ol {
-          margin-top: 0.5rem;
-          margin-bottom: 0.5rem;
-          padding-left: 1.5rem;
-        }
+        .editor-content ul, .editor-content ol { margin-top: 0.5rem; margin-bottom: 0.5rem; padding-left: 1.5rem; }
         .editor-content ul { list-style-type: disc; }
         .editor-content ol { list-style-type: decimal; }
         .editor-content li { margin-bottom: 0.25rem; }
         [contenteditable="true"] ul, [contenteditable="true"] ol { padding-left: 1.5rem; }
         [contenteditable="true"] ul { list-style-type: disc; }
         [contenteditable="true"] ol { list-style-type: decimal; }
-        .history-list ul, .history-list ol {
-          margin-top: 0.5rem;
-          margin-bottom: 0.5rem;
-          padding-left: 1.5rem;
-        }
+        .history-list ul, .history-list ol { margin-top: 0.5rem; margin-bottom: 0.5rem; padding-left: 1.5rem; }
         .history-list ul { list-style-type: disc; }
         .history-list ol { list-style-type: decimal; }
         .history-list li { margin-bottom: 0.25rem; }
@@ -439,12 +393,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       <div className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
-              Clinical Consultations
-            </h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Doctor workspace for logging vitals, prescriptions, and detox therapy assignments.
-            </p>
+            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Clinical Consultations</h1>
+            <p className="text-slate-500 text-sm mt-1">Doctor workspace for logging vitals, prescriptions, and detox therapy assignments.</p>
           </div>
         </div>
 
@@ -457,37 +407,20 @@ export default function ConsultationsView({ appointments, patients, doctors, con
             <p className="text-sm text-slate-500 mb-4">These patients are checked in and ready for consultation.</p>
             <div className="space-y-3">
               {pendingConsults.map(appt => {
-                const pt = patients.find(p => String(p.id) === String(appt.patient_id || appt.patientId)) || 
-                           appt.patient || 
-                           appt.Patient || 
-                           {};
+                const pt = patients.find(p => String(p.id) === String(appt.patient_id || appt.patientId)) || appt.patient || appt.Patient || {};
                 return (
-                  <button
-                    key={appt.id}
-                    onClick={() => setSelectedApptId(appt.id)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
-                      String(selectedApptId) === String(appt.id)
-                        ? 'bg-emerald-50 border-emerald-300 shadow-sm'
-                        : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-emerald-200'
-                    }`}
-                  >
+                  <button key={appt.id} onClick={() => setSelectedApptId(appt.id)} className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${String(selectedApptId) === String(appt.id) ? 'bg-emerald-50 border-emerald-300 shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50 hover:border-emerald-200'}`}>
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="font-bold text-slate-800 text-sm">{pt.name || pt.fullName || 'Unknown Patient'}</div>
                         <div className="text-xs text-slate-500 mt-1">{pt.age} yrs, {pt.gender}</div>
                       </div>
                     </div>
-                    <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">
-                      Assigned to: {appt.doctor_name || 'Assigned Provider'}
-                    </div>
+                    <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">Assigned to: {appt.doctor_name || 'Assigned Provider'}</div>
                   </button>
                 );
               })}
-              {pendingConsults.length === 0 && (
-                <div className="text-center py-6 text-slate-400 text-sm italic">
-                  No patients currently checked-in.
-                </div>
-              )}
+              {pendingConsults.length === 0 && (<div className="text-center py-6 text-slate-400 text-sm italic">No patients currently checked-in.</div>)}
             </div>
           </div>
 
@@ -501,93 +434,37 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     <h2 className="text-lg font-bold text-slate-800">{activePt.name}</h2>
                     <span className="text-sm text-slate-500">ID: P-{activePt.id} • Phone: {activePt.phone?.replace(/\D/g, '').slice(-10)}</span>
                   </div>
-                  <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">
-                    Consultation in Progress
-                  </div>
+                  <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">Consultation in Progress</div>
                 </div>
 
                 <div className="p-5 flex flex-wrap items-center gap-3 bg-white border-b border-slate-100">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTab('consultation')}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedTab === 'consultation' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    Consultation
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTab('history')}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedTab === 'history' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    History
-                  </button>
+                  <button type="button" onClick={() => setSelectedTab('consultation')} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedTab === 'consultation' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Consultation</button>
+                  <button type="button" onClick={() => setSelectedTab('history')} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedTab === 'history' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>History</button>
                 </div>
 
                 {selectedTab === 'consultation' ? (
                   <>
                     {/* 1. Clinical Consultation Notes */}
                     <div className="p-5 space-y-4">
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                        <Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes
-                      </h3>
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes</h3>
                       <div>
                         <div className="flex items-center justify-between gap-3 mb-2">
                           <label className="block text-xs font-semibold text-slate-600">Consultation Notes</label>
-                          <button
-                            type="button"
-                            onClick={appendLatestHistoryToCurrent}
-                            disabled={!latestHistory}
-                            className={`text-xs font-semibold ${historyAppended ? 'text-slate-400 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-700'} disabled:text-slate-400`}
-                          >
+                          <button type="button" onClick={appendLatestHistoryToCurrent} disabled={!latestHistory} className={`text-xs font-semibold ${historyAppended ? 'text-slate-400 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-700'} disabled:text-slate-400`}>
                             {latestHistory ? (historyAppended ? 'Latest history already added' : 'Add latest history notes') : 'No previous history available'}
                           </button>
                         </div>
-                        <RichTextEditor 
-                          editorRef={consultationEditorRef}
-                          content={consultationNotes}
-                          setContent={setConsultationNotes}
-                          placeholder="Enter consultation notes here..."
-                        />
+                        <RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." />
                       </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label>
-                        <RichTextEditor 
-                          editorRef={medicalHistoryEditorRef}
-                          content={medicalHistory}
-                          setContent={setMedicalHistory}
-                          placeholder="Enter patient medical history..."
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label>
-                        <RichTextEditor 
-                          editorRef={detoxProcedureEditorRef}
-                          content={detoxProcedure}
-                          setContent={setDetoxProcedure}
-                          placeholder="Enter detox procedure notes..."
-                        />
-                      </div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label><RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label><RichTextEditor editorRef={detoxProcedureEditorRef} content={detoxProcedure} setContent={setDetoxProcedure} placeholder="Enter detox procedure notes..." /></div>
                     </div>
 
                     {/* 2. Diet Plan Note */}
                     <div className="p-5 space-y-4">
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-emerald-600" /> 2. Diet Plan Note
-                      </h3>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Diet Plan Note</label>
-                        <RichTextEditor 
-                          editorRef={dietPlanEditorRef}
-                          content={dietPlanNote}
-                          setContent={setDietPlanNote}
-                          placeholder="Enter diet plan notes..."
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Home Care Guidelines</label>
-                        <input type="text" value={homeCare} onChange={e => setHomeCare(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-                      </div>
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><ClipboardList className="w-4 h-4 text-emerald-600" /> 2. Diet Plan Note</h3>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Diet Plan Note</label><RichTextEditor editorRef={dietPlanEditorRef} content={dietPlanNote} setContent={setDietPlanNote} placeholder="Enter diet plan notes..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Home Care Guidelines</label><input type="text" value={homeCare} onChange={e => setHomeCare(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" /></div>
                     </div>
 
                     {/* 3. Detox Recommendation */}
@@ -599,48 +476,21 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       {detoxRecommended && (
                         <div className="mt-3 ml-8 space-y-3">
                           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            {/* Detox Doctor Dropdown - From Master */}
                             <div className="space-y-2">
                               <label className="block text-xs font-semibold text-slate-600">Assign Detox Doctor</label>
-                              <select 
-                                value={detoxDoctorId} 
-                                onChange={e => setDetoxDoctorId(e.target.value)} 
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                              >
+                              <select value={detoxDoctorId} onChange={e => setDetoxDoctorId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <option value="">Select Detox Doctor</option>
-                                {availableDoctors.length > 0 ? (
-                                  availableDoctors.map(doc => (
-                                    <option key={doc.id} value={doc.id}>
-                                      Dr. {doc.name || doc.user?.fullName} — {doc.specialization || 'General'}
-                                    </option>
-                                  ))
-                                ) : (
-                                  <option disabled>No doctors available</option>
-                                )}
+                                {availableDoctors.length > 0 ? (availableDoctors.map(doc => (<option key={doc.id} value={doc.id}>Dr. {doc.name || doc.user?.fullName} — {doc.specialization || 'General'}</option>))) : (<option disabled>No doctors available</option>)}
                               </select>
                             </div>
-                            
-                            {/* Follow-up Date */}
                             <div className="space-y-2">
                               <label className="block text-xs font-semibold text-slate-600">Follow-up Date</label>
-                              <input
-                                type="date"
-                                value={detoxFollowupDate}
-                                onChange={e => setDetoxFollowupDate(e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                              />
+                              <input type="date" value={detoxFollowupDate} onChange={e => setDetoxFollowupDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                             </div>
                           </div>
-                          
                           <div className="mt-3">
                             <label className="block text-xs font-semibold text-slate-600">Remarks for Receptionist</label>
-                            <textarea
-                              value={detoxFollowupRemarks}
-                              onChange={e => setDetoxFollowupRemarks(e.target.value)}
-                              rows={3}
-                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                              placeholder="Enter any special instructions for the receptionist..."
-                            />
+                            <textarea value={detoxFollowupRemarks} onChange={e => setDetoxFollowupRemarks(e.target.value)} rows={3} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" placeholder="Enter any special instructions for the receptionist..." />
                           </div>
                           <p className="text-xs text-emerald-700 mt-1.5 font-medium">These follow-up details will be sent to reception so they can call the patient later.</p>
                         </div>
@@ -649,134 +499,271 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
                     {/* Save Button */}
                     <div className="p-5 bg-slate-50 flex justify-end">
-                      <button
-                        onClick={handleCompleteConsultation}
-                        disabled={isSaving}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isSaving ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="w-4 h-4" /> Save & Finalize Consultation
-                          </>
-                        )}
+                      <button onClick={handleCompleteConsultation} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isSaving ? (<><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Saving...</>) : (<><Save className="w-4 h-4" /> Save & Finalize Consultation</>)}
                       </button>
                     </div>
                   </>
                 ) : (
-                  <div className="p-5 space-y-4 consultation-history">
-                    <h3 className="text-lg font-bold text-slate-800">Patient Consultation History</h3>
-                    <p className="text-sm text-slate-500">{activePt ? `Showing history for ${activePt.name}.` : 'Showing all completed consultations.'}</p>
-                    <div className="space-y-4">
-                      {pagedHistory.map(record => {
-                        const pt = (activePt && String(activePt.id) === String(record.patient_id)) ? activePt : (patients.find(p => String(p.id) === String(record.patient_id)) || {});
-                        return (
-                          <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-                              <div>
-                                <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
-                                <h4 className="text-xl font-bold text-slate-900 mt-1">{pt.name || pt.fullName || 'Unknown Patient'}</h4>
-                                <div className="text-sm text-slate-600">Patient ID: P-{pt.id || record.patient_id || 'N/A'} • {pt.age || '--'} yrs • {pt.gender || '--'}</div>
-                              </div>
-                              <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                                Provider: {record.doctor_name || 'Assigned Provider'}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                              <div className="space-y-4">
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Consultation Notes</div>
-                                  <div
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                    dangerouslySetInnerHTML={{ __html: record.consultation_notes || '<p class="text-slate-500">No notes recorded.</p>' }}
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Medical History</div>
-                                  <div
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                    dangerouslySetInnerHTML={{ __html: record.medical_history || '<p class="text-slate-500">No history recorded.</p>' }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="space-y-4">
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Detox Procedure Note</div>
-                                  <div
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                    dangerouslySetInnerHTML={{ __html: record.detox_procedure || '<p class="text-slate-500">No detox procedure notes recorded.</p>' }}
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Diet Plan Note</div>
-                                  <div
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                    dangerouslySetInnerHTML={{ __html: record.diet_plan_note || '<p class="text-slate-500">No diet plan note.</p>' }}
-                                  />
-                                </div>
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Detox Recommendation</div>
-                                  <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800">
-                                    {record.detox_recommended ? (
-                                      <>
-                                        <div>
-                                          Detox Doctor: {
-                                            record.detox_doctor_name || 
-                                            record.detoxDoctorName ||
-                                            availableDoctors.find(d => Number(d.id) === Number(record.detox_doctor_id ?? record.detoxDoctorId))?.name ||
-                                            doctors.find(d => Number(d.id) === Number(record.detox_doctor_id ?? record.detoxDoctorId))?.name ||
-                                            'Not assigned'
-                                          }
-                                        </div>
-                                        <div className="mt-1">Follow-up Date: {record.followup_date ? record.followup_date.split('T')[0] : 'Not scheduled'}</div>
-                                        <div className="mt-1">Remarks: {record.followup_remarks || 'No remarks'}</div>
-                                      </>
-                                    ) : (
-                                      <div className="text-slate-500">No detox recommended.</div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {historyRecords.length === 0 && (
-                        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-                          No consultation history found yet. Complete a consultation to see it here.
-                        </div>
-                      )}
+                  <div className="p-5 space-y-4">
+                    <h3 className="text-lg font-bold text-slate-800">{activePt.name} - Patient History</h3>
+                    
+                    {/* History Sub Tabs */}
+                    <div className="flex flex-wrap gap-3 border-b border-slate-200 pb-3">
+                      <button
+                        type="button"
+                        onClick={() => { setHistorySubTab('consultations'); setHistoryPage(1); }}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
+                          historySubTab === 'consultations' 
+                            ? 'bg-emerald-600 text-white shadow-sm' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Stethoscope className="w-4 h-4" />
+                        Consultations ({patientConsultations.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setHistorySubTab('detox'); setHistoryPage(1); }}
+                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
+                          historySubTab === 'detox' 
+                            ? 'bg-emerald-600 text-white shadow-sm' 
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Droplets className="w-4 h-4" />
+                        Detox Sessions ({patientDetoxSessions.length})
+                      </button>
                     </div>
 
-                    {historyRecords.length > 0 && (
-                      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="text-sm text-slate-500">
-                          Showing {Math.min(historyRecords.length, historyPageSize)} of {historyRecords.length} records
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-                            disabled={historyPage <= 1}
-                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage <= 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                          >
-                            ← Previous
-                          </button>
-                          <span className="text-sm font-medium text-slate-600">Page {historyPage} of {totalHistoryPages}</span>
-                          <button
-                            type="button"
-                            onClick={() => setHistoryPage(prev => Math.min(totalHistoryPages, prev + 1))}
-                            disabled={historyPage >= totalHistoryPages}
-                            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage >= totalHistoryPages ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                          >
-                            Next →
-                          </button>
-                        </div>
+                 {/* Consultation History - Show ALL Notes in Grid Layout */}
+{historySubTab === 'consultations' && (
+  <div className="space-y-4">
+    {pagedConsultations.length > 0 ? (
+      pagedConsultations.map(record => (
+        <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+          {/* Header */}
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+            <div>
+              <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
+              <h4 className="text-xl font-bold text-slate-900 mt-1">{activePt.name}</h4>
+              <div className="text-sm text-slate-600">Patient ID: P-{activePt.id}</div>
+            </div>
+            <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+              Provider: {record.doctor_name || 'Assigned Provider'}
+            </div>
+          </div>
+
+          {/* Row 1: Consultation Notes & Medical History - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                <Activity className="w-3 h-3" /> Consultation Notes
+              </div>
+              <div 
+                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px]" 
+                dangerouslySetInnerHTML={{ 
+                  __html: record.consultation_notes || '<p class="text-slate-500 italic">No notes recorded.</p>' 
+                }} 
+              />
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                <FileText className="w-3 h-3" /> Medical History
+              </div>
+              <div 
+                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px]" 
+                dangerouslySetInnerHTML={{ 
+                  __html: record.medical_history || '<p class="text-slate-500 italic">No medical history recorded.</p>' 
+                }} 
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Detox Procedure Note & Diet Plan Note - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                <Droplets className="w-3 h-3" /> Detox Procedure Note
+              </div>
+              <div 
+                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px]" 
+                dangerouslySetInnerHTML={{ 
+                  __html: record.detox_procedure || '<p class="text-slate-500 italic">No detox procedure notes recorded.</p>' 
+                }} 
+              />
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                <ClipboardList className="w-3 h-3" /> Diet Plan Note
+              </div>
+              <div 
+                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px]" 
+                dangerouslySetInnerHTML={{ 
+                  __html: record.diet_plan_note || '<p class="text-slate-500 italic">No diet plan note recorded.</p>' 
+                }} 
+              />
+            </div>
+          </div>
+
+          {/* Row 3: Home Care Guidelines & Detox Recommendation - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                <MessageSquare className="w-3 h-3" /> Home Care Guidelines
+              </div>
+              <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm text-slate-700 min-h-[100px]">
+                {record.home_care || <span className="text-slate-500 italic">No home care guidelines recorded.</span>}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                <Calendar className="w-3 h-3" /> Detox Recommendation
+              </div>
+              <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm min-h-[100px]">
+                {record.detox_recommended ? (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <span className="font-semibold text-slate-700 min-w-[100px]">Detox Doctor:</span>
+                      <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-semibold text-slate-700 min-w-[100px]">Follow-up Date:</span>
+                      <span className="text-slate-600">{record.followup_date || 'Not scheduled'}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                      <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-slate-500 italic">No detox recommendation.</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))
+    ) : (
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
+        <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+        No consultation history found for this patient.
+      </div>
+    )}
+    
+    {/* Pagination */}
+    {patientConsultations.length > 0 && totalConsultationPages > 1 && (
+      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="text-sm text-slate-500">
+          Showing {Math.min(patientConsultations.length, historyPageSize)} of {patientConsultations.length} records
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
+            disabled={historyPage <= 1}
+            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+              historyPage <= 1 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            ← Previous
+          </button>
+          <span className="text-sm font-medium text-slate-600">
+            Page {historyPage} of {totalConsultationPages}
+          </span>
+          <button
+            onClick={() => setHistoryPage(prev => Math.min(totalConsultationPages, prev + 1))}
+            disabled={historyPage >= totalConsultationPages}
+            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+              historyPage >= totalConsultationPages 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            Next →
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+                    {/* Detox Sessions History */}
+                    {historySubTab === 'detox' && (
+                      <div className="space-y-4">
+                        {pagedDetoxSessions.length > 0 ? (
+                          pagedDetoxSessions.map(session => (
+                            <div key={session.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+                              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+                                <div>
+                                  <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold flex items-center gap-2">
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(session.sessionDate).toLocaleDateString('en-CA')}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                    <h4 className="text-xl font-bold text-slate-900">Detox Session</h4>
+                                    <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-semibold flex items-center gap-1">
+                                      {getSessionTypeIcon(session.sessionType)}
+                                      {getSessionTypeDisplay(session.sessionType)}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-slate-600 mt-1">Patient: {activePt.name} • ID: {activePt.id}</div>
+                                </div>
+                                <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+                                  Provider: {session.doctor?.user?.fullName || session.doctorName || 'Assigned Provider'}
+                                </div>
+                              </div>
+
+                              <div className="mt-3">
+                                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
+                                  <Activity className="w-3 h-3" />
+                                  Detox Procedure Notes
+                                </div>
+                                <div
+                                  className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
+                                  dangerouslySetInnerHTML={{ __html: session.detoxNotes || '<p class="text-slate-500">No detox notes recorded.</p>' }}
+                                />
+                              </div>
+
+                              {session.followupDate && (
+                                <div className="mt-4 pt-3 border-t border-slate-200">
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="text-sm">
+                                      <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Follow-up Date</span>
+                                      <div className="text-slate-700 font-medium mt-1">{new Date(session.followupDate).toLocaleDateString('en-CA')}</div>
+                                    </div>
+                                    <div className="text-sm">
+                                      <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>
+                                      <div className="text-slate-700 mt-1">{session.followupRemarks || 'No specific follow-up instructions.'}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="mt-4 pt-3 border-t border-slate-200">
+                                <div className="text-xs text-slate-400">Session #{session.sessionNumber} • Record ID: {session.id}</div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
+                            <Droplets className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                            No detox session history found for this patient.
+                            <div className="text-sm mt-1">Complete a detox session to see it here.</div>
+                          </div>
+                        )}
+                        
+                        {patientDetoxSessions.length > 0 && totalDetoxPages > 1 && (
+                          <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="text-sm text-slate-500">Showing {Math.min(patientDetoxSessions.length, historyPageSize)} of {patientDetoxSessions.length} records</div>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))} disabled={historyPage <= 1} className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage <= 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}>← Previous</button>
+                              <span className="text-sm font-medium text-slate-600">Page {historyPage} of {totalDetoxPages}</span>
+                              <button onClick={() => setHistoryPage(prev => Math.min(totalDetoxPages, prev + 1))} disabled={historyPage >= totalDetoxPages} className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage >= totalDetoxPages ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}>Next →</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

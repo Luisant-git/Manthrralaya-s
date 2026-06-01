@@ -46,13 +46,13 @@ export default function ChangeMyPin({ currentUser, onLogout, onCancel }) {
     return (
         <div className="max-w-md mx-auto">
             {/* Back Button */}
-            <button 
+            {/* <button 
                 onClick={onCancel}
                 className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-medium text-sm mb-6 transition-colors group"
             >
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                 Back to Dashboard
-            </button>
+            </button> */}
 
             <div className="bg-white border border-slate-200 w-full rounded-2xl shadow-xl overflow-hidden">
                 <div className="bg-emerald-600 text-white p-6">

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { UpdateConsultationDto } from './dto/update-consultation.dto';
@@ -34,13 +34,32 @@ export class ConsultationService {
       }
     }
 
-    // If appointmentId is provided, check if appointment exists
+    // CRITICAL FIX: Check if consultation already exists for this appointment
     if (createConsultationDto.appointmentId) {
-      const appointment = await this.prisma.appointment.findUnique({
-        where: { id: createConsultationDto.appointmentId }
+      const existingConsultation = await this.prisma.consultation.findFirst({
+        where: { appointmentId: createConsultationDto.appointmentId }
       });
-      if (!appointment) {
-        throw new NotFoundException(`Appointment with ID ${createConsultationDto.appointmentId} not found`);
+      
+      if (existingConsultation) {
+        // Instead of throwing error, return the existing consultation
+        console.log(`⚠️ Consultation already exists for appointment ${createConsultationDto.appointmentId}, returning existing record`);
+        return this.prisma.consultation.findUnique({
+          where: { id: existingConsultation.id },
+          include: {
+            patient: true,
+            doctor: {
+              include: {
+                user: true
+              }
+            },
+            appointment: true,
+            detoxDoctor: {
+              include: {
+                user: true
+              }
+            }
+          }
+        });
       }
     }
 
@@ -84,6 +103,36 @@ export class ConsultationService {
     }
 
     return consultation;
+  }
+
+  // Add a method to cleanup duplicate consultations
+  async cleanupDuplicates() {
+    // Find all appointments with multiple consultations
+    const duplicates = await this.prisma.$queryRaw`
+      SELECT appointment_id, COUNT(*) as count, array_agg(id) as ids
+      FROM consultations 
+      WHERE appointment_id IS NOT NULL
+      GROUP BY appointment_id
+      HAVING COUNT(*) > 1
+    `;
+
+    const deletedIds = [];
+    
+    for (const duplicate of duplicates as any[]) {
+      const ids = duplicate.ids;
+      // Keep the first one (oldest) or the one with most data
+      const [firstId, ...restIds] = ids;
+      
+      for (const id of restIds) {
+        await this.prisma.consultation.delete({ where: { id } });
+        deletedIds.push(id);
+      }
+    }
+
+    return {
+      message: `Cleaned up ${deletedIds.length} duplicate consultation records`,
+      deletedIds
+    };
   }
 
   async findAll() {

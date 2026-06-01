@@ -122,7 +122,7 @@ export default function DoctorMasterView() {
             Doctor Master Directory
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            View clinical practitioners and manage availability status. To add a new doctor, use Staff Management.
+            View clinical practitioners and manage availability status.
           </p>
         </div>
         <button 
