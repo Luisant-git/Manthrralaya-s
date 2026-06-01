@@ -9,12 +9,12 @@ export class AdminService {
   constructor(private prisma: PrismaService) {}
 
   // ========== CREATE USER ==========
-  async createUser(role: UserRole, dto: CreateUserDto) {
+  async createUser(role: UserRole, dto: CreateUserDto, allowAdminCreation = false) {
     if (role === UserRole.DOCTOR && !dto.specialization) {
       throw new BadRequestException('Specialization is required for doctors');
     }
 
-    if (role === UserRole.ADMIN) {
+    if (role === UserRole.ADMIN && !allowAdminCreation) {
       throw new BadRequestException('Cannot create ADMIN users via this endpoint');
     }
 

@@ -30,7 +30,7 @@ export class AuthService {
       pin: dto.pin,  // Pass plain pin
       fullName: dto.fullName,
       phone: dto.phone,
-    });
+    }, true);
 
     return { 
       message: 'Admin created successfully', 
