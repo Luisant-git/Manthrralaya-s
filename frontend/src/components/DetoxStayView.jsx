@@ -1,23 +1,36 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon } from 'lucide-react';
+import { createDetoxSession, getDetoxSessionsByPatient, getPatientDetoxProgress } from '../api/detoxSessionApi';
+import { toast } from 'react-toastify';
 
-export default function DetoxView({ appointments = [], patients = [], doctors = [], consultations = [], onAddConsultation, activeRole }) {
+export default function DetoxView({ 
+  appointments = [], 
+  patients = [], 
+  doctors = [], 
+  consultations = [], 
+  onAddConsultation, 
+  onAddDetoxSession,
+  detoxSessions = [],
+  activeRole,
+  currentUser 
+}) {
   const [selectedApptId, setSelectedApptId] = useState('');
   const [selectedTab, setSelectedTab] = useState('detox');
   const [historyPage, setHistoryPage] = useState(1);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Detox Notes state
   const [detoxNotes, setDetoxNotes] = useState('');
   
   // Session Type state
-  const [sessionType, setSessionType] = useState('morning'); // 'morning', 'evening', 'fullDay'
+  const [sessionType, setSessionType] = useState('morning');
   
   // Followup state
   const [followupDate, setFollowupDate] = useState(new Date().toISOString().split('T')[0]);
   const [followupRemarks, setFollowupRemarks] = useState('Call patient later to confirm detox preparation and next steps.');
   
   const detoxEditorRef = useRef(null);
-  const todayDate = new Date().toISOString().split('T')[0];
+  const todayDate = new Date().toLocaleDateString('en-CA');
 
   const applyEditorCommand = (command, value, editorRef, setter) => {
     if (!editorRef?.current) return;
@@ -195,28 +208,121 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
     </div>
   );
 
-  // Filter only "Checked-in" appointments for today that are Detox type
+  // Check if appointment is detox type
   const isDetoxAppointment = (appt) => {
     return String(appt?.appointmentType || '').toLowerCase().includes('detox');
   };
 
-  const pendingConsults = appointments.filter(a => a.status === 'Checked-in' && a.date === todayDate && isDetoxAppointment(a));
-  const activeAppt = pendingConsults.find(a => a.id === selectedApptId);
-  const activePt = activeAppt ? patients.find(p => p.id === activeAppt.patient_id) : null;
+  // Find current doctor
+  const isDoctorView = activeRole === 'doctor';
+  let currentDoctorId = null;
   
-  // Get all consultations for this patient (both detox and regular)
-  const allPatientConsultations = activePt && consultations 
-    ? consultations.filter(c => c.patient_id === activePt.id)
+  if (isDoctorView && doctors.length > 0) {
+    const currentUserLower = String(currentUser || '').toLowerCase();
+    const currentDoctor = doctors.find(d => {
+      const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
+      const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
+      return doctorEmail === currentUserLower || doctorName === currentUserLower;
+    });
+    currentDoctorId = currentDoctor?.id ? Number(currentDoctor.id) : null;
+  }
+
+  // FALLBACK: Extract doctor ID from appointments
+  if (isDoctorView && !currentDoctorId && appointments.length > 0) {
+    const aptWithDoctor = appointments.find(a => {
+      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
+      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
+      const currentUserLower = String(currentUser || '').toLowerCase();
+      return dEmail === currentUserLower || dName === currentUserLower;
+    });
+    if (aptWithDoctor && aptWithDoctor.doctor) {
+      currentDoctorId = aptWithDoctor.doctor.id;
+    }
+  }
+
+  // CRITICAL: Filter appointments - EXCLUDE appointments that already have a consultation
+  const pendingConsults = appointments.filter(a => {
+    const rawDate = a.appointmentDate || a.date;
+    let apptDateStr = '';
+    if (rawDate) {
+      if (typeof rawDate === 'string') {
+        apptDateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+      } else {
+        apptDateStr = new Date(rawDate).toLocaleDateString('en-CA');
+      }
+    }
+    
+    const isToday = apptDateStr === todayDate;
+    const isCheckedIn = a.status === 'Checked-in';
+    const isDetox = isDetoxAppointment(a);
+    
+    // CRITICAL: Check if this appointment already has a consultation
+    const hasConsultation = consultations.some(c => 
+      c.appointment_id === a.id || 
+      String(c.appointment_id) === String(a.id) ||
+      (c.appointment_id && Number(c.appointment_id) === Number(a.id))
+    );
+    
+    // Only show if: today, checked-in, detox, NO existing consultation
+    const shouldShow = isToday && isCheckedIn && isDetox && !hasConsultation;
+    
+    if (!shouldShow && isToday && isCheckedIn && isDetox && hasConsultation) {
+      console.log(`🚫 Appointment ${a.id} hidden - already has consultation`);
+    }
+    
+    // Filter by doctor
+    if (shouldShow && isDoctorView && currentDoctorId) {
+      const appointmentDoctorId = Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id);
+      return appointmentDoctorId === currentDoctorId;
+    }
+    
+    return shouldShow;
+  });
+
+  console.log('📋 Pending Consults:', pendingConsults.map(a => ({ 
+    id: a.id, 
+    status: a.status, 
+    hasConsultation: consultations.some(c => c.appointment_id === a.id)
+  })));
+
+  const activeAppt = pendingConsults.find(a => String(a.id) === String(selectedApptId)) || pendingConsults[0];
+  const activePt = activeAppt 
+    ? (patients.find(p => String(p.id) === String(activeAppt.patient_id || activeAppt.patientId)) || 
+       activeAppt.patient || 
+       activeAppt.Patient) 
+    : null;
+
+  // Check if this specific appointment already has a detox consultation
+  const appointmentHasDetox = activeAppt 
+    ? consultations.some(c => 
+        (c.appointment_id === activeAppt.id || String(c.appointment_id) === String(activeAppt.id)) && 
+        c.detox_recommended === true
+      )
+    : false;
+
+  const appointmentHasAnyConsultation = activeAppt 
+    ? consultations.some(c => c.appointment_id === activeAppt.id || String(c.appointment_id) === String(activeAppt.id))
+    : false;
+
+  // Can only add session if appointment has NO consultation at all
+  const canAddSession = !appointmentHasAnyConsultation;
+
+  // Get consultation history for this patient
+  const consHistory = activePt 
+    ? consultations.filter(c => String(c.patient_id) === String(activePt.id))
         .sort((a, b) => new Date(b.date) - new Date(a.date))
     : [];
-  
-  // Separate detox sessions and regular consultations
-  const detoxSessions = allPatientConsultations.filter(c => c.detox_recommended === true);
-  
-  const sessionCount = detoxSessions.length;
-  const canAddMoreSessions = sessionCount < 3;
 
-  // Get session type display name
+  useEffect(() => {
+    if (!selectedApptId && pendingConsults.length > 0) {
+      setSelectedApptId(String(pendingConsults[0].id));
+    }
+  }, [pendingConsults, selectedApptId]);
+
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [activePt?.id, selectedTab]);
+
   const getSessionTypeDisplay = (type) => {
     switch(type) {
       case 'morning': return 'Morning Session';
@@ -235,60 +341,101 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
     }
   };
 
-  useEffect(() => {
-    if (!selectedApptId && pendingConsults.length > 0) {
-      setSelectedApptId(pendingConsults[0].id);
-    }
-  }, [pendingConsults, selectedApptId]);
-
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [activePt?.id, selectedTab]);
-
-  const handleSaveDetoxSession = () => {
-    if (!activeAppt || !activePt) return;
-    
-    const doctorName = activeAppt.doctor_name || 'Assigned Provider';
-    const sessionNumber = sessionCount + 1;
-    const sessionTypeDisplay = getSessionTypeDisplay(sessionType);
-    
-    const newDetoxConsultation = {
-      id: `DETOX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      patient_id: activePt.id,
-      doctor_name: doctorName,
-      date: new Date().toISOString().split('T')[0],
-      consultation_notes: '',
-      medical_history: '',
-      detox_procedure: detoxNotes,
-      diet_plan_note: '',
-      home_care: '',
-      detox_recommended: true,
-      detox_type: sessionTypeDisplay,
-      detox_session_type: sessionType, // Store the raw type for filtering
-      detox_doctor_id: null,
-      detox_doctor_name: null,
-      followup_date: followupDate,
-      followup_remarks: followupRemarks,
-      session_number: sessionNumber
-    };
-
-    if (onAddConsultation) {
-      onAddConsultation(newDetoxConsultation, activeAppt.id);
+  const handleSaveDetoxSession = async () => {
+    if (!activeAppt || !activePt) {
+      toast.error('No active appointment selected');
+      return;
     }
     
-    setDetoxNotes('');
-    setSessionType('morning');
-    setFollowupDate(new Date().toISOString().split('T')[0]);
-    setFollowupRemarks('Call patient later to confirm detox preparation and next steps.');
-    setSelectedApptId('');
+    if (!canAddSession) {
+      toast.warning('This appointment already has a completed session.');
+      return;
+    }
     
-    alert(`Detox ${sessionTypeDisplay} ${sessionNumber} saved successfully!`);
+    if (!detoxNotes.trim()) {
+      toast.warning('Please enter detox procedure notes');
+      return;
+    }
+    
+    setIsSaving(true);
+    const currentApptId = activeAppt.id;
+    
+    try {
+      const doctorName = activeAppt.doctor_name || doctors.find(d => d.id === currentDoctorId)?.name || 'Assigned Provider';
+      const doctorId = Number(activeAppt.doctor_id || activeAppt.doctorId || currentDoctorId || 0);
+      const sessionTypeDisplay = getSessionTypeDisplay(sessionType);
+      
+      // Save detox session to backend
+     const detoxData = {
+  patientId: activePt.id,
+  doctorId: doctorId || null,
+  appointmentId: activeAppt.id ? parseInt(String(activeAppt.id).replace(/^\D+/g, ''), 10) : null,
+  sessionNumber: 1,  // Always 1, not sessionCount + 1
+  sessionType: sessionType,
+  sessionDate: new Date().toISOString(),
+  detoxNotes: detoxNotes,
+  followupDate: followupDate,
+  followupRemarks: followupRemarks
+};
+      
+      console.log('💾 Saving detox session:', detoxData);
+      const savedSession = await createDetoxSession(detoxData);
+      console.log('✅ Detox session saved:', savedSession);
+      
+      // Create consultation record for this detox session
+      const newDetoxConsultation = {
+        id: savedSession.id || `DETOX-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        patient_id: activePt.id,
+        doctor_id: doctorId,
+        doctor_name: doctorName,
+        appointment_id: activeAppt.id,
+        date: new Date().toISOString().split('T')[0],
+        consultation_notes: '',
+        medical_history: '',
+        detox_procedure: detoxNotes,
+        diet_plan_note: '',
+        home_care: '',
+        detox_recommended: true,
+        detox_doctor_id: doctorId,
+        detox_doctor_name: doctorName,
+        detox_type: sessionTypeDisplay,
+        detox_session_type: sessionType,
+        followup_date: followupDate,
+        followup_remarks: followupRemarks,
+        session_number: 1
+      };
+
+      // Save consultation - this will mark appointment as Completed
+      if (onAddConsultation) {
+        await onAddConsultation(newDetoxConsultation, currentApptId);
+      }
+      
+      if (onAddDetoxSession) {
+        onAddDetoxSession(savedSession, activePt);
+      }
+      
+      // Clear the selected appointment to remove it from UI
+      setSelectedApptId('');
+      
+      // Reset form
+      setDetoxNotes('');
+      setSessionType('morning');
+      setFollowupDate(new Date().toISOString().split('T')[0]);
+      setFollowupRemarks('Call patient later to confirm detox preparation and next steps.');
+      
+      toast.success(`Detox ${sessionTypeDisplay} completed successfully!`);
+    } catch (error) {
+      console.error('❌ Error saving detox session:', error);
+      toast.error(error.message || 'Failed to save detox session. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Pagination for history
   const historyPageSize = 3;
-  const totalHistoryPages = Math.max(1, Math.ceil(allPatientConsultations.length / historyPageSize));
-  const pagedHistory = allPatientConsultations.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
+  const totalHistoryPages = Math.max(1, Math.ceil(consHistory.length / historyPageSize));
+  const pagedHistory = consHistory.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize);
 
   const getConsultationTypeBadge = (consultation) => {
     if (consultation.detox_recommended) {
@@ -313,56 +460,25 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
   return (
     <>
       <style>{`
-        .editor-content ul,
-        .editor-content ol {
+        .editor-content ul, .editor-content ol {
           margin-top: 0.5rem;
           margin-bottom: 0.5rem;
           padding-left: 1.5rem;
         }
-        
-        .editor-content ul {
-          list-style-type: disc;
-        }
-        
-        .editor-content ol {
-          list-style-type: decimal;
-        }
-        
-        .editor-content li {
-          margin-bottom: 0.25rem;
-        }
-        
-        [contenteditable="true"] ul,
-        [contenteditable="true"] ol {
-          padding-left: 1.5rem;
-        }
-        
-        [contenteditable="true"] ul {
-          list-style-type: disc;
-        }
-        
-        [contenteditable="true"] ol {
-          list-style-type: decimal;
-        }
-        
-        .history-list ul,
-        .history-list ol {
+        .editor-content ul { list-style-type: disc; }
+        .editor-content ol { list-style-type: decimal; }
+        .editor-content li { margin-bottom: 0.25rem; }
+        [contenteditable="true"] ul, [contenteditable="true"] ol { padding-left: 1.5rem; }
+        [contenteditable="true"] ul { list-style-type: disc; }
+        [contenteditable="true"] ol { list-style-type: decimal; }
+        .history-list ul, .history-list ol {
           margin-top: 0.5rem;
           margin-bottom: 0.5rem;
           padding-left: 1.5rem;
         }
-        
-        .history-list ul {
-          list-style-type: disc;
-        }
-        
-        .history-list ol {
-          list-style-type: decimal;
-        }
-        
-        .history-list li {
-          margin-bottom: 0.25rem;
-        }
+        .history-list ul { list-style-type: disc; }
+        .history-list ol { list-style-type: decimal; }
+        .history-list li { margin-bottom: 0.25rem; }
       `}</style>
       
       <div className="space-y-6">
@@ -372,7 +488,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
               Detox Therapy Sessions
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Manage detox procedures for patients. Each patient can have up to 3 detox sessions.
+              Manage detox procedures for patients. Each appointment allows one detox session.
             </p>
           </div>
         </div>
@@ -387,48 +503,32 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
             <div className="space-y-3">
               {pendingConsults.length > 0 ? (
                 pendingConsults.map(appt => {
-                  const pt = patients?.find(p => p.id === appt.patient_id) || {};
-                  const existingDetoxSessions = consultations 
-                    ? consultations.filter(c => c.patient_id === pt.id && c.detox_recommended === true)
-                    : [];
-                  const sessionsDone = existingDetoxSessions.length;
-                  const canStartSession = sessionsDone < 3;
-                  
+                  const pt = patients?.find(p => String(p.id) === String(appt.patient_id || appt.patientId)) || 
+                             appt.patient || 
+                             appt.Patient || 
+                             {};
                   return (
                     <button
                       key={appt.id}
-                      onClick={() => canStartSession && setSelectedApptId(appt.id)}
-                      disabled={!canStartSession}
+                      onClick={() => setSelectedApptId(String(appt.id))}
                       className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
-                        !canStartSession 
-                          ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed'
-                          : selectedApptId === appt.id
-                            ? 'bg-emerald-50 border-emerald-300 shadow-sm'
-                            : 'bg-white border-slate-200 hover:border-emerald-200 hover:bg-slate-50'
+                        String(selectedApptId) === String(appt.id)
+                          ? 'bg-emerald-50 border-emerald-300 shadow-sm'
+                          : 'bg-white border-slate-200 hover:border-emerald-200 hover:bg-slate-50'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="font-bold text-slate-800 text-sm">{pt.name || 'Unknown Patient'}</div>
-                          <div className="text-xs text-slate-500 mt-1">{appt.session === 'FN' ? 'Forenoon' : 'Afternoon'} • {pt.age || '--'} yrs, {pt.gender || '--'}</div>
+                          <div className="font-bold text-slate-800 text-sm">{pt.name ?? pt.fullName ?? 'Unknown Patient'}</div>
+                          <div className="text-xs text-slate-500 mt-1">{pt.age ?? '--'} yrs, {pt.gender ?? '--'}</div>
                         </div>
-                        <div className={`text-xs font-bold px-2 py-1 rounded-full ${
-                          sessionsDone === 0 ? 'bg-emerald-100 text-emerald-700' :
-                          sessionsDone === 1 ? 'bg-blue-100 text-blue-700' :
-                          sessionsDone === 2 ? 'bg-amber-100 text-amber-700' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {sessionsDone}/3 Sessions
+                        <div className="text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">
+                          Detox
                         </div>
                       </div>
                       <div className="text-[10px] text-emerald-600 font-bold mt-2 uppercase tracking-wider">
                         Assigned to: {appt.doctor_name || 'Assigned Provider'}
                       </div>
-                      {!canStartSession && (
-                        <div className="text-[10px] text-amber-600 font-bold mt-1">
-                          Max 3 sessions completed
-                        </div>
-                      )}
                     </button>
                   );
                 })
@@ -460,7 +560,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                     </div>
                   </div>
                   <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">
-                    Session {sessionCount + 1}/3
+                    Detox Session
                   </div>
                 </div>
 
@@ -487,7 +587,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                     }`}
                   >
                     <ClipboardList className="w-4 h-4" />
-                    Complete History ({allPatientConsultations.length})
+                    History ({consHistory.length})
                   </button>
                 </div>
 
@@ -555,84 +655,91 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                     <div className="p-5 space-y-4">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                         <Activity className="w-4 h-4 text-emerald-600" /> 
-                        Detox Session #{sessionCount + 1} Notes ({getSessionTypeDisplay(sessionType)})
+                        Detox Session Notes
                       </h3>
                       
-                      {!canAddMoreSessions ? (
+                      {!canAddSession ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
                           <div className="text-amber-700 font-semibold mb-2">
-                            Maximum 3 detox sessions completed for this patient.
+                            This appointment already has a completed session.
                           </div>
                           <p className="text-sm text-amber-600">
-                            No additional detox sessions can be added.
+                            No additional session can be added for this appointment.
                           </p>
                         </div>
                       ) : (
-                        <>
-                          <RichTextEditor 
-                            editorRef={detoxEditorRef}
-                            content={detoxNotes}
-                            setContent={setDetoxNotes}
-                            placeholder={`Enter ${getSessionTypeDisplay(sessionType)} detox procedure notes, observations, recommendations...`}
-                          />
-                          
-                          
-                        </>
+                        <RichTextEditor 
+                          editorRef={detoxEditorRef}
+                          content={detoxNotes}
+                          setContent={setDetoxNotes}
+                          placeholder="Enter detox procedure notes, observations, recommendations..."
+                        />
                       )}
                     </div>
 
                     {/* Followup Section */}
-                    <div className="p-5 bg-emerald-50 border-y border-emerald-100">
-                      <div className="flex items-center gap-3">
-                        <Calendar className="w-5 h-5 text-emerald-600" />
-                        <h3 className="font-bold text-slate-800 text-sm">Follow-up Details</h3>
-                      </div>
-                      <div className="mt-4 space-y-4">
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {canAddSession && (
+                      <div className="p-5 bg-emerald-50 border-y border-emerald-100">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-5 h-5 text-emerald-600" />
+                          <h3 className="font-bold text-slate-800 text-sm">Follow-up Details</h3>
+                        </div>
+                        <div className="mt-4 space-y-4">
+                          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                <Calendar className="w-3 h-3" /> Follow-up Date
+                              </label>
+                              <input
+                                type="date"
+                                value={followupDate}
+                                onChange={e => setFollowupDate(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                          </div>
                           <div className="space-y-2">
                             <label className="block text-xs font-semibold text-slate-600 flex items-center gap-1">
-                              <Calendar className="w-3 h-3" /> Follow-up Date
+                              <MessageSquare className="w-3 h-3" /> Remarks for Receptionist
                             </label>
-                            <input
-                              type="date"
-                              value={followupDate}
-                              onChange={e => setFollowupDate(e.target.value)}
+                            <textarea
+                              value={followupRemarks}
+                              onChange={e => setFollowupRemarks(e.target.value)}
+                              rows={3}
+                              placeholder="Enter follow-up instructions for the receptionist..."
                               className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                             />
                           </div>
+                          <p className="text-xs text-emerald-700 mt-1.5 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            These follow-up details will be sent to reception so they can call the patient later.
+                          </p>
                         </div>
-                        <div className="space-y-2">
-                          <label className="block text-xs font-semibold text-slate-600 flex items-center gap-1">
-                            <MessageSquare className="w-3 h-3" /> Remarks for Receptionist
-                          </label>
-                          <textarea
-                            value={followupRemarks}
-                            onChange={e => setFollowupRemarks(e.target.value)}
-                            rows={3}
-                            placeholder="Enter follow-up instructions for the receptionist..."
-                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                          />
-                        </div>
-                        <p className="text-xs text-emerald-700 mt-1.5 font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          These follow-up details will be sent to reception so they can call the patient later.
-                        </p>
                       </div>
-                    </div>
+                    )}
 
                     {/* Save Button */}
                     <div className="p-5 bg-slate-50 flex justify-end">
                       <button
                         onClick={handleSaveDetoxSession}
-                        disabled={!canAddMoreSessions || !detoxNotes.trim()}
+                        disabled={!canAddSession || !detoxNotes.trim() || isSaving}
                         className={`bg-emerald-600 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm ${
-                          (!canAddMoreSessions || !detoxNotes.trim()) 
+                          (!canAddSession || !detoxNotes.trim() || isSaving) 
                             ? 'opacity-50 cursor-not-allowed' 
                             : 'hover:bg-emerald-700'
                         }`}
                       >
-                        <Save className="w-4 h-4" /> 
-                        Save {getSessionTypeDisplay(sessionType)} {sessionCount + 1}/3
+                        {isSaving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" /> 
+                            Save Detox Session
+                          </>
+                        )}
                       </button>
                     </div>
                   </>
@@ -640,10 +747,10 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                   <div className="p-5 space-y-4 consultation-history">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                       <FileText className="w-5 h-5 text-emerald-600" />
-                      Complete Patient History
+                      Detox Procedure History
                     </h3>
                     <p className="text-sm text-slate-500">
-                      Showing all consultations for {activePt.name} ({allPatientConsultations.length} total records)
+                      Showing procedure logs and clinical notes for {activePt.name} ({consHistory.length} total records)
                     </p>
                     
                     <div className="space-y-4">
@@ -683,7 +790,7 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                                     <div
                                       className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
                                       dangerouslySetInnerHTML={{ 
-                                        __html: record.detox_procedure || '<p class="text-slate-500">No detox notes recorded for this session.</p>' 
+                                        __html: record.detox_procedure || '<p class="text-slate-500">No detox notes recorded.</p>' 
                                       }}
                                     />
                                   </div>
@@ -696,50 +803,44 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                                             Follow-up Date
                                           </span>
                                           <div className="text-slate-700 font-medium mt-1">
-                                            {record.followup_date ? record.followup_date.split('T')[0] : 'Not scheduled'}
+                                            {record.followup_date}
                                           </div>
                                         </div>
                                         <div className="text-sm">
                                           <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>
-                                          <div className="text-slate-700 mt-1">{record.followup_remarks || 'No remarks'}</div>
+                                          <div className="text-slate-700 mt-1">
+                                            {record.followup_remarks || 
+                                             record.followupRemarks || 
+                                             record.consultation_notes || 
+                                             record.consultationNotes || 
+                                             'No specific follow-up instructions.'}
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
                                   )}
                                 </>
                               ) : (
-                                <>
-                                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                                    <div>
-                                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Consultation Notes</div>
-                                      <div
-                                        className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                        dangerouslySetInnerHTML={{ 
-                                          __html: record.consultation_notes || '<p class="text-slate-500">No notes recorded.</p>' 
-                                        }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Medical History</div>
-                                      <div
-                                        className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                        dangerouslySetInnerHTML={{ 
-                                          __html: record.medical_history || '<p class="text-slate-500">No history recorded.</p>' 
-                                        }}
-                                      />
-                                    </div>
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                                  <div>
+                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Consultation Notes</div>
+                                    <div
+                                      className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: record.consultation_notes || '<p class="text-slate-500">No notes recorded.</p>' 
+                                      }}
+                                    />
                                   </div>
-                                  
-                                  {record.diet_plan_note && (
-                                    <div className="mt-4">
-                                      <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Diet Plan Note</div>
-                                      <div
-                                        className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                        dangerouslySetInnerHTML={{ __html: record.diet_plan_note }}
-                                      />
-                                    </div>
-                                  )}
-                                </>
+                                  <div>
+                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2">Medical History</div>
+                                    <div
+                                      className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
+                                      dangerouslySetInnerHTML={{ 
+                                        __html: record.medical_history || '<p class="text-slate-500">No history recorded.</p>' 
+                                      }}
+                                    />
+                                  </div>
+                                </div>
                               )}
 
                               <div className="mt-4 pt-3 border-t border-slate-200">
@@ -759,10 +860,10 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                       )}
                     </div>
 
-                    {allPatientConsultations.length > 0 && (
+                    {consHistory.length > 0 && (
                       <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="text-sm text-slate-500">
-                          Showing {Math.min(allPatientConsultations.length, historyPageSize)} of {allPatientConsultations.length} records
+                          Showing {Math.min(consHistory.length, historyPageSize)} of {consHistory.length} records
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -792,41 +893,6 @@ export default function DetoxView({ appointments = [], patients = [], doctors = 
                           >
                             Next →
                           </button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Session Progress Indicator */}
-                    {detoxSessions.length > 0 && detoxSessions.length < 3 && (
-                      <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-100">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-semibold text-emerald-800">Detox Progress</span>
-                          <span className="text-emerald-700">{detoxSessions.length}/3 sessions completed</span>
-                        </div>
-                        <div className="w-full bg-emerald-200 rounded-full h-2 mt-2">
-                          <div 
-                            className="bg-emerald-600 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(detoxSessions.length / 3) * 100}%` }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Summary Stats */}
-                    {allPatientConsultations.length > 0 && (
-                      <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-semibold text-blue-800">Summary</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 mt-2">
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-blue-700">{allPatientConsultations.length}</div>
-                            <div className="text-xs text-blue-600">Total Visits</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-lg font-bold text-teal-700">{detoxSessions.length}</div>
-                            <div className="text-xs text-teal-600">Detox Sessions</div>
-                          </div>
                         </div>
                       </div>
                     )}

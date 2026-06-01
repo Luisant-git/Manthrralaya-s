@@ -133,6 +133,14 @@ export default function App() {
 
   const fetchDoctorsFromBackend = async () => {
     try {
+      // Only admins and receptionists are authorized to fetch the full directory of doctors.
+      // Skip this call for other roles (like doctors themselves) to prevent 403 errors 
+      // since they use the appointments extraction fallback instead.
+      if (activeRole !== 'admin' && activeRole !== 'receptionist') {
+        console.log('ℹ️ Skipping staff list fetch for this role to avoid 403.');
+        setDoctors([]);
+        return;
+      }
       console.log('🟢 Fetching doctors from backend...');
       const response = await userApi.getUsersByRole('DOCTOR');
       console.log('🔍 Raw response for doctors:', response);
@@ -362,15 +370,13 @@ export default function App() {
 
     const newStatus = doctorInitiated ? 'Checked-in' : 'Arrived';
     
+    // Optimistic UI update: Immediately reflect arrival/check-in in local state
+    setAppointments(prev => prev.map(a => 
+      (String(a.id) === String(apptId)) ? { ...a, status: newStatus } : a
+    ));
+
     try {
       await apiUpdateStatus(apptId, newStatus);
-      
-      if (doctorInitiated) {
-        setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Checked-in' } : a)));
-      } else {
-        setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Arrived' } : a)));
-      }
-
       const pt = patients.find(p => String(p.id) === String(appt.patient_id || appt.patientId)) || {};
       const waLog = {
         id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: pt.id, patient_name: pt.name, phone: pt.phone,
@@ -404,10 +410,16 @@ export default function App() {
   const handleAddConsultation = async (newCons, apptId) => {
     try {
       // Prepare data for API
+      // Ensure IDs are numeric even if they have mock prefixes like "P-" or "A-"
+      const patientId = Number(String(newCons.patient_id).replace(/^\D+/g, ''));
+      const doctorIdValue = newCons.doctor_id || doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id || 0;
+      const doctorId = Number(String(doctorIdValue).replace(/^\D+/g, ''));
+      const appointmentId = apptId ? parseInt(String(apptId).replace(/^\D+/g, ''), 10) : undefined;
+
       const consultationData = {
-        patientId: Number(newCons.patient_id),
-        doctorId: Number(newCons.doctor_id || doctors.find(d => d.name === newCons.doctor_name)?.id || doctors[0]?.id),
-        appointmentId: apptId ? parseInt(apptId) : undefined,
+        patientId,
+        doctorId,
+        appointmentId: isNaN(appointmentId) ? undefined : appointmentId,
         consultationNotes: newCons.consultation_notes,
         medicalHistoryNotes: newCons.medical_history,
         detoxProcedureNotes: newCons.detox_procedure,
@@ -419,19 +431,32 @@ export default function App() {
         followupDate: newCons.followup_date,
         followupRemarks: newCons.followup_remarks
       };
+
+      if (isNaN(patientId)) throw new Error("Invalid Patient ID format.");
+      if (isNaN(doctorId) || doctorId === 0) throw new Error("A valid Doctor must be assigned to save history.");
       
+      // Optimistic UI: Immediately mark the appointment as Completed to clear queues
+      if (apptId) {
+        setAppointments(prev => prev.map(a => 
+          (String(a.id) === String(apptId)) ? { ...a, status: 'Completed' } : a
+        ));
+      }
+
       // Save to backend
       const createdConsultation = await createConsultation(consultationData);
-      console.log('Consultation saved to backend:', createdConsultation);
+      console.log('✅ Consultation saved to backend:', createdConsultation);
       
-      // Update local state
-      setConsultations(prev => [...prev, {
-        ...newCons,
-        id: createdConsultation.id
-      }]);
-      
-      // Update appointment status
-      setAppointments(prev => prev.map(a => (String(a.id) === String(apptId) ? { ...a, status: 'Completed' } : a)));
+      // Persist the appointment status update to the database
+      if (apptId) {
+        try {
+          await apiUpdateStatus(apptId, 'Completed');
+        } catch (statusError) {
+          console.error('⚠️ API Status update failed but local state is already synced:', statusError);
+        }
+      }
+
+      // Update consultations list
+      setConsultations(prev => [...prev, { ...newCons, id: createdConsultation.id }]);
 
       // Mark previous pending followups as Completed since a new consultation just occurred
       setFollowups(prev => prev.map(f => 
@@ -603,13 +628,14 @@ export default function App() {
           detoxSessions={detoxSessions}
           stayManagement={stayManagement}
           onAddConsultation={handleAddConsultation}
-          onScheduleDetox={handleScheduleDetox}
+          onAddDetoxSession={handleScheduleDetox}
           onUpdateDetoxStatus={handleUpdateDetoxStatus}
           onUpdateDetoxSession={handleUpdateDetoxSession}
           onAdmitPatient={handleAdmitPatient}
           onUpdateNursingChecklist={handleUpdateNursingChecklist}
           onDischargePatient={handleDischargePatient}
           activeRole={activeRole}
+          currentUser={currentUser}
         />;
       case 'whatsapp-hub':
         return <WhatsAppHubView whatsappLogs={whatsappLogs} patients={patients} onSendCustomMessage={handleSendCustomMessage} />;

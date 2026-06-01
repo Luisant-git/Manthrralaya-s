@@ -82,34 +82,45 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [detoxDoctorId, setDetoxDoctorId] = useState('');
   const [detoxFollowupDate, setDetoxFollowupDate] = useState(new Date().toISOString().split('T')[0]);
   const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('');
-  const todayDate = new Date().toISOString().split('T')[0];
+  const todayDate = new Date().toLocaleDateString('en-CA');
 
   const isDetoxAppointment = (appt) => {
-    return String(appt?.appointmentType || '').toLowerCase().includes('detox');
+    const type = String(appt?.appointmentType || appt?.appointment_type || '').toLowerCase();
+    return type.includes('detox');
   };
 
   const isDoctorView = activeRole === 'doctor';
+  const currentUserEmail = (currentUser?.email || (typeof currentUser === 'string' ? currentUser : '')).toLowerCase();
+  const currentUserId = currentUser?.userId || currentUser?.id;
 
   // Find current doctor - Match from doctors list or fallback to appointments data
   let currentDoctor = isDoctorView
     ? doctors.find(d => {
         const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
         const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
-        const currentUserLower = String(currentUser || '').toLowerCase();
-        return doctorEmail === currentUserLower || doctorName === currentUserLower;
+        const dUserId = d.user?.id || d.userId;
+        return doctorEmail === currentUserEmail || 
+               (doctorName && currentUserEmail.includes(doctorName)) ||
+               doctorName === currentUserEmail || 
+               (currentUserId && Number(dUserId) === Number(currentUserId));
       })
     : null;
 
   // FALLBACK: Identify doctor from appointments if doctors list is empty
   if (isDoctorView && !currentDoctor && appointments && appointments.length > 0) {
     const aptWithDoctor = appointments.find(a => {
-      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
-      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
-      const currentUserLower = String(currentUser || '').toLowerCase();
-      return dEmail === currentUserLower || dName === currentUserLower;
+      const doc = a.doctor || a.Doctor || {};
+      if (!doc) return false;
+      const dEmail = (doc.user?.email || doc.email || '').toLowerCase();
+      const dName = (doc.user?.fullName || doc.name || '').toLowerCase();
+      const dUserId = doc.user?.id || doc.userId;
+      return dEmail === currentUserEmail || 
+             (dName && currentUserEmail.includes(dName)) || 
+             (currentUserId && Number(dUserId) === Number(currentUserId));
     });
-    if (aptWithDoctor && aptWithDoctor.doctor) {
-      currentDoctor = { ...aptWithDoctor.doctor, name: aptWithDoctor.doctor.user?.fullName || aptWithDoctor.doctor.name };
+    const foundDoc = aptWithDoctor?.doctor || aptWithDoctor?.Doctor;
+    if (foundDoc) {
+      currentDoctor = { ...foundDoc, name: foundDoc.user?.fullName || foundDoc.name };
     }
   }
 
@@ -149,9 +160,17 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
   // Get today's appointments that are checked-in and ready for consultation
   const pendingConsults = appointments.filter(a => {
-    const apptDate = a.date || (a.appointmentDate ? new Date(a.appointmentDate).toISOString().split('T')[0] : '');
+    const rawDate = a.appointmentDate || a.date;
+    let apptDateStr = '';
+    if (rawDate) {
+      if (typeof rawDate === 'string') {
+        apptDateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+      } else {
+        apptDateStr = new Date(rawDate).toLocaleDateString('en-CA');
+      }
+    }
     const isReady = isDoctorView ? a.status === 'Checked-in' : (a.status === 'Checked-in' || a.status === 'Arrived');
-    const isToday = apptDate === todayDate;
+    const isToday = apptDateStr === todayDate;
     const isNotDetox = !isDetoxAppointment(a);
     
     if (!isReady || !isToday || !isNotDetox) return false;

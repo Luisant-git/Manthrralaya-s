@@ -16,6 +16,12 @@ export default function PatientTimeline({
 }) {
   if (!patient) return null;
 
+  // Helper to clean HTML from notes for preview
+  const cleanHtml = (text) => {
+    if (!text) return '';
+    return text.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+  };
+
   const timelineEvents = [];
 
   phoneCalls.filter(c => c.phone === patient.phone || c.phone === patient.whatsapp).forEach(c => {
@@ -46,33 +52,43 @@ export default function PatientTimeline({
   });
 
   consultations.filter(c => String(c.patient_id || c.patientId) === String(patient.id)).forEach(c => {
-    const detoxDetail = c.detox_recommended
-      ? `Detox assignment: ${c.detox_type || 'Recommended'} with ${c.detox_doctor_name || 'Assigned Provider'}`
+    const isDetoxRec = c.detox_recommended || c.detoxRecommended;
+    const fRemarks = c.followup_remarks || c.followupRemarks;
+    const docName = c.detox_doctor_name || c.detoxDoctorName || 'Assigned Provider';
+
+    const detoxDetail = isDetoxRec
+      ? `Detox assignment: ${c.detox_type || 'Recommended'} with ${docName}. Follow-up Remarks: ${fRemarks || 'No additional remarks.'}`
       : 'No detox recommended';
 
-    // Clean HTML from notes for preview
-    const cleanNotes = (c.consultation_notes || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim().substring(0, 150);
+    const cNotes = cleanHtml(c.consultation_notes || c.consultationNotes);
+    const dNotes = cleanHtml(c.detox_procedure || c.detoxProcedureNotes);
+    const combinedNotes = [cNotes, dNotes].filter(Boolean).join(' | ').substring(0, 200);
 
     timelineEvents.push({
-      date: c.date, 
+      date: c.date || c.consultationDate?.split('T')[0] || 'Unknown Date', 
       time: 'Consult Time', 
       type: 'consultation', 
       title: 'Doctor Consultation',
       icon: Stethoscope, 
       color: 'bg-indigo-500',
-      description: `Clinical Notes: ${cleanNotes}${cleanNotes.length >= 150 ? '...' : ''}. ${detoxDetail}`
+      description: `Clinical Notes: ${combinedNotes}${combinedNotes.length >= 200 ? '...' : ''}. ${detoxDetail}`
     });
   });
 
   detoxSessions.filter(d => String(d.patient_id || d.patientId) === String(patient.id)).forEach(d => {
+    const cleanNotes = cleanHtml(d.notes || d.detoxNotes);
+    // Fallback to linked consultation remarks if session remarks are empty
+    const fRemarks = d.followup_remarks || d.followupRemarks || d.consultation?.followup_remarks || d.consultation?.followupRemarks;
+    const fDate = d.followupDate || d.followup_date || d.consultation?.followupDate || d.consultation?.followup_date;
+
     timelineEvents.push({
-      date: d.scheduled_date, 
+      date: d.scheduled_date || d.sessionDate?.split('T')[0] || 'Unknown Date', 
       time: 'Session Date', 
       type: 'detox', 
-      title: `Detox Procedure scheduled`,
+      title: `Detox Therapy Session`,
       icon: Activity, 
       color: 'bg-cyan-500',
-      description: `Scheduled ${d.type || 'Detox'}. Status: ${d.status}. Technician: ${d.technician || 'Not assigned'}. Notes: ${d.notes}`
+      description: `Session: ${d.type || d.sessionType || 'Detox'}. Status: ${d.status || 'Active'}. Clinical Notes: ${cleanNotes}${fRemarks ? `. Follow-up Instructions: ${cleanHtml(fRemarks)}` : ''}${fDate ? `. Review Scheduled: ${fDate.split('T')[0]}` : ''}`
     });
   });
 

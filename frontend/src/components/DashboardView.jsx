@@ -27,16 +27,20 @@ export default function DashboardView({
   console.log('  - appointments count:', appointments.length);
   
  
+  const currentUserEmail = (currentUser?.email || (typeof currentUser === 'string' ? currentUser : '')).toLowerCase();
+  const currentUserId = currentUser?.userId || currentUser?.id;
 
   // Find current doctor - Match from doctors list or fallback to appointments data
   let currentDoctor = isDoctorView
     ? doctors.find(d => {
         const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
         const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
-        const currentUserLower = String(currentUser || '').toLowerCase();
-        
-        // Match by email or name to ensure the doctor record is found correctly
-        return doctorEmail === currentUserLower || doctorName === currentUserLower;
+        const doctorUserId = d.user?.id || d.userId;
+        // Fix: correctly handle currentUser object vs string
+        return doctorEmail === currentUserEmail || 
+               (doctorName && currentUserEmail.includes(doctorName)) || 
+               doctorName === currentUserEmail ||
+               (currentUserId && Number(doctorUserId) === Number(currentUserId));
       })
     : null;
 
@@ -44,16 +48,17 @@ export default function DashboardView({
   // or match not found, try to identify the doctor from the appointments data.
   if (isDoctorView && !currentDoctor && appointments && appointments.length > 0) {
     const aptWithDoctor = appointments.find(a => {
-      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
-      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
-      const currentUserLower = String(currentUser || '').toLowerCase();
-      return dEmail === currentUserLower || dName === currentUserLower;
+      const docObj = a.doctor || a.Doctor || {};
+      const dEmail = (docObj.user?.email || docObj.email || '').toLowerCase();
+      const dName = (docObj.user?.fullName || docObj.name || '').toLowerCase();
+      return dEmail === currentUserEmail || (dName && currentUserEmail.includes(dName));
     });
     
-    if (aptWithDoctor && aptWithDoctor.doctor) {
+    const foundDoc = aptWithDoctor?.doctor || aptWithDoctor?.Doctor;
+    if (foundDoc) {
       currentDoctor = {
-        ...aptWithDoctor.doctor,
-        name: aptWithDoctor.doctor.user?.fullName || aptWithDoctor.doctor.name,
+        ...foundDoc,
+        name: foundDoc.user?.fullName || foundDoc.name,
       };
       console.log('💡 Identified current doctor from appointments fallback:', currentDoctor);
     }

@@ -38,9 +38,13 @@ model Doctor {
   specialization String
   status         String   @default("Available")
   user           User     @relation(fields: [userId], references: [id])
+
   appointments   Appointment[]
   consultations  Consultation[]
   detoxConsultations Consultation[] @relation("DetoxDoctor")
+  detoxSessions   DetoxSession[] 
+
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -59,6 +63,7 @@ model Patient {
 
   appointments  Appointment[]
   consultations Consultation[]
+  detoxSessions  DetoxSession[]  
 
   @@map("patients")
   @@index([phone])
@@ -79,6 +84,7 @@ model Appointment {
   patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor          Doctor?   @relation(fields: [doctorId], references: [id])
   consultation    Consultation?
+  detoxSessions   DetoxSession[] 
 
   @@index([patientId])
   @@index([doctorId])
@@ -114,10 +120,47 @@ model Consultation {
   doctor            Doctor    @relation(fields: [doctorId], references: [id])
   appointment       Appointment? @relation(fields: [appointmentId], references: [id])
   detoxDoctor       Doctor?   @relation("DetoxDoctor", fields: [detoxDoctorId], references: [id])
+  detoxSessions     DetoxSession[] 
 
   @@index([patientId])
   @@index([doctorId])
   @@index([detoxDoctorId])
   @@index([appointmentId])
   @@index([consultationDate])
+}
+
+model DetoxSession {
+  id              Int       @id @default(autoincrement())
+  patientId       Int
+  doctorId        Int?
+  appointmentId   Int?
+  consultationId  Int?
+  
+  // Session details
+  sessionNumber   Int       // 1, 2, or 3 (max 3 sessions per patient)
+  sessionType     String    // 'morning', 'evening', 'fullDay'
+  sessionDate     DateTime  @default(now())
+  
+  // Detox notes
+  detoxNotes      String?   
+  
+  // Follow-up details
+  followupDate    DateTime?
+  followupRemarks String?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor          Doctor?   @relation(fields: [doctorId], references: [id])
+  appointment     Appointment? @relation(fields: [appointmentId], references: [id]) // Removed @unique
+  consultation    Consultation? @relation(fields: [consultationId], references: [id])
+
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([appointmentId])
+  @@index([consultationId])
+  @@index([sessionDate])
 }

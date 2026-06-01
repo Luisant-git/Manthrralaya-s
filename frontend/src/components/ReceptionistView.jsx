@@ -68,6 +68,24 @@ export default function ReceptionistView({
   const [showPatientFoundAlert, setShowPatientFoundAlert] = useState(false);
   const [phoneDebounce, setPhoneDebounce] = useState(null);
 
+  // Create a robust list of available doctors (Master list + Extraction from Appointments)
+  // This ensures the list isn't empty even if the master fetch is restricted or delayed.
+  const availableDoctors = doctors ? doctors.filter(d => d.status === 'Available') : [];
+  
+  if (appointments && appointments.length > 0) {
+    appointments.forEach(a => {
+      const doc = a.doctor || a.Doctor;
+      if (doc && doc.id && doc.status === 'Available') {
+        if (!availableDoctors.some(d => String(d.id) === String(doc.id))) {
+          availableDoctors.push({
+            ...doc,
+            name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`
+          });
+        }
+      }
+    });
+  }
+
   // Debug: Log doctors data
   useEffect(() => {
     console.log('Doctors received:', doctors);
@@ -527,8 +545,8 @@ export default function ReceptionistView({
                 
                 {showDoctorDropdown && (
                   <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-64 overflow-y-auto animate-fadeIn">
-                    {doctors && doctors.length > 0 ? (
-                      doctors
+                    {availableDoctors.length > 0 ? (
+                      availableDoctors
                         .filter(d => {
                           const doctorName = d.user?.fullName || d.name || `Doctor ${d.id}`;
                           const doctorSpecialty = d.specialization || d.designation || '';
@@ -572,9 +590,9 @@ export default function ReceptionistView({
                           );
                         })
                     ) : (
-                      <div className="p-4 text-center text-xs text-slate-400 italic">Loading doctors...</div>
+                      <div className="p-4 text-center text-xs text-slate-400 italic">No available doctors found.</div>
                     )}
-                    {doctors && doctors.length > 0 && doctors.filter(d => d.status === 'Available').length === 0 && (
+                    {availableDoctors.length === 0 && doctors.length > 0 && (
                       <div className="p-4 text-center text-xs text-slate-400 italic">No doctors available today.</div>
                     )}
                   </div>
