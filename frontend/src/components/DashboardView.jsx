@@ -25,7 +25,11 @@ export default function DashboardView({
   console.log('  - doctors array length:', doctors.length);
   console.log('  - doctors:', doctors);
   console.log('  - appointments count:', appointments.length);
-  
+    const storedEmail = localStorage.getItem('user_email') || '';
+    const usernameFromEmail = storedEmail.includes('@') ? storedEmail.split('@')[0] : (typeof currentUser === 'string' && currentUser.includes('@') ? currentUser.split('@')[0] : '');
+    const usernameDisplay = currentUser?.username || currentUser?.user?.username || usernameFromEmail || '';
+    const fullNameCandidate = currentUser?.fullName || currentUser?.name || localStorage.getItem('user_display_name') || '';
+    const displayName = usernameDisplay || fullNameCandidate || (typeof currentUser === 'string' ? currentUser : '');
  
   const currentUserEmail = (currentUser?.email || (typeof currentUser === 'string' ? currentUser : '')).toLowerCase();
   const currentUserId = currentUser?.userId || currentUser?.id;
@@ -118,6 +122,11 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
     status: a.status,
     patientName: a.patient?.name || 'Unknown'
   })));
+
+  const getInitials = (name) => {
+    if (!name) return '??';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
   
   const totalAppointmentsToday = todayAppointments.length;
   
@@ -275,10 +284,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
     return matchesSearch && matchesFilter;
   });
 
-  const getInitials = (name) => {
-    if (!name) return '??';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
+ 
   
   // If doctor view but we haven't identified the doctor profile yet (even with fallback)
   if (isDoctorView && !currentDoctor && doctors.length === 0) {
@@ -320,14 +326,14 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
-              {getInitials(currentUser)}
+              {getInitials(displayName)}
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
                 Doctor Dashboard
               </h1>
               <p className="text-slate-500 text-sm mt-1">
-                Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>
+                Welcome back, <span className="font-bold text-emerald-600">{displayName}</span>
               </p>
             </div>
           </div>
@@ -358,15 +364,15 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
       {/* Top Title & Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
-            {getInitials(currentUser)}
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border-2 border-white shadow-sm text-xl">
+            {getInitials(displayName)}
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
               {isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Welcome back, <span className="font-bold text-emerald-600">{currentUser}</span>. 
+              Welcome back, <span className="font-bold text-emerald-600">{displayName}</span>. 
               {isDoctorView
                 ? ' Here is your patient queue for today.'
                 : ' View real-time insights on patient flow and admissions.'}

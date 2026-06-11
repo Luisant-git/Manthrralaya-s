@@ -21,7 +21,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist'] },
     { id: 'user-management', name: 'Staff Management', icon: UserPlus, roles: ['admin'] },
     { id: 'receptionist-desk', name: 'Appointment Booking', icon: CalendarDays, roles: ['receptionist', 'admin'] },
-    { id: 'doctor-master', name: 'Doctor Master', icon: Stethoscope, roles: ['receptionist', 'admin'] },
+    { id: 'doctor-master', name: activeRole === 'receptionist' ? 'Doctor Availability' : 'Doctor Master', icon: Stethoscope, roles: ['receptionist', 'admin'] },
     { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist'] },
     { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin'] },
     { id: 'change-my-pin', name: 'Change My PIN', icon: Lock, roles: ['admin', 'doctor', 'receptionist'] },

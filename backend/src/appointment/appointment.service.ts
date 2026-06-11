@@ -117,7 +117,11 @@ export class AppointmentService {
           }
         }
       },
-      orderBy: { appointmentDate: 'asc' }
+      // Ensure appointments for a doctor are ordered FIFO for their queue
+      orderBy: [
+        { appointmentDate: 'asc' },
+        { createdAt: 'asc' }
+      ]
     });
   }
 
@@ -143,7 +147,12 @@ export class AppointmentService {
           }
         }
       },
-      orderBy: { session: 'asc' }
+      // Return appointments in FIFO order: earliest created appointments first.
+      // Session ordering is not FIFO for waiting lists, so we order by `createdAt`.
+      orderBy: [
+        { createdAt: 'asc' },
+        { appointmentDate: 'asc' }
+      ]
     });
   }
 

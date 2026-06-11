@@ -16,6 +16,13 @@ export default function Header({
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  // Prefer username when available, then fall back to full name or stored display name.
+  const storedEmail = localStorage.getItem('user_email') || '';
+  const usernameFromEmail = storedEmail.includes('@') ? storedEmail.split('@')[0] : (typeof currentUser === 'string' && currentUser.includes('@') ? currentUser.split('@')[0] : '');
+  const usernameDisplay = currentUser?.username || currentUser?.user?.username || usernameFromEmail || '';
+  const fullNameCandidate = currentUser?.fullName || currentUser?.name || localStorage.getItem('user_display_name') || '';
+  const displayName = usernameDisplay || fullNameCandidate || (typeof currentUser === 'string' ? currentUser : '');
+
   return (
     <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
       {/* Brand logo */}
@@ -67,11 +74,11 @@ export default function Header({
         {/* Profile Avatar */}
         <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
           <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center font-bold text-emerald-700 border border-emerald-200">
-            {getInitials(currentUser)}
+            {getInitials(fullNameCandidate || displayName)}
           </div>
           <div className="hidden md:block text-left mr-2">
             <span className="text-sm font-bold text-slate-800 block leading-tight">
-              {currentUser || 'Staff User'}
+              {displayName || 'Staff User'}
             </span>
             <span className="text-xs text-slate-500 block capitalize">{activeRole}</span>
           </div>
