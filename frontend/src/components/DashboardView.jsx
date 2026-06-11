@@ -173,7 +173,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
       const patientConsultations = consultations.filter(c => String(c.patient_id || c.patientId) === String(pid));
       const historyCount = patientConsultations.length;
       const historyRecords = patientConsultations.sort((a, b) => new Date(b.date) - new Date(a.date));
-      const latestNote = historyRecords[0]?.consultation_notes || appt.notes || 'No consultation notes yet.';
+      const latestNote = appt.notes || historyRecords[0]?.consultation_notes || 'No consultation notes yet.';
       const isCheckedIn = appt.status === 'Checked-in';
       
       // Check if this appointment already has a completed consultation

@@ -30,6 +30,19 @@ export const updateAppointmentStatus = async (id, status) => {
     return await response.json();
 };
 
+export const updateAppointment = async (id, appointmentData) => {
+    const response = await fetch(`${API_URL}/${id}`, {
+        method: 'PATCH',
+        headers: getAuthHeader(),
+        body: JSON.stringify(appointmentData),
+    });
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to update appointment');
+    }
+    return await response.json();
+};
+
 export const getAppointmentsByDate = async (date) => {
     const response = await fetch(`${API_URL}/date?date=${date}`, {
         headers: getAuthHeader()

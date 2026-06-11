@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getPatientByPhone, createPatient } from '../api/patientApi';
-import { createAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
+import { createAppointment, updateAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
 import { toast } from 'react-toastify';
 import { 
   UserPlus, 
@@ -71,12 +71,19 @@ export default function ReceptionistView({
   // Create a robust list of available doctors (Master list + Extraction from Appointments)
   // This ensures the list isn't empty even if the master fetch is restricted or delayed.
   const availableDoctors = doctors ? doctors.filter(d => d.status === 'Available') : [];
+  const allDoctors = doctors ? [...doctors] : [];
   
   if (appointments && appointments.length > 0) {
     appointments.forEach(a => {
       const doc = a.doctor || a.Doctor;
-      if (doc && doc.id && doc.status === 'Available') {
-        if (!availableDoctors.some(d => String(d.id) === String(doc.id))) {
+      if (doc && doc.id) {
+        if (!allDoctors.some(d => String(d.id) === String(doc.id))) {
+          allDoctors.push({
+            ...doc,
+            name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`
+          });
+        }
+        if (doc.status === 'Available' && !availableDoctors.some(d => String(d.id) === String(doc.id))) {
           availableDoctors.push({
             ...doc,
             name: doc.user?.fullName || doc.name || `Doctor ${doc.id}`
@@ -242,10 +249,18 @@ export default function ReceptionistView({
       };
 
       const newAppt = await createAppointment(appointmentData);
-      setAppointments(prev => [...prev, newAppt]);
+      
+      // Ensure doctor info is preserved in local state
+      const doctorObj = allDoctors.find(d => String(d.id) === String(formData.doctor_id));
+      const normalizedNewAppt = {
+        ...newAppt,
+        doctor: doctorObj,
+        doctorId: formData.doctor_id ? parseInt(formData.doctor_id, 10) : newAppt.doctorId || newAppt.doctor_id,
+        doctor_name: doctorObj?.user?.fullName || doctorObj?.name
+      };
+      setAppointments(prev => [...prev, normalizedNewAppt]);
 
       if (type === 'book') {
-        const doctorObj = doctors.find(d => String(d.id) === String(formData.doctor_id));
         const docName = doctorObj?.user?.fullName || doctorObj?.name || 'Not Applicable';
         const waLog = {
           id: `WA-${Date.now()}`,
@@ -276,8 +291,26 @@ export default function ReceptionistView({
     try {
       const waitingAppt = appointments.find(a => (String(a.patientId || a.patient_id) === String(bookingModalPatient.id)) && a.status === 'Waiting');
       if (waitingAppt) {
-        const updated = await updateAppointmentStatus(waitingAppt.id, 'Scheduled');
-        setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
+        const doctorIdValue = modalBookingData.doctor_id ? parseInt(modalBookingData.doctor_id, 10) : waitingAppt.doctorId || waitingAppt.doctor_id;
+        await updateAppointment(waitingAppt.id, {
+          doctorId: doctorIdValue,
+          appointmentDate: modalBookingData.date || waitingAppt.appointmentDate || waitingAppt.date,
+          appointmentType: modalBookingData.appointmentType || waitingAppt.appointmentType,
+          session: modalBookingData.session || waitingAppt.session,
+          notes: modalBookingData.notes || waitingAppt.notes
+        });
+
+        const updatedStatus = await updateAppointmentStatus(waitingAppt.id, 'Scheduled');
+        const selectedDoc = allDoctors.find(d => String(d.id) === String(doctorIdValue));
+        const mergedUpdate = {
+          ...waitingAppt,
+          ...updatedStatus,
+          doctorId: doctorIdValue,
+          doctor: selectedDoc || updatedStatus.doctor || waitingAppt.doctor,
+          doctor_name: selectedDoc?.user?.fullName || selectedDoc?.name || updatedStatus.doctor_name || updatedStatus.doctor?.user?.fullName || updatedStatus.doctor?.name
+        };
+
+        setAppointments(prev => prev.map(a => a.id === waitingAppt.id ? mergedUpdate : a));
         toast.success(`Appointment successfully scheduled for ${bookingModalPatient.name}!`);
         setBookingModalPatient(null);
       }
@@ -289,7 +322,7 @@ export default function ReceptionistView({
   const handleCheckIn = async (apptId) => {
     try {
       const updated = await updateAppointmentStatus(apptId, 'Arrived');
-      setAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
+      setAppointments(prev => prev.map(a => a.id === apptId ? { ...a, ...updated } : a));
     } catch (error) {
       toast.error('Check-in failed');
     }
@@ -298,7 +331,7 @@ export default function ReceptionistView({
   const handleCancelAppointment = async (apptId) => {
     try {
       const updated = await updateAppointmentStatus(apptId, 'Cancelled');
-      setAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
+      setAppointments(prev => prev.map(a => a.id === apptId ? { ...a, ...updated } : a));
     } catch (error) {
       toast.error('Cancellation failed');
     }
@@ -325,8 +358,8 @@ export default function ReceptionistView({
   const filteredActiveBookings = activeBookings.filter(appt => {
     if (!appt) return false;
     const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || appt.Patient || {};
-    const doc = doctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || {};
-    const docFullName = doc?.user?.fullName || doc?.name || '';
+    const doc = allDoctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || {};
+    const docFullName = doc?.user?.fullName || doc?.name || appt.doctor_name || '';
 
     const matchesSearch = !searchQuery || 
       pt.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -689,11 +722,17 @@ export default function ReceptionistView({
                   <tbody className="divide-y divide-slate-100">
                     {waitingList.map(appt => {
                       const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || appt.Patient || {};
+                      const assignedDoc = allDoctors.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
+                      const assignedDocName = assignedDoc?.user?.fullName || assignedDoc?.name || appt.doctor_name;
+                      
                       return (
                         <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors align-top">
                           <td className="py-2.5 px-4">
                             <span className="font-bold text-slate-800 block text-sm">{pt.name || 'Unknown Patient'}</span>
                             <span className="text-slate-500 text-xs">{formatPhoneWithoutCountryCode(pt.phone) || 'No phone'}</span>
+                            {assignedDocName && (
+                              <span className="text-emerald-600 text-[10px] font-bold block uppercase mt-1">For: {assignedDocName}</span>
+                            )}
                           </td>
                           <td className="py-2.5 px-4">
                             <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType}</span>
@@ -790,8 +829,9 @@ export default function ReceptionistView({
                             <span className="font-semibold text-slate-700 block truncate">
                               {appt?.doctor?.user?.fullName ||
                                 appt?.doctor?.name ||
+                                appt?.doctor_name ||
                                 (() => {
-                                  const doctor = doctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
+                                  const doctor = allDoctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
                                   return doctor?.user?.fullName || doctor?.name || '';
                                 })() ||
                                 'Not Assigned'}
