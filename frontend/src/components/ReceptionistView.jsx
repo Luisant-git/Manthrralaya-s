@@ -29,7 +29,8 @@ export default function ReceptionistView({
   setPatients,
   doctors,
   whatsappLogs,
-  setWhatsappLogs
+  setWhatsappLogs,
+  consultations = []
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -124,16 +125,36 @@ export default function ReceptionistView({
         setFoundPatient(patient);
         setShowPatientFoundAlert(true);
         
-        setFormData(prev => ({
-          ...prev,
-          name: patient.name,
-          age: patient.age.toString(),
-          gender: patient.gender || '',
-          location: patient.location || '',
-          address: patient.address || '',
-          whatsapp: patient.whatsapp || patient.phone,
-          phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
-        }));
+        // Find latest follow-up info from consultations
+        const ptCons = consultations.filter(c => String(c.patient_id) === String(patient.id));
+        const latestCons = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+        // Find last appointment to guess preferred session
+        const ptAppts = appointments.filter(a => String(a.patient_id || a.patientId) === String(patient.id));
+        const lastAppt = [...ptAppts].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+        setFormData(prev => {
+          const newState = {
+            ...prev,
+            name: patient.name,
+            age: patient.age.toString(),
+            gender: patient.gender || '',
+            location: patient.location || '',
+            address: patient.address || '',
+            whatsapp: patient.whatsapp || patient.phone,
+            phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
+          };
+
+          if (latestCons) {
+            if (latestCons.followup_date) newState.date = latestCons.followup_date;
+            if (latestCons.detox_doctor_id || latestCons.doctor_id) {
+              newState.doctor_id = latestCons.detox_doctor_id || latestCons.doctor_id;
+            }
+            newState.appointmentType = latestCons.detox_recommended ? 'Detox' : (latestCons.followup_date ? 'Review' : prev.appointmentType);
+            if (lastAppt) newState.session = lastAppt.session || 'FN';
+          }
+          return newState;
+        });
         
         setTimeout(() => setShowPatientFoundAlert(false), 5000);
       } else {
@@ -725,12 +746,29 @@ export default function ReceptionistView({
                       const assignedDoc = allDoctors.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
                       const assignedDocName = assignedDoc?.user?.fullName || assignedDoc?.name || appt.doctor_name;
                       
+                      // Find follow-up recommendation for this patient
+                      const ptCons = consultations.filter(c => String(c.patient_id) === String(pt.id));
+                      const latestFollowup = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                      const fDate = latestFollowup?.followup_date;
+                      const fDocId = latestFollowup?.detox_doctor_id || latestFollowup?.doctor_id;
+                      const fDoc = allDoctors.find(d => String(d.id) === String(fDocId));
+                      const fDocName = fDoc?.user?.fullName || fDoc?.name;
+
                       return (
                         <tr key={appt.id} className="hover:bg-amber-50/10 transition-colors align-top">
                           <td className="py-2.5 px-4">
                             <span className="font-bold text-slate-800 block text-sm">{pt.name || 'Unknown Patient'}</span>
                             <span className="text-slate-500 text-xs">{formatPhoneWithoutCountryCode(pt.phone) || 'No phone'}</span>
-                            {assignedDocName && (
+                            
+                            {fDate ? (
+                              <div className="mt-1.5 p-1.5 bg-indigo-50 rounded-lg border border-indigo-100">
+                                <span className="text-indigo-600 text-[9px] font-bold block uppercase">Recommended Follow-up:</span>
+                                <span className="text-slate-700 text-[10px] font-bold block">{fDate}</span>
+                                {fDocName && (
+                                  <span className="text-slate-500 text-[9px] block">With: Dr. {fDocName}</span>
+                                )}
+                              </div>
+                            ) : assignedDocName && (
                               <span className="text-emerald-600 text-[10px] font-bold block uppercase mt-1">For: {assignedDocName}</span>
                             )}
                           </td>

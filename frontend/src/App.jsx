@@ -684,6 +684,7 @@ export default function App() {
             doctors={doctors}
             whatsappLogs={whatsappLogs}
             setWhatsappLogs={setWhatsappLogs}
+            consultations={consultations}
           />
         );
       case 'doctor-master':
