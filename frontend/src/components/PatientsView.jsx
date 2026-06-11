@@ -191,13 +191,13 @@ export default function PatientsView({ appointments = [], followups = [], onAddP
             Manage patient intakes, demographics, and clinical records.
           </p>
         </div>
-        <button
+        {/* <button
           onClick={() => setIsAdding(!isAdding)}
           className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
         >
           {isAdding ? <FileText className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {isAdding ? 'View Directory' : 'New Intake Registration'}
-        </button>
+        </button> */}
       </div>
 
       {isAdding ? (

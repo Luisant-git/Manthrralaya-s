@@ -75,10 +75,10 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   })));
   
   // Calculate quick metrics
-  const totalPatients = patients.length;
-  const todaysAppts = appointments.filter(a => a.date === todayDate).length;
-  const activeStays = stayManagement.filter(s => s.status === 'Admitted').length;
-  const pendingFollowups = followups.filter(f => f.status === 'Pending').length;
+  const totalPatients = patients?.length ?? 0;
+  const todaysAppts = appointments?.filter(a => a.date === todayDate).length ?? 0;
+  const activeStays = stayManagement?.filter(s => s.status === 'Admitted').length ?? 0;
+  const pendingFollowups = followups?.filter(f => f.status === 'Pending').length ?? 0;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');

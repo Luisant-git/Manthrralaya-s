@@ -57,10 +57,14 @@ export default function App() {
     try {
       console.log('Fetching patients from backend...');
       const response = await getAllPatients();
-      if (response && response.data) {
-        setPatients(response.data);
-        console.log('Patients fetched successfully:', response.data);
-      }
+      const patientsData = Array.isArray(response?.data)
+        ? response.data
+        : Array.isArray(response)
+        ? response
+        : response?.patients || [];
+
+      setPatients(patientsData);
+      console.log('Patients fetched successfully:', patientsData);
     } catch (error) {
       console.error('Error fetching patients:', error);
     }
