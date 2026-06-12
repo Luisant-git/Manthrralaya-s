@@ -175,26 +175,26 @@ export default function App() {
 
   const fetchDoctorsFromBackend = async () => {
     try {
-      if (activeRole !== 'admin' && activeRole !== 'receptionist' && activeRole !== 'doctor') {
+      if (activeRole !== 'admin' && activeRole !== 'receptionist' && activeRole !== 'doctor' && activeRole !== 'therapist') {
         console.log('ℹ️ Skipping staff list fetch for this role to avoid 403.');
         setDoctors([]);
         return;
       }
-      console.log('🟢 Fetching doctors from backend...');
-      const response = await userApi.getUsersByRole('DOCTOR');
-      console.log('🔍 Raw response for doctors:', response);
+      console.log('🟢 Fetching doctors and therapists from backend...');
+      const [doctorsResponse, therapistsResponse] = await Promise.all([
+        userApi.getUsersByRole('DOCTOR'),
+        userApi.getUsersByRole('THERAPIST')
+      ]);
       
-      let doctorsList = [];
-      
-      if (Array.isArray(response)) {
-        doctorsList = response;
-      } else if (response?.data && Array.isArray(response.data)) {
-        doctorsList = response.data;
-      } else if (response?.data?.data && Array.isArray(response.data.data)) {
-        doctorsList = response.data.data;
-      } else if (response?.success && Array.isArray(response.data)) {
-        doctorsList = response.data;
-      }
+      const extractData = (response) => {
+        if (Array.isArray(response)) return response;
+        if (response?.data && Array.isArray(response.data)) return response.data;
+        if (response?.data?.data && Array.isArray(response.data.data)) return response.data.data;
+        if (response?.success && Array.isArray(response.data)) return response.data;
+        return [];
+      };
+
+      const doctorsList = [...extractData(doctorsResponse), ...extractData(therapistsResponse)];
       
       if (doctorsList?.length > 0) {
         const doctorsFromBackend = doctorsList.map(doc => ({
@@ -204,7 +204,8 @@ export default function App() {
           email: doc.user?.email || doc.email,
           specialization: doc.specialization,
           status: doc.status,
-          user: doc.user
+          user: doc.user,
+          role: doc.user?.role
         }));
         
         setDoctors(doctorsFromBackend);

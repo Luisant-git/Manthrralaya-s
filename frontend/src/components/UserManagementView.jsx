@@ -45,11 +45,12 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
         try {
             if (activeFilter === 'all' || activeFilter === 'pin-reset' || activeFilter === 'my-account') {
                 // Load both receptionists and doctors
-                const [receptionists, doctors] = await Promise.all([
+                const [receptionists, doctors, therapists] = await Promise.all([
                     userApi.getUsersByRole('RECEPTIONIST'),
-                    userApi.getUsersByRole('DOCTOR')
+                    userApi.getUsersByRole('DOCTOR'),
+                    userApi.getUsersByRole('THERAPIST')
                 ]);
-                let allStaff = [...(receptionists.data || []), ...(doctors.data || [])];
+                let allStaff = [...(receptionists.data || []), ...(doctors.data || []), ...(therapists.data || [])];
                 
                 // Filter for "My Account" if requested
                 if (activeFilter === 'my-account' && currentUser) {
@@ -232,6 +233,12 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                 className={`px-4 py-2 rounded-full text-sm font-semibold transition ${activeFilter === 'DOCTOR' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}`}
                             >
                                 Doctor
+                            </button>
+                            <button
+                                onClick={() => { setActiveFilter('THERAPIST'); setCurrentPage(1); }}
+                                className={`px-4 py-2 rounded-full text-sm font-semibold transition ${activeFilter === 'THERAPIST' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}`}
+                            >
+                                Therapist
                             </button>
                         </div>
                     </div>
@@ -473,6 +480,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                     >
                                         <option value="RECEPTIONIST">Receptionist</option>
                                         <option value="DOCTOR">Doctor</option>
+                                        <option value="THERAPIST">Therapist</option>
                                     </select>
                                 </div>
                                 <div>
@@ -506,7 +514,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                 />
                             </div>
 
-                            {formData.role === 'DOCTOR' && (
+                            {(formData.role === 'DOCTOR' || formData.role === 'THERAPIST') && (
                                 <div className="animate-fadeIn">
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                                         Medical Specialization <span className="text-rose-500">*</span>

@@ -3,6 +3,7 @@ import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, S
 import { createDetoxSession, getAllDetoxSessions } from '../api/detoxSessionApi';
 import { getAllConsultations } from '../api/consultationApi';
 import { toast } from 'react-toastify';
+import { generateDetoxPDF } from '../utils/pdfGenerator';
 
 export default function DetoxView({ 
   appointments = [], 
@@ -296,7 +297,7 @@ export default function DetoxView({
   };
 
   // Find current doctor
-  const isDoctorView = activeRole === 'doctor';
+  const isDoctorView = activeRole === 'doctor' || activeRole === 'therapist';
   let currentDoctorId = null;
   
   if (isDoctorView && doctors.length > 0) {
@@ -446,6 +447,19 @@ export default function DetoxView({
       console.log('💾 Saving detox session:', detoxData);
       const savedSession = await createDetoxSession(detoxData);
       console.log('✅ Detox session saved:', savedSession);
+      
+      try {
+        const pdfData = {
+          ...detoxData,
+          patient_name: activePt.name,
+          doctorName: doctorName
+        };
+        generateDetoxPDF(pdfData);
+        toast.success("Detox session PDF generated successfully");
+      } catch (pdfError) {
+        console.error("PDF Generation error", pdfError);
+        toast.error("Failed to generate PDF, but session was saved.");
+      }
       
       if (onAddConsultation) {
         await onAddConsultation(null, currentApptId);

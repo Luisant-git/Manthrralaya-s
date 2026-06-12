@@ -12,6 +12,7 @@ enum UserRole {
   RECEPTIONIST
   DOCTOR
   ADMIN
+  THERAPIST
 }
 
 // User model for authentication

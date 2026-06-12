@@ -16,7 +16,7 @@ export default function DashboardView({
 }) {
   
   const todayDate = new Date().toLocaleDateString('en-CA');
-  const isDoctorView = activeRole === 'doctor';
+  const isDoctorView = activeRole === 'doctor' || activeRole === 'therapist';
   
   // DEBUG: Log what we received
   console.log('📊 DashboardView Debug:');
@@ -330,7 +330,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
             </div>
             <div>
               <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
-                Doctor Dashboard
+                {activeRole === 'therapist' ? 'Therapist Dashboard' : 'Doctor Dashboard'}
               </h1>
               <p className="text-slate-500 text-sm mt-1">
                 Welcome back, <span className="font-bold text-emerald-600">{displayName}</span>
@@ -369,7 +369,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
           </div>
           <div>
             <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
-              {isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
+              {activeRole === 'therapist' ? 'Therapist Dashboard' : isDoctorView ? 'Doctor Dashboard' : 'Clinic Overview'}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
               Welcome back, <span className="font-bold text-emerald-600">{displayName}</span>. 

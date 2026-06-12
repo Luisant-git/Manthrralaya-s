@@ -43,7 +43,7 @@ export default function UnifiedPatientRecords({
   });
 
   // Identify current doctor and their relevant patients
-  const isDoctor = activeRole === 'doctor';
+  const isDoctor = activeRole === 'doctor' || activeRole === 'therapist';
   let currentDoc = isDoctor
     ? doctors.find(d => {
         const doctorEmail = (d.user?.email || d.email || '').toLowerCase();

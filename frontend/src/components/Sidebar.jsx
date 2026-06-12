@@ -18,19 +18,19 @@ import {
 
 export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
   const navigationItems = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist'] },
+    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
     { id: 'user-management', name: 'Staff Management', icon: UserPlus, roles: ['admin'] },
     { id: 'receptionist-desk', name: 'Appointment Booking', icon: CalendarDays, roles: ['receptionist', 'admin'] },
     { id: 'doctor-master', name: activeRole === 'receptionist' ? 'Doctor Availability' : 'Doctor Master', icon: Stethoscope, roles: ['receptionist', 'admin'] },
-    { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist'] },
+    { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
     { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin'] },
-    { id: 'change-my-pin', name: 'Change My PIN', icon: Lock, roles: ['admin', 'doctor', 'receptionist'] },
+    { id: 'change-my-pin', name: 'Change My PIN', icon: Lock, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
     { id: 'reset-pin', name: 'Manage Staff PINs', icon: Key, roles: ['admin'] },
     { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin'] },
     { id: 'consultations', name: 'Consultations', icon: Stethoscope, roles: ['admin', 'doctor'] },
-    { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin'] },
-    { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor'] },
-    { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin'] },
+    { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin', 'therapist'] },
+    { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor', 'therapist'] },
+    { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin', 'receptionist'] },
     { id: 'reports', name: 'Reports & Analytics', icon: FileBarChart, roles: ['admin'] },
     { id: 'reviews', name: 'Patient Feedback', icon: Star, roles: ['admin'] }
   ];

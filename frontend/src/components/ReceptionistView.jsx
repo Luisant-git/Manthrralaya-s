@@ -19,8 +19,11 @@ import {
   Search,
   Filter,
   User,
-  RefreshCw
+  RefreshCw,
+  Download
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function ReceptionistView({
   appointments,
@@ -60,6 +63,8 @@ export default function ReceptionistView({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const todayDate = new Date().toISOString().split('T')[0];
+  const [filterDate, setFilterDate] = useState(todayDate);
+  const [filterDoctor, setFilterDoctor] = useState('all');
 
   const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
@@ -371,7 +376,7 @@ export default function ReceptionistView({
   const activeBookings = appointments?.filter(a => {
     if (!a) return false;
     const apptDate = a.appointmentDate ? (typeof a.appointmentDate === 'string' ? a.appointmentDate.split('T')[0] : a.appointmentDate) : a.date;
-    return a.status !== 'Waiting' && apptDate === todayDate;
+    return a.status !== 'Waiting' && apptDate === filterDate;
   }) || [];
 
   const waitingList = appointments?.filter(a => a?.status === 'Waiting') || [];
@@ -388,9 +393,54 @@ export default function ReceptionistView({
       docFullName.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
+    const matchesDoctor = filterDoctor === 'all' || String(appt.doctorId || appt.doctor_id) === String(filterDoctor);
     
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesFilter && matchesDoctor;
   });
+
+  const handleDownloadPdf = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.setTextColor(5, 150, 105);
+    doc.text("Manthrralaya's Wellness - Schedule Report", 14, 22);
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Date: ${filterDate}`, 14, 30);
+    const doctorLabel = filterDoctor === 'all' ? 'All Doctors' : allDoctors.find(d => String(d.id) === String(filterDoctor))?.name || 'Selected Doctor';
+    doc.text(`Doctor: ${doctorLabel}`, 14, 36);
+    doc.text(`Type: ${filterType === 'all' ? 'All Types' : filterType}`, 14, 42);
+
+    const tableData = filteredActiveBookings.map(appt => {
+      const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || {};
+      const docObj = allDoctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || {};
+      const docFullName = docObj?.user?.fullName || docObj?.name || appt.doctor_name || '0';
+      return [
+        pt.name || '0',
+        pt.phone ? String(pt.phone).replace(/\D/g, '').slice(-10) : '0',
+        appt.session || 'FN',
+        appt.appointmentType || '0',
+        docFullName,
+        appt.status || '0',
+        appt.notes ? appt.notes.substring(0, 50) : '0'
+      ];
+    });
+
+    if (tableData.length === 0) {
+       tableData.push(['0', '0', '0', '0', '0', '0', '0']);
+    }
+
+    autoTable(doc, {
+      startY: 50,
+      head: [['Patient', 'Contact', 'Session', 'Type', 'Doctor', 'Status', 'Notes']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [5, 150, 105] },
+      styles: { fontSize: 8, overflow: 'linebreak' }
+    });
+
+    doc.save(`Schedule_Report_${filterDate}.pdf`);
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -622,7 +672,9 @@ export default function ReceptionistView({
                               type="button"
                               onClick={() => {
                                 if (isAvailable) {
-                                  setFormData({ ...formData, doctor_id: d.id });
+                                  const update = { doctor_id: d.id };
+                                  if (d.role === 'THERAPIST') update.appointmentType = 'Detox';
+                                  setFormData({ ...formData, ...update });
                                   setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
                                   setShowDoctorDropdown(false);
                                 }
@@ -680,9 +732,15 @@ export default function ReceptionistView({
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
                 <select value={formData.appointmentType} onChange={e => setFormData({ ...formData, appointmentType: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
-                  <option value="Initial consultation">Initial Consultation</option>
-                  <option value="Detox">Detox</option>
-                  <option value="Review">Review</option>
+                  {availableDoctors.find(d => String(d.id) === String(formData.doctor_id))?.role === 'THERAPIST' ? (
+                    <option value="Detox">Detox</option>
+                  ) : (
+                    <>
+                      <option value="Initial consultation">Initial Consultation</option>
+                      <option value="Detox">Detox</option>
+                      <option value="Review">Review</option>
+                    </>
+                  )}
                 </select>
               </div>
             </div>
@@ -796,19 +854,44 @@ export default function ReceptionistView({
                 <h3 className="font-bold text-slate-800 flex items-center gap-2 text-sm"><Calendar className="w-4.5 h-4.5 text-emerald-600" /> Active Schedule & Clinic Arrivals</h3>
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredActiveBookings.length} / {activeBookings.length} Total</span>
               </div>
-              <div className="flex gap-3">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="text" placeholder="Search by patient name, phone, or doctor..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" />
+              <div className="space-y-3">
+                {/* Search and Action Row */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input type="text" placeholder="Search by patient name, phone, or doctor..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" />
+                  </div>
+                  <button onClick={handleDownloadPdf} className="bg-emerald-600 text-white hover:bg-emerald-700 font-bold px-5 py-2 rounded-xl border border-emerald-600 transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap shadow-sm">
+                    <Download className="w-4 h-4" /> Download Report
+                  </button>
                 </div>
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
-                    <option value="all">All Types</option>
-                    <option value="Initial consultation">Initial Consultation</option>
-                    <option value="Detox">Detox</option>
-                    <option value="Review">Review</option>
-                  </select>
+                
+                {/* Filters Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer" />
+                  </div>
+                  
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select value={filterDoctor} onChange={(e) => setFilterDoctor(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
+                      <option value="all">All Doctors</option>
+                      {availableDoctors.map(d => (
+                        <option key={d.id} value={d.id}>Dr. {d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
+                      <option value="all">All Types</option>
+                      <option value="Initial consultation">Initial Consultation</option>
+                      <option value="Detox">Detox</option>
+                      <option value="Review">Review</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -937,7 +1020,9 @@ export default function ReceptionistView({
                               key={d.id}
                               type="button"
                               onClick={() => {
-                                setModalBookingData({ ...modalBookingData, doctor_id: d.id });
+                                const update = { doctor_id: d.id };
+                                if (d.role === 'THERAPIST') update.appointmentType = 'Detox';
+                                setModalBookingData({ ...modalBookingData, ...update });
                                 setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
                                 setShowDoctorDropdown(false);
                               }}
@@ -971,9 +1056,15 @@ export default function ReceptionistView({
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
                   <select required value={modalBookingData.appointmentType} onChange={e => setModalBookingData({ ...modalBookingData, appointmentType: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500">
-                    <option value="Initial consultation">Initial Consultation</option>
-                    <option value="Detox">Detox</option>
-                    <option value="Review">Review</option>
+                    {doctors.find(d => String(d.id) === String(modalBookingData.doctor_id))?.role === 'THERAPIST' ? (
+                      <option value="Detox">Detox</option>
+                    ) : (
+                      <>
+                        <option value="Initial consultation">Initial Consultation</option>
+                        <option value="Detox">Detox</option>
+                        <option value="Review">Review</option>
+                      </>
+                    )}
                   </select>
                 </div>
               </div>

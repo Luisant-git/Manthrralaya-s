@@ -10,8 +10,8 @@ export class AdminService {
 
   // ========== CREATE USER ==========
   async createUser(role: UserRole, dto: CreateUserDto, allowAdminCreation = false) {
-    if (role === UserRole.DOCTOR && !dto.specialization) {
-      throw new BadRequestException('Specialization is required for doctors');
+    if ((role === UserRole.DOCTOR || role === UserRole.THERAPIST) && !dto.specialization) {
+      throw new BadRequestException('Specialization is required for doctors and therapists');
     }
 
     if (role === UserRole.ADMIN && !allowAdminCreation) {
@@ -58,7 +58,7 @@ export class AdminService {
       });
 
       let profile = null;
-      if (role === UserRole.DOCTOR) {
+      if (role === UserRole.DOCTOR || role === UserRole.THERAPIST) {
         profile = await prisma.doctor.create({
           data: {
             userId: user.id,
@@ -118,8 +118,13 @@ export class AdminService {
 
   // ========== GET ALL USERS BY ROLE ==========
   async getUsersByRole(role: UserRole) {
-    if (role === UserRole.DOCTOR) {
+    if (role === UserRole.DOCTOR || role === UserRole.THERAPIST) {
       const doctors = await this.prisma.doctor.findMany({
+        where: {
+          user: {
+            role: role
+          }
+        },
         include: {
           user: {
             select: {
@@ -128,6 +133,7 @@ export class AdminService {
               username: true,
               fullName: true,
               phone: true,
+              role: true,
               isActive: true,
               createdAt: true,
               lastLogin: true,
@@ -290,7 +296,7 @@ async getUserById(id: number) {
       });
 
       let profile = null;
-      if (user.role === UserRole.DOCTOR && user.doctor) {
+      if ((user.role === UserRole.DOCTOR || user.role === UserRole.THERAPIST) && user.doctor) {
         profile = await prisma.doctor.update({
           where: { userId: userId },
           data: {

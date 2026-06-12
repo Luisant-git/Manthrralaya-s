@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAllDetoxSessions } from '../api/detoxSessionApi';
+import { generateConsultationPDF } from '../utils/pdfGenerator';
 
 export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole, currentUser }) {
   const [selectedApptId, setSelectedApptId] = useState('');
@@ -306,6 +307,14 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       };
 
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
+      
+      try {
+        generateConsultationPDF(newCons);
+        toast.success("Consultation PDF generated successfully");
+      } catch (pdfError) {
+        console.error("PDF Generation error", pdfError);
+        toast.error("Failed to generate PDF, but consultation was saved.");
+      }
 
       if (diet.breakfast !== '') {
         onAddDietChart({

@@ -28,8 +28,12 @@ export default function DoctorMasterView() {
   const loadDoctors = async () => {
     setIsLoading(true);
     try {
-      const response = await userApi.getUsersByRole('DOCTOR');
-      setDoctors(response.data || []);
+      const [doctorsResponse, therapistsResponse] = await Promise.all([
+        userApi.getUsersByRole('DOCTOR'),
+        userApi.getUsersByRole('THERAPIST')
+      ]);
+      const doctorsList = [...(doctorsResponse.data || []), ...(therapistsResponse.data || [])];
+      setDoctors(doctorsList);
       setError(null);
     } catch (err) {
       setError('Failed to synchronize doctor directory.');

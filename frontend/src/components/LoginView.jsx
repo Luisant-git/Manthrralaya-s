@@ -28,7 +28,9 @@ export default function LoginView({ onLogin }) {
 
       // Ensure the selected role in the UI matches the user's actual role in the database
       if (selectedRole.toUpperCase() !== response.role) {
-        throw new Error(`Unauthorized: Your account does not have access to the ${selectedRole} workspace.`);
+        if (!(selectedRole === 'doctor' && response.role === 'THERAPIST')) {
+          throw new Error(`Unauthorized: Your account does not have access to the ${selectedRole} workspace.`);
+        }
       }
 
       // Save the token to local storage so the session persists on refresh

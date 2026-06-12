@@ -159,11 +159,22 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 <select 
                   required 
                   value={formData.doctor_id}
-                  onChange={e => setFormData({...formData, doctor_id: e.target.value})}
+                  onChange={e => {
+                    const selectedDocId = e.target.value;
+                    const docInfo = doctors.find(d => String(d.id) === String(selectedDocId));
+                    if (docInfo?.role === 'THERAPIST') {
+                      setFormData({...formData, doctor_id: selectedDocId, appointmentType: 'Detox'});
+                    } else {
+                      setFormData({...formData, doctor_id: selectedDocId});
+                    }
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 >
                   <option value="">-- Choose available doctor --</option>
-                  {doctors.map(d => (
+                  {doctors.filter(d => {
+                    if (formData.appointmentType !== 'Detox' && d.role === 'THERAPIST') return false;
+                    return true;
+                  }).map(d => (
                     <option key={d.id} value={d.id} disabled={d.status !== 'Available'}>
                       {d.user?.fullName || d.name} ({d.specialization}) 
                       {d.status !== 'Available' ? ' - On Leave' : ''}
@@ -181,9 +192,15 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                   onChange={e => setFormData({ ...formData, appointmentType: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 >
-                  <option value="Initial consultation">Initial Consultation</option>
-                  <option value="Detox">Detox</option>
-                  <option value="Review">Follow-up</option>
+                  {doctors.find(d => String(d.id) === String(formData.doctor_id))?.role === 'THERAPIST' ? (
+                    <option value="Detox">Detox</option>
+                  ) : (
+                    <>
+                      <option value="Initial consultation">Initial Consultation</option>
+                      <option value="Detox">Detox</option>
+                      <option value="Review">Follow-up</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div>
