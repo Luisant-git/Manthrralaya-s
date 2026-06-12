@@ -83,7 +83,7 @@ export class ConsultationController {
   }
 
   @Patch(':id/receptionist-followup')
-  @Roles('RECEPTIONIST', 'ADMIN')
+  @Roles('RECEPTIONIST', 'ADMIN', 'DOCTOR', 'THERAPIST')
   @ApiOperation({ summary: 'Update receptionist-specific follow-up notes for a consultation' })
   updateReceptionistFollowup(
     @Param('id', ParseIntPipe) id: number,

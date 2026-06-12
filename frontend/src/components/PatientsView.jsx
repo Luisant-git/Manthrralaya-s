@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
-export default function PatientsView({ appointments = [], followups = [], consultations = [], onAddPatient, onSelectPatient }) {
+export default function PatientsView({ appointments = [], followups = [], consultations = [], onAddPatient, onSelectPatient, onRefreshConsultations }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
@@ -49,10 +49,52 @@ export default function PatientsView({ appointments = [], followups = [], consul
     return sorted[0]?.appointmentType || 'No appointment type';
   };
 
-  const getNextFollowup = (patientId) => {
-    return followups
-      .filter(f => f.patient_id === patientId && f.status === 'Pending')
-      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0] || null;
+  const getFollowupInfo = (patientId) => {
+    // 1. Check consultations for receptionistFollowup
+    const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
+    const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+    
+    if (latestCons) {
+      const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
+      if (rec && (rec.followupDate || rec.followup_date)) {
+        return {
+          id: rec.id,
+          consultationId: latestCons.id || latestCons.consultationId,
+          date: rec.followupDate || rec.followup_date,
+          status: rec.status || 'Pending',
+          notes: rec.notes || '',
+          source: 'receptionist'
+        };
+      }
+      
+      if (latestCons.followup_date || latestCons.followupDate) {
+        return {
+          id: null,
+          consultationId: latestCons.id || latestCons.consultationId,
+          date: latestCons.followup_date || latestCons.followupDate,
+          status: 'Pending',
+          notes: latestCons.followup_remarks || latestCons.followupRemarks || '',
+          source: 'doctor'
+        };
+      }
+    }
+    
+    // 2. Fallback to derived followups
+    const fup = followups
+      .filter(f => String(f.patient_id) === String(patientId))
+      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
+      
+    if (fup) {
+        return {
+            id: fup.id,
+            date: fup.scheduled_date,
+            status: fup.status || 'Pending',
+            notes: fup.notes,
+            source: 'derived'
+        };
+    }
+
+    return null;
   };
 
   const matchesTypeFilter = (patient) => {
@@ -60,9 +102,10 @@ export default function PatientsView({ appointments = [], followups = [], consul
     const tab = appointmentTabs.find(t => t.id === selectedTab);
     if (!tab) return true;
     if (tab.id === 'followup') {
-      return followups.some(f => f.patient_id === patient.id && f.status === 'Pending');
+      const info = getFollowupInfo(patient.id);
+      return info && info.status === 'Pending';
     }
-    return appointments.some(appt => appt.patientId === patient.id && appt.appointmentType === tab.type);
+    return appointments.some(appt => String(appt.patientId) === String(patient.id) && appt.appointmentType === tab.type);
   };
 
   // New Patient Form State
@@ -438,66 +481,66 @@ export default function PatientsView({ appointments = [], followups = [], consul
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredPatients.map(pt => (
-                  <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
-                    <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone?.replace(/\D/g, '').slice(-10)}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10)}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">
-                      {getLatestAppointmentType(pt.id)}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.gender || 'N/A'}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
-                    <td className="py-3 px-4 text-slate-600 font-medium max-w-[200px] truncate">
-                      {getNextFollowup(pt.id)?.scheduled_date || 'No follow-up'}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex justify-end items-center gap-2">
-                        <button 
-                          onClick={() => setViewingPatient(pt)}
-                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-blue-200"
-                        >
-                          <Eye className="w-4 h-4" /> View
-                        </button>
-                        <button
-                          onClick={() => {
-                            console.log('Edit click for patient', pt.id);
-                            // open edit modal for this patient immediately
-                            setEditingPatient(pt);
-
-                            // prefill editing fields defensively
-                            try {
-                              const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(pt.id));
-                              const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || b.followup_date || 0) - new Date(a.consultationDate || a.date || a.followup_date || 0))[0];
-                              const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup || null;
-                              setEditingConsultationId(latestCons?.id || latestCons?.consultationId || latestCons?.consultation_id || null);
-                              setEditingFollowupDate(rec?.followupDate || rec?.followup_date || latestCons?.followup_date || latestCons?.followupDate || '');
-                              setEditingFollowupNotes(rec?.notes || latestCons?.followup_remarks || latestCons?.followupRemarks || '');
-                              setEditingFollowupStatus(rec?.status || 'Pending');
-                            } catch (err) {
-                              console.error('Error preparing followup edit:', err);
-                              setEditingConsultationId(null);
-                              setEditingFollowupDate('');
-                              setEditingFollowupNotes('');
-                              setEditingFollowupStatus('Pending');
-                            }
-                          }}
-                          className="text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-semibold px-2 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-slate-200"
-                        >
-                          <Activity className="w-4 h-4" /> Edit
-                        </button>
-                        <button 
-                          onClick={() => onSelectPatient && onSelectPatient(pt)}
-                          className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
-                        >
-                          <Activity className="w-4 h-4" /> Timeline
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredPatients.map(pt => {
+                  const fupInfo = getFollowupInfo(pt.id);
+                  return (
+                    <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
+                      <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone?.replace(/\D/g, '').slice(-10)}</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10)}</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">
+                        {getLatestAppointmentType(pt.id)}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.gender || 'N/A'}</td>
+                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
+                      <td className="py-3 px-4">
+                        {fupInfo && fupInfo.date ? (
+                          <div className="flex flex-col">
+                            <span className={`text-sm font-bold tracking-tight ${fupInfo.status === 'Pending' ? 'text-amber-600' : fupInfo.status === 'Completed' ? 'text-emerald-600' : 'text-slate-400 line-through'}`}>
+                              {new Date(fupInfo.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">{fupInfo.status}</span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-sm">No follow-up</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex justify-end items-center gap-2">
+                          {fupInfo && fupInfo.date && (
+                            <button 
+                              onClick={() => {
+                                 setEditingPatient(pt);
+                                 setEditingConsultationId(fupInfo.consultationId);
+                                 setEditingFollowupDate(fupInfo.date);
+                                 setEditingFollowupNotes(fupInfo.notes);
+                                 setEditingFollowupStatus(fupInfo.status);
+                              }}
+                              title="Edit Follow-up"
+                              className="text-slate-500 bg-white shadow-sm border border-slate-200 hover:border-emerald-300 hover:text-emerald-600 font-semibold p-1.5 rounded-lg transition-all flex items-center justify-center"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            </button>
+                          )}
+                          <button 
+                            onClick={() => setViewingPatient(pt)}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-blue-200"
+                          >
+                            <Eye className="w-4 h-4" /> View
+                          </button>
+                          <button 
+                            onClick={() => onSelectPatient && onSelectPatient(pt)}
+                            className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
+                          >
+                            <Activity className="w-4 h-4" /> Timeline
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filteredPatients.length === 0 && (
                   <tr>
                     <td colSpan="10" className="py-12 text-center text-slate-500">
@@ -570,144 +613,17 @@ export default function PatientsView({ appointments = [], followups = [], consul
                 </li>
                 <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50">
                   <span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Next Follow-up Date</span>
-                  <span className="font-medium text-slate-800 text-sm">{getNextFollowup(viewingPatient.id)?.scheduled_date || 'No follow-up'}</span>
+                  <span className="font-medium text-slate-800 text-sm">
+                    {(() => {
+                      const info = getFollowupInfo(viewingPatient.id);
+                      if (!info || !info.date) return 'No follow-up';
+                      return `${new Date(info.date).toLocaleDateString('en-GB')} (${info.status})`;
+                    })()}
+                  </span>
                 </li>
               </ul>
-              {/* Receptionist edit controls */}
-              <div className="mb-4">
-                <button
-                  onClick={() => setReceptionistEditMode(prev => !prev)}
-                  className="text-sm text-emerald-600 font-semibold underline mb-2"
-                >
-                  {receptionistEditMode ? 'Cancel follow-up edit' : 'Edit follow-up (Receptionist)'}
-                </button>
 
-                {receptionistEditMode && (
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <label className="flex items-center gap-2 mb-2">
-                      <input type="checkbox" checked={receptionistChecked} onChange={e => setReceptionistChecked(e.target.checked)} className="w-4 h-4" />
-                      <span className="text-sm font-medium text-slate-700">Mark as receptionist-updated</span>
-                    </label>
 
-                    <div className="grid grid-cols-2 gap-3 mb-2">
-                      <input
-                        type="date"
-                        value={receptionistFollowupDate ? new Date(receptionistFollowupDate).toISOString().split('T')[0] : ''}
-                        onChange={e => setReceptionistFollowupDate(e.target.value)}
-                        className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Short notes"
-                        value={receptionistFollowupNotes}
-                        onChange={e => setReceptionistFollowupNotes(e.target.value)}
-                        className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={async () => {
-                          // find latest consultation id for this patient
-                          const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(viewingPatient.id));
-                          const latestCons = [...ptCons].sort((a, b) => new Date(b.consultationDate || b.date || b.followup_date || 0) - new Date(a.consultationDate || a.date || a.followup_date || 0))[0];
-                          if (!latestCons) {
-                            toast.error('No consultation found to attach follow-up to.');
-                            return;
-                          }
-                          const consultationId = latestCons.id || latestCons.consultationId || latestCons.consultation_id;
-                          if (!consultationId) {
-                            toast.error('Consultation identifier not available.');
-                            return;
-                          }
-                          setIsUpdatingFollowup(true);
-                          try {
-                            await updateReceptionistFollowup(consultationId, {
-                              followupDate: receptionistFollowupDate || undefined,
-                              notes: receptionistFollowupNotes || undefined,
-                              receptionistUpdated: receptionistChecked
-                            });
-                            toast.success('Receptionist follow-up updated');
-                            // refresh patient list
-                            await fetchPatients();
-                            setReceptionistEditMode(false);
-                          } catch (err) {
-                            console.error(err);
-                            toast.error(err.message || 'Failed to update follow-up');
-                          } finally {
-                            setIsUpdatingFollowup(false);
-                          }
-                        }}
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-semibold disabled:opacity-50"
-                        disabled={isUpdatingFollowup}
-                      >
-                        {isUpdatingFollowup ? 'Saving...' : 'Save Follow-up'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Edit Follow-up Modal (separate neat UI) */}
-                {editingPatient && (
-                  <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden text-left">
-                      <div className="flex items-center justify-between p-4 border-b border-slate-100">
-                        <h3 className="text-lg font-bold">Edit Follow-up — {editingPatient.name}</h3>
-                        <button onClick={() => setEditingPatient(null)} className="text-slate-400 hover:text-slate-600 p-2 rounded"> <X className="w-5 h-5"/> </button>
-                      </div>
-                      <div className="p-4 space-y-3">
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">Status</label>
-                          <select value={editingFollowupStatus} onChange={e=>setEditingFollowupStatus(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm">
-                            <option value="Pending">Pending</option>
-                            <option value="Completed">Completed</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">Follow-up Date</label>
-                          <input type="date" value={editingFollowupDate ? new Date(editingFollowupDate).toISOString().split('T')[0] : ''} onChange={e=>setEditingFollowupDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm" />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-slate-500 mb-1">Notes</label>
-                          <textarea rows={3} value={editingFollowupNotes} onChange={e=>setEditingFollowupNotes(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm resize-none" />
-                        </div>
-                      </div>
-                      <div className="p-4 border-t border-slate-100 flex justify-between items-center bg-slate-50">
-                        <button className="text-rose-600 font-semibold" onClick={async ()=>{
-                          // remove followup (set null)
-                          if (!editingConsultationId) { toast.error('No consultation to remove follow-up from'); return; }
-                          try {
-                            setIsUpdatingFollowup(true);
-                            await updateReceptionistFollowup(editingConsultationId, { followupDate: null, notes: null, status: 'Pending' });
-                            toast.success('Follow-up removed');
-                            await fetchPatients();
-                            setEditingPatient(null);
-                          } catch (err) {
-                            toast.error(err.message || 'Failed to remove follow-up');
-                          } finally { setIsUpdatingFollowup(false); }
-                        }}>Remove Follow-up</button>
-                        <div className="flex items-center gap-2">
-                          <button onClick={()=>setEditingPatient(null)} className="px-4 py-2 bg-white border border-slate-200 rounded-lg">Cancel</button>
-                          <button className="px-4 py-2 bg-emerald-600 text-white rounded-lg" onClick={async ()=>{
-                            if (!editingConsultationId) { toast.error('No consultation available to save'); return; }
-                            try {
-                              setIsUpdatingFollowup(true);
-                              await updateReceptionistFollowup(editingConsultationId, { followupDate: editingFollowupDate || undefined, notes: editingFollowupNotes || undefined, status: editingFollowupStatus || undefined });
-                              toast.success('Follow-up saved');
-                              await fetchPatients();
-                              setEditingPatient(null);
-                            } catch (err) {
-                              console.error(err);
-                              toast.error(err.message || 'Failed to save follow-up');
-                            } finally { setIsUpdatingFollowup(false); }
-                          }}>{isUpdatingFollowup ? 'Saving...' : 'Save'}</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
               <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                 <span className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Primary Medical Conditions / Notes</span>
                 <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
@@ -723,6 +639,91 @@ export default function PatientsView({ appointments = [], followups = [], consul
               >
                 Close Details
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clean Edit Follow-up Modal */}
+      {editingPatient && (
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden text-left border border-slate-200">
+            <div className="p-4 flex justify-between items-start border-b border-slate-100">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">Update Follow-up</h3>
+                <p className="text-sm font-medium text-slate-500 mt-0.5">{editingPatient.name}</p>
+              </div>
+              <button onClick={() => setEditingPatient(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50 transition-colors"> <X className="w-5 h-5"/> </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>
+                <select 
+                  value={editingFollowupStatus} 
+                  onChange={e=>setEditingFollowupStatus(e.target.value)} 
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-shadow"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Schedule Date</label>
+                <input 
+                  type="date" 
+                  value={editingFollowupDate ? new Date(editingFollowupDate).toISOString().split('T')[0] : ''} 
+                  onChange={e=>setEditingFollowupDate(e.target.value)} 
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-shadow" 
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Notes (Optional)</label>
+                <textarea 
+                  rows={2} 
+                  placeholder="Any remarks..." 
+                  value={editingFollowupNotes} 
+                  onChange={e=>setEditingFollowupNotes(e.target.value)} 
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none transition-shadow" 
+                />
+              </div>
+            </div>
+            
+            <div className="p-4 bg-slate-50 flex justify-between items-center border-t border-slate-100">
+               {editingConsultationId ? (
+                 <button className="text-sm font-semibold text-rose-600 hover:text-rose-700 hover:underline transition-colors" onClick={async ()=>{
+                   try {
+                     setIsUpdatingFollowup(true);
+                     await updateReceptionistFollowup(editingConsultationId, { followupDate: null, notes: null, status: 'Pending' });
+                     toast.success('Follow-up cleared');
+                     if (onRefreshConsultations) await onRefreshConsultations();
+                     await fetchPatients();
+                     setEditingPatient(null);
+                   } catch (err) { toast.error('Failed to clear'); } finally { setIsUpdatingFollowup(false); }
+                 }}>Remove</button>
+               ) : <div></div>}
+               
+               <div className="flex gap-2">
+                 <button className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm" onClick={()=>setEditingPatient(null)}>Cancel</button>
+                 <button className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2" onClick={async ()=>{
+                    if (!editingConsultationId) { toast.error('No consultation available to attach follow-up'); return; }
+                    try {
+                      setIsUpdatingFollowup(true);
+                      await updateReceptionistFollowup(editingConsultationId, { 
+                        followupDate: editingFollowupDate || null, 
+                        notes: editingFollowupNotes || null, 
+                        status: editingFollowupStatus || 'Pending' 
+                      });
+                      toast.success('Follow-up updated successfully');
+                      if (onRefreshConsultations) await onRefreshConsultations();
+                      await fetchPatients();
+                      setEditingPatient(null);
+                    } catch (err) { toast.error('Failed to save'); } finally { setIsUpdatingFollowup(false); }
+                  }}>{isUpdatingFollowup ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Save'}</button>
+               </div>
             </div>
           </div>
         </div>

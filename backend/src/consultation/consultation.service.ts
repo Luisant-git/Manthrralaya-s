@@ -61,7 +61,8 @@ export class ConsultationService {
               include: {
                 user: true
               }
-            }
+            },
+            receptionistFollowup: true
           }
         });
       }
@@ -94,7 +95,8 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       }
     });
 
@@ -153,7 +155,8 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
     });
@@ -174,7 +177,8 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       }
     });
 
@@ -200,16 +204,13 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
     });
 
-    // Include receptionist follow-up info for each record
-    return Promise.all(consultations.map(async (c) => {
-      const receptionistInfo = await this.receptionistFollowupService.findOneByConsultation(c.id);
-      return { ...c, receptionistFollowup: receptionistInfo };
-    }));
+    return consultations;
   }
 
   async findByDoctor(doctorId: number) {
@@ -227,7 +228,8 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
     });
@@ -253,7 +255,8 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
     });
@@ -281,13 +284,14 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       },
       orderBy: { followupDate: 'asc' }
     });
 
-    return Promise.all(consultations.map(async (c) => {
-      const receptionistInfo = await this.receptionistFollowupService.findOneByConsultation(c.id);
+    return consultations.map(c => {
+      const receptionistInfo = c.receptionistFollowup;
       return {
         id: c.id,
         patientId: c.patientId,
@@ -300,7 +304,7 @@ export class ConsultationService {
         consultationDate: c.consultationDate,
         doctorName: c.doctor.user?.fullName,
       };
-    }));
+    });
   }
 
   async update(id: number, updateConsultationDto: UpdateConsultationDto) {
@@ -341,7 +345,8 @@ export class ConsultationService {
           include: {
             user: true
           }
-        }
+        },
+        receptionistFollowup: true
       }
     });
   }
@@ -353,8 +358,8 @@ export class ConsultationService {
     const consultation = await this.findOne(consultationId); // Ensure consultation exists
     return this.receptionistFollowupService.updateOrCreate(consultation.id, {
       patientId: consultation.patientId,
-      followupDate: data.followupDate ? new Date(data.followupDate) : undefined,
-      notes: data.notes,
+      followupDate: data.followupDate !== undefined ? (data.followupDate ? new Date(data.followupDate) : null) : undefined,
+      notes: data.notes !== undefined ? data.notes : undefined,
       status: data.status,
     });
   }

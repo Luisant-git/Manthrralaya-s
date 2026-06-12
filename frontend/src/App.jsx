@@ -103,6 +103,7 @@ export default function App() {
         detox_doctor_name: cons.detoxDoctor?.user?.fullName || cons.detoxDoctor?.name || cons.detoxDoctorName || cons.detox_doctor_name,
         followup_date: cons.followupDate ? cons.followupDate.split('T')[0] : null,
         followup_remarks: cons.followupRemarks,
+        receptionistFollowup: cons.receptionistFollowup,
         created_at: cons.createdAt,
         updated_at: cons.updatedAt
       }));
@@ -639,7 +640,7 @@ export default function App() {
       case 'dashboard':
         return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} doctors={doctors} />;
       case 'patients':
-        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
+        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} />;
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':
