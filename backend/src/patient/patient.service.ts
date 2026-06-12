@@ -7,14 +7,17 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 export class PatientService {
   constructor(private prisma: PrismaService) {}
 
+  // ✅ CREATE (allow same phone, prevent exact duplicate)
   async create(createPatientDto: CreatePatientDto) {
-    // Check if patient with same phone exists
-    const existingPatient = await this.prisma.patient.findUnique({
-      where: { phone: createPatientDto.phone }
+    const existing = await this.prisma.patient.findFirst({
+      where: {
+        phone: createPatientDto.phone,
+        name: createPatientDto.name
+      }
     });
 
-    if (existingPatient) {
-      throw new ConflictException('Patient with this phone number already exists');
+    if (existing) {
+      throw new ConflictException('Patient with same name and phone already exists');
     }
 
     return this.prisma.patient.create({
@@ -22,6 +25,7 @@ export class PatientService {
     });
   }
 
+  // ✅ GET ALL
   async findAll() {
     return this.prisma.patient.findMany({
       include: {
@@ -39,6 +43,7 @@ export class PatientService {
     });
   }
 
+  // ✅ GET ONE
   async findOne(id: number) {
     const patient = await this.prisma.patient.findUnique({
       where: { id },
@@ -63,9 +68,30 @@ export class PatientService {
     return patient;
   }
 
+  // ✅ FIND BY PHONE (MULTIPLE PATIENTS)
   async findByPhone(phone: string) {
-    const patient = await this.prisma.patient.findUnique({
-      where: { phone },
+    // Normalize input and attempt flexible matching so searches succeed
+    const cleaned = phone ? phone.toString().replace(/\D/g, '') : '';
+    const last10 = cleaned.slice(-10);
+
+    const candidates = new Set<string>();
+    if (cleaned) candidates.add(cleaned);
+    if (cleaned.length === 10) candidates.add('+91' + cleaned);
+    if (cleaned.length > 10 && cleaned.startsWith('91')) candidates.add('+' + cleaned);
+    // also try bare '91' + last10
+    if (last10) candidates.add('91' + last10);
+
+    const orClauses: any[] = [];
+    for (const c of candidates) {
+      orClauses.push({ phone: c });
+    }
+    // also match any phone that ends with the last 10 digits
+    if (last10) orClauses.push({ phone: { endsWith: last10 } });
+
+    const patients = await this.prisma.patient.findMany({
+      where: {
+        OR: orClauses
+      },
       include: {
         appointments: {
           include: {
@@ -79,15 +105,16 @@ export class PatientService {
       }
     });
 
-    if (!patient) {
-      throw new NotFoundException(`Patient with phone ${phone} not found`);
+    if (!patients.length) {
+      throw new NotFoundException(`No patients found with phone ${phone}`);
     }
 
-    return patient;
+    return patients;
   }
 
+  // ✅ UPDATE
   async update(id: number, updatePatientDto: UpdatePatientDto) {
-    await this.findOne(id); // Check if exists
+    await this.findOne(id);
 
     return this.prisma.patient.update({
       where: { id },
@@ -98,8 +125,9 @@ export class PatientService {
     });
   }
 
+  // ✅ DELETE
   async remove(id: number) {
-    await this.findOne(id); // Check if exists
+    await this.findOne(id);
 
     return this.prisma.patient.delete({
       where: { id }
