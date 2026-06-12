@@ -20,6 +20,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
     const [showNewPin, setShowNewPin] = useState(false);
     const [showConfirmPin, setShowConfirmPin] = useState(false);
     const [resetFeedback, setResetFeedback] = useState({ error: '', success: false });
+    const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
     
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -105,10 +106,10 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
     };
 
     const handleDeleteStaff = async (userId) => {
-        if (!window.confirm('Are you sure you want to deactivate this staff member?')) return;
         try {
             await userApi.deleteUser(userId);
             loadStaff();
+            setDeleteConfirmUser(null);
         } catch (err) {
             alert(err.message);
         }
@@ -339,7 +340,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                                     </button>
                                                     
                                                     <button 
-                                                        onClick={() => handleDeleteStaff(user.id)}
+                                                        onClick={() => setDeleteConfirmUser(user)}
                                                         className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                                                         title="Delete Staff"
                                                     >
@@ -751,6 +752,44 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                 </>
                             )}
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmUser && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn text-left">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-scaleIn">
+                        <div className="bg-rose-50 border-b border-rose-100 p-5 flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 flex-shrink-0">
+                                <AlertTriangle className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-rose-800">Delete Staff Member</h3>
+                                <p className="text-sm text-rose-600">This action is permanent.</p>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-slate-600 mb-6 text-sm leading-relaxed">
+                                Are you sure you want to permanently delete the account for <span className="font-bold text-slate-800">{deleteConfirmUser.fullName}</span>? 
+                                Their system access will be immediately revoked and their login data will be removed.
+                            </p>
+                            
+                            <div className="flex justify-end gap-3">
+                                <button 
+                                    onClick={() => setDeleteConfirmUser(null)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={() => handleDeleteStaff(deleteConfirmUser.id)}
+                                    className="bg-rose-600 hover:bg-rose-700 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition-colors shadow-sm flex items-center gap-2"
+                                >
+                                    <Trash2 className="w-4 h-4" /> Yes, Delete Permanently
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

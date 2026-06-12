@@ -95,7 +95,8 @@ export const userApi = {
             method: 'DELETE',
             headers: getAuthHeader()
         });
-        if (!response.ok) throw new Error('Failed to delete user');
-        return response.json();
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Failed to delete user');
+        return result;
     }
 };

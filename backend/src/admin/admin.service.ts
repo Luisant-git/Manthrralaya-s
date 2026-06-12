@@ -211,21 +211,38 @@ async updateDoctorStatus(doctorId: number, status: string) {
   // ========== DELETE USER ==========
   async deleteUser(userId: number) {
     const user = await this.prisma.user.findUnique({
-      where: { id: userId }
+      where: { id: userId },
+      include: { doctor: true }
     });
 
     if (!user) throw new NotFoundException('User not found');
     if (user.role === UserRole.ADMIN) throw new ConflictException('Cannot delete ADMIN');
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { isActive: false },
-    });
+    try {
+      await this.prisma.$transaction(async (prisma) => {
+        // First delete the doctor profile if it exists
+        if (user.doctor) {
+          await prisma.doctor.delete({
+            where: { userId: userId }
+          });
+        }
+        
+        // Then delete the user
+        await prisma.user.delete({
+          where: { id: userId }
+        });
+      });
 
-    return {
-      success: true,
-      message: `User ${user.fullName} has been deleted`,
-    };
+      return {
+        success: true,
+        message: `User ${user.fullName} has been permanently deleted`,
+      };
+    } catch (error) {
+      if (error.code === 'P2003') {
+        throw new ConflictException(`Cannot delete ${user.fullName} because they have associated appointments, consultations, or other system records. Please deactivate them instead.`);
+      }
+      throw new BadRequestException('Failed to permanently delete staff member. Please try again.');
+    }
   }
 
 
