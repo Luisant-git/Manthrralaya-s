@@ -73,13 +73,23 @@ export class ConsultationController {
   }
 
   @Patch(':id')
-  @Roles('DOCTOR', 'ADMIN')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST') // Allow receptionists to update consultations
   @ApiOperation({ summary: 'Update consultation' })
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateConsultationDto: UpdateConsultationDto,
   ) {
     return this.consultationService.update(id, updateConsultationDto);
+  }
+
+  @Patch(':id/receptionist-followup')
+  @Roles('RECEPTIONIST', 'ADMIN')
+  @ApiOperation({ summary: 'Update receptionist-specific follow-up notes for a consultation' })
+  updateReceptionistFollowup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: { followupDate?: string; notes?: string; status?: string },
+  ) {
+    return this.consultationService.updateReceptionistNotes(id, data);
   }
 
   @Delete(':id')

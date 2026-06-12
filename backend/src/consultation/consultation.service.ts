@@ -2,10 +2,14 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { UpdateConsultationDto } from './dto/update-consultation.dto';
+import { ReceptionistFollowupService } from '../receptionist-followup/receptionist-followup.service';
 
 @Injectable()
 export class ConsultationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private receptionistFollowupService: ReceptionistFollowupService,
+  ) {}
 
   async create(createConsultationDto: CreateConsultationDto) {
     // Check if patient exists
@@ -182,7 +186,7 @@ export class ConsultationService {
   }
 
   async findByPatient(patientId: number) {
-    return this.prisma.consultation.findMany({
+    const consultations = await this.prisma.consultation.findMany({
       where: { patientId },
       include: {
         patient: true,
@@ -200,6 +204,12 @@ export class ConsultationService {
       },
       orderBy: { consultationDate: 'desc' }
     });
+
+    // Include receptionist follow-up info for each record
+    return Promise.all(consultations.map(async (c) => {
+      const receptionistInfo = await this.receptionistFollowupService.findOneByConsultation(c.id);
+      return { ...c, receptionistFollowup: receptionistInfo };
+    }));
   }
 
   async findByDoctor(doctorId: number) {
@@ -276,17 +286,20 @@ export class ConsultationService {
       orderBy: { followupDate: 'asc' }
     });
 
-    return consultations.map(c => ({
-      id: c.id,
-      patientId: c.patientId,
-      patientName: c.patient.name,
-      patientPhone: c.patient.phone,
-      followupDate: c.followupDate,
-      followupRemarks: c.followupRemarks,
-      consultationDate: c.consultationDate,
-      doctorName: c.doctor.user?.fullName,
-      detoxDoctorName: c.detoxDoctor?.user?.fullName || null,
-      detoxDoctorId: c.detoxDoctorId
+    return Promise.all(consultations.map(async (c) => {
+      const receptionistInfo = await this.receptionistFollowupService.findOneByConsultation(c.id);
+      return {
+        id: c.id,
+        patientId: c.patientId,
+        patientName: c.patient.name,
+        patientPhone: c.patient.phone,
+        doctorFollowupDate: c.followupDate, // Renamed for clarity
+        doctorFollowupRemarks: c.followupRemarks, // Renamed for clarity
+        receptionistFollowupDate: receptionistInfo?.followupDate || null,
+        receptionistNotes: receptionistInfo?.notes || null,
+        consultationDate: c.consultationDate,
+        doctorName: c.doctor.user?.fullName,
+      };
     }));
   }
 
@@ -330,6 +343,19 @@ export class ConsultationService {
           }
         }
       }
+    });
+  }
+
+  async updateReceptionistNotes(
+    consultationId: number,
+    data: { followupDate?: string; notes?: string; status?: string },
+  ) {
+    const consultation = await this.findOne(consultationId); // Ensure consultation exists
+    return this.receptionistFollowupService.updateOrCreate(consultation.id, {
+      patientId: consultation.patientId,
+      followupDate: data.followupDate ? new Date(data.followupDate) : undefined,
+      notes: data.notes,
+      status: data.status,
     });
   }
 

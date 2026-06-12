@@ -65,6 +65,7 @@ model Patient {
 
   appointments  Appointment[]
   consultations Consultation[]
+  receptionistFollowups ReceptionistFollowup[]
   detoxSessions  DetoxSession[]  
 
   @@map("patients")
@@ -123,6 +124,7 @@ model Consultation {
   appointment       Appointment? @relation(fields: [appointmentId], references: [id])
   detoxDoctor       Doctor?   @relation("DetoxDoctor", fields: [detoxDoctorId], references: [id])
   detoxSessions     DetoxSession[] 
+  receptionistFollowup ReceptionistFollowup?
 
   @@index([patientId])
   @@index([doctorId])
@@ -165,4 +167,20 @@ model DetoxSession {
   @@index([appointmentId])
   @@index([consultationId])
   @@index([sessionDate])
+}
+
+model ReceptionistFollowup {
+  id             Int      @id @default(autoincrement())
+  consultationId Int      @unique
+  patientId      Int
+  followupDate   DateTime?
+  notes          String?    @db.Text
+  status         String    @default("Pending")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  consultation Consultation @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patient      Patient      @relation(fields: [patientId], references: [id])
+
+  @@map("receptionist_followups")
 }
