@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { addTemplateHeader, addTemplateFooter } from '../utils/pdfGenerator';
 
 export default function ReceptionistView({
   appointments,
@@ -65,6 +66,7 @@ export default function ReceptionistView({
   const todayDate = new Date().toISOString().split('T')[0];
   const [filterDate, setFilterDate] = useState(todayDate);
   const [filterDoctor, setFilterDoctor] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   const [doctorSearchTerm, setDoctorSearchTerm] = useState('');
   const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
@@ -394,49 +396,74 @@ export default function ReceptionistView({
     
     const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
     const matchesDoctor = filterDoctor === 'all' || String(appt.doctorId || appt.doctor_id) === String(filterDoctor);
+    const matchesStatus = filterStatus === 'all' || appt.status === filterStatus;
     
-    return matchesSearch && matchesFilter && matchesDoctor;
+    return matchesSearch && matchesFilter && matchesDoctor && matchesStatus;
   });
 
   const handleDownloadPdf = () => {
     const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.setTextColor(5, 150, 105);
-    doc.text("Manthrralaya's Wellness - Schedule Report", 14, 22);
     
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Date: ${filterDate}`, 14, 30);
-    const doctorLabel = filterDoctor === 'all' ? 'All Doctors' : allDoctors.find(d => String(d.id) === String(filterDoctor))?.name || 'Selected Doctor';
-    doc.text(`Doctor: ${doctorLabel}`, 14, 36);
-    doc.text(`Type: ${filterType === 'all' ? 'All Types' : filterType}`, 14, 42);
+    addTemplateHeader(doc, "SCHEDULE REPORT");
+    addTemplateFooter(doc);
 
-    const tableData = filteredActiveBookings.map(appt => {
+    const pageWidth = doc.internal.pageSize.width;
+    
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(0);
+
+    const doctorLabel = filterDoctor === 'all' ? 'All Doctors' : allDoctors.find(d => String(d.id) === String(filterDoctor))?.name || 'Selected Doctor';
+    const typeLabel = filterType === 'all' ? 'All Types' : filterType;
+    const statusLabel = filterStatus === 'all' ? 'All Statuses' : filterStatus;
+
+    doc.text(`Date: ${filterDate}`, pageWidth - 14, 65, { align: 'right' });
+    doc.text(`Doctor: ${doctorLabel}`, 14, 72);
+    doc.text(`Type: ${typeLabel}`, 14, 79);
+    doc.text(`Status: ${statusLabel}`, 14, 86);
+
+    const tableData = filteredActiveBookings.map((appt, index) => {
       const pt = patients?.find(p => String(p.id) === String(appt.patientId || appt.patient_id)) || appt.patient || {};
-      const docObj = allDoctors?.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id)) || {};
-      const docFullName = docObj?.user?.fullName || docObj?.name || appt.doctor_name || '0';
       return [
+        index + 1,
         pt.name || '0',
-        pt.phone ? String(pt.phone).replace(/\D/g, '').slice(-10) : '0',
+        pt.phone ? String(pt.phone).replace(/\\D/g, '').slice(-10) : '0',
         appt.session || 'FN',
-        appt.appointmentType || '0',
-        docFullName,
-        appt.status || '0',
-        appt.notes ? appt.notes.substring(0, 50) : '0'
+        appt.appointmentType || '-',
+        appt.notes || '-',
+        appt.status || '-',
+        ''
       ];
     });
 
     if (tableData.length === 0) {
-       tableData.push(['0', '0', '0', '0', '0', '0', '0']);
+       tableData.push(['-', '-', '-', '-', '-', '-', '-', '']);
     }
 
     autoTable(doc, {
-      startY: 50,
-      head: [['Patient', 'Contact', 'Session', 'Type', 'Doctor', 'Status', 'Notes']],
+      startY: 95,
+      head: [['S.No', 'Patient', 'Contact', 'Session', 'Type', 'Notes', 'Status', 'Attended']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [5, 150, 105] },
-      styles: { fontSize: 8, overflow: 'linebreak' }
+      headStyles: { fillColor: [59, 63, 113] },
+      styles: { fontSize: 8, overflow: 'linebreak' },
+      columnStyles: {
+        5: { cellWidth: 50 } // Allocate specific width to Notes to enforce wrapping
+      },
+      margin: { bottom: 25 },
+      didDrawCell: function(data) {
+        if (data.column.index === 7 && data.section === 'body') {
+          doc.setDrawColor(100);
+          doc.setLineWidth(0.3);
+          const boxSize = 3; // decreased box size
+          doc.rect(
+            data.cell.x + data.cell.width / 2 - boxSize / 2, 
+            data.cell.y + data.cell.height / 2 - boxSize / 2, 
+            boxSize, 
+            boxSize
+          );
+        }
+      }
     });
 
     doc.save(`Schedule_Report_${filterDate}.pdf`);
@@ -867,7 +894,7 @@ export default function ReceptionistView({
                 </div>
                 
                 {/* Filters Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer" />
@@ -890,6 +917,18 @@ export default function ReceptionistView({
                       <option value="Initial consultation">Initial Consultation</option>
                       <option value="Detox">Detox</option>
                       <option value="Review">Review</option>
+                    </select>
+                  </div>
+
+                  <div className="relative">
+                    <Check className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
+                      <option value="all">All Statuses</option>
+                      <option value="Scheduled">Scheduled</option>
+                      <option value="Arrived">Arrived</option>
+                      <option value="Checked-in">With Doctor</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
                     </select>
                   </div>
                 </div>

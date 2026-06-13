@@ -751,7 +751,20 @@ export default function App() {
         />
       )}
 
-      <ToastContainer position="top-right" autoClose={3000} theme="colored" />
+      <ToastContainer 
+        position="top-right" 
+        autoClose={3000} 
+        hideProgressBar={true}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+        toastClassName="!rounded-2xl !border !border-slate-200 !shadow-lg !bg-white !font-inter !text-slate-800 !mt-4 !mr-4"
+        bodyClassName="!font-medium !text-sm !p-1"
+      />
     </div>
   );
 }

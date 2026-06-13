@@ -15,56 +15,56 @@ export class DetoxsessionController {
   constructor(private readonly detoxsessionService: DetoxsessionService) {}
 
   @Post()
-  @Roles('DOCTOR', 'ADMIN')
+  @Roles('DOCTOR', 'ADMIN', 'THERAPIST')
   @ApiOperation({ summary: 'Create a new detox session' })
   create(@Body() createDetoxsessionDto: CreateDetoxsessionDto) {
     return this.detoxsessionService.create(createDetoxsessionDto);
   }
 
   @Get()
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get all detox sessions' })
   findAll() {
     return this.detoxsessionService.findAll();
   }
 
   @Get('patient/:patientId')
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get detox sessions by patient ID' })
   findByPatient(@Param('patientId', ParseIntPipe) patientId: number) {
     return this.detoxsessionService.findByPatient(patientId);
   }
 
   @Get('patient/:patientId/progress')
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get patient detox session progress' })
   getPatientProgress(@Param('patientId', ParseIntPipe) patientId: number) {
     return this.detoxsessionService.getPatientSessionProgress(patientId);
   }
 
   @Get('doctor/:doctorId')
-  @Roles('DOCTOR', 'ADMIN')
+  @Roles('DOCTOR', 'ADMIN', 'THERAPIST')
   @ApiOperation({ summary: 'Get detox sessions by doctor ID' })
   findByDoctor(@Param('doctorId', ParseIntPipe) doctorId: number) {
     return this.detoxsessionService.findByDoctor(doctorId);
   }
 
   @Get('followups/upcoming')
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get upcoming detox follow-ups' })
   getUpcomingFollowups() {
     return this.detoxsessionService.getUpcomingFollowups();
   }
 
   @Get(':id')
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get detox session by ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.detoxsessionService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles('DOCTOR', 'ADMIN')
+  @Roles('DOCTOR', 'ADMIN', 'THERAPIST')
   @ApiOperation({ summary: 'Update detox session' })
   update(
     @Param('id', ParseIntPipe) id: number,
