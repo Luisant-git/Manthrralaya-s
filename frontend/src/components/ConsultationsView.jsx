@@ -365,23 +365,45 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   };
 
   // Reusable Editor Component
-  const RichTextEditor = ({ editorRef, content, setContent, placeholder }) => (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <div className="mb-2 flex flex-wrap gap-2">
-        <button type="button" onClick={() => applyEditorCommand('bold', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Bold</button>
-        <button type="button" onClick={() => applyEditorCommand('italic', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Italic</button>
-        <button type="button" onClick={() => applyEditorCommand('underline', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Underline</button>
-        <select onChange={(e) => handleFontSizeChange(e, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer" defaultValue="">
-          <option value="" disabled>Font Size</option>
-          {fontSizeOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-        </select>
-        <button type="button" onClick={() => applyEditorCommand('insertUnorderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Bullet List"><span className="text-base">•</span> Bullets</button>
-        <button type="button" onClick={() => applyEditorCommand('insertOrderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Numbered List"><span className="text-xs font-bold">1.</span> Numbers</button>
+  const RichTextEditor = ({ editorRef, content, setContent, placeholder }) => {
+    const placeholderRef = useRef(null);
+
+    useEffect(() => {
+      if (!editorRef.current || !placeholderRef.current) return;
+      const html = editorRef.current.innerHTML;
+      const text = editorRef.current.innerText.trim();
+      const empty = !html || html === '<br>' || html === '<p><br></p>' || text === '';
+      placeholderRef.current.style.display = empty ? 'block' : 'none';
+    }, [content, editorRef]);
+
+    const handleInput = (e) => {
+      if (!placeholderRef.current) return;
+      const html = e.currentTarget.innerHTML;
+      const text = e.currentTarget.innerText.trim();
+      const empty = !html || html === '<br>' || html === '<p><br></p>' || text === '';
+      placeholderRef.current.style.display = empty ? 'block' : 'none';
+    };
+
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-2 flex flex-wrap gap-2">
+          <button type="button" onClick={() => applyEditorCommand('bold', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Bold</button>
+          <button type="button" onClick={() => applyEditorCommand('italic', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Italic</button>
+          <button type="button" onClick={() => applyEditorCommand('underline', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Underline</button>
+          <select onChange={(e) => handleFontSizeChange(e, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer" defaultValue="">
+            <option value="" disabled>Font Size</option>
+            {fontSizeOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+          </select>
+          <button type="button" onClick={() => applyEditorCommand('insertUnorderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Bullet List"><span className="text-base">•</span> Bullets</button>
+          <button type="button" onClick={() => applyEditorCommand('insertOrderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Numbered List"><span className="text-xs font-bold">1.</span> Numbers</button>
+        </div>
+        <div className="relative">
+          <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onInput={handleInput} onBlur={e => setContent(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" dangerouslySetInnerHTML={{ __html: content }} />
+          <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>{placeholder}</div>
+        </div>
       </div>
-      <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setContent(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" dangerouslySetInnerHTML={{ __html: content }} />
-      {(!content || content === '<br>') && (<div className="text-slate-400 text-sm -mt-8 ml-3 pointer-events-none">{placeholder}</div>)}
-    </div>
-  );
+    );
+  };
 
   return (
     <>

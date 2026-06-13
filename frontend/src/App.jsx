@@ -754,16 +754,15 @@ export default function App() {
       <ToastContainer 
         position="top-right" 
         autoClose={3000} 
-        hideProgressBar={true}
+        hideProgressBar={false}
         newestOnTop={true}
         closeOnClick
         rtl={false}
         pauseOnFocusLoss
         draggable
         pauseOnHover
-        theme="light"
-        toastClassName="!rounded-2xl !border !border-slate-200 !shadow-lg !bg-white !font-inter !text-slate-800 !mt-4 !mr-4"
-        bodyClassName="!font-medium !text-sm !p-1"
+        theme="colored"
+        toastClassName="!rounded-xl shadow-2xl font-inter text-sm"
       />
     </div>
   );
