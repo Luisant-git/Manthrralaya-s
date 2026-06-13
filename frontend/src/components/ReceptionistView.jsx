@@ -74,6 +74,7 @@ export default function ReceptionistView({
   const [isFetchingPatient, setIsFetchingPatient] = useState(false);
   const [foundPatient, setFoundPatient] = useState(null);
   const [showPatientFoundAlert, setShowPatientFoundAlert] = useState(false);
+  const [matchingPatients, setMatchingPatients] = useState([]);
   const [phoneDebounce, setPhoneDebounce] = useState(null);
 
   // Create a robust list of available doctors (Master list + Extraction from Appointments)
@@ -127,8 +128,19 @@ export default function ReceptionistView({
 
     setIsFetchingPatient(true);
     try {
-      const patient = await getPatientByPhone(phoneNumber);
+      const patientResp = await getPatientByPhone(phoneNumber);
+      console.log('fetchPatientByPhone result:', patientResp);
+      if (Array.isArray(patientResp) && patientResp.length > 1) {
+        // Multiple patients match this phone — let user pick the right one
+        setMatchingPatients(patientResp);
+        setFoundPatient(null);
+        setShowPatientFoundAlert(false);
+        setIsFetchingPatient(false);
+        return;
+      }
+      const patient = Array.isArray(patientResp) ? patientResp[0] : patientResp;
       if (patient) {
+        setMatchingPatients([]);
         setFoundPatient(patient);
         setShowPatientFoundAlert(true);
         
@@ -140,28 +152,31 @@ export default function ReceptionistView({
         const ptAppts = appointments.filter(a => String(a.patient_id || a.patientId) === String(patient.id));
         const lastAppt = [...ptAppts].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-        setFormData(prev => {
-          const newState = {
-            ...prev,
-            name: patient.name,
-            age: patient.age.toString(),
-            gender: patient.gender || '',
-            location: patient.location || '',
-            address: patient.address || '',
-            whatsapp: patient.whatsapp || patient.phone,
-            phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
-          };
+        const shouldAutoFill = !formData.name.trim() || formData.name.trim() === String(patient.name || '').trim();
+        if (shouldAutoFill) {
+          setFormData(prev => {
+            const newState = {
+              ...prev,
+              name: patient.name,
+              age: patient.age.toString(),
+              gender: patient.gender || '',
+              location: patient.location || '',
+              address: patient.address || '',
+              whatsapp: patient.whatsapp || patient.phone,
+              phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
+            };
 
-          if (latestCons) {
-            if (latestCons.followup_date) newState.date = latestCons.followup_date;
-            if (latestCons.detox_doctor_id || latestCons.doctor_id) {
-              newState.doctor_id = latestCons.detox_doctor_id || latestCons.doctor_id;
+            if (latestCons) {
+              if (latestCons.followup_date) newState.date = latestCons.followup_date;
+              if (latestCons.detox_doctor_id || latestCons.doctor_id) {
+                newState.doctor_id = latestCons.detox_doctor_id || latestCons.doctor_id;
+              }
+              newState.appointmentType = latestCons.detox_recommended ? 'Detox' : (latestCons.followup_date ? 'Review' : prev.appointmentType);
+              if (lastAppt) newState.session = lastAppt.session || 'FN';
             }
-            newState.appointmentType = latestCons.detox_recommended ? 'Detox' : (latestCons.followup_date ? 'Review' : prev.appointmentType);
-            if (lastAppt) newState.session = lastAppt.session || 'FN';
-          }
-          return newState;
-        });
+            return newState;
+          });
+        }
         
         setTimeout(() => setShowPatientFoundAlert(false), 5000);
       } else {
@@ -169,6 +184,7 @@ export default function ReceptionistView({
       }
     } catch (error) {
       setFoundPatient(null);
+      setMatchingPatients([]);
     } finally {
       setIsFetchingPatient(false);
     }
@@ -246,9 +262,20 @@ export default function ReceptionistView({
     if (!formData.phone.trim()) { toast.warn('Patient Phone is required.'); return; }
 
     try {
-      let patientObj = await getPatientByPhone(formData.phone);
-      
-      if (!patientObj) {
+      // Determine patientObj: if user selected a matching patient, use it.
+      // If the entered name does not match any existing patient on the same phone,
+      // create a fresh patient record for this phone instead.
+      let patientObj = null;
+      const resp = await getPatientByPhone(formData.phone).catch(() => null);
+      const matches = Array.isArray(resp) ? resp : (resp ? [resp] : []);
+      const firstMatch = matches[0] || null;
+      const normalizedName = formData.name.trim();
+
+      const hasNameMatch = matches.some(m => String(m.name || '').trim() === normalizedName);
+      const shouldCreateNew = !hasNameMatch && normalizedName !== '';
+
+      if (foundPatient && normalizedName !== String(foundPatient.name || '').trim()) {
+        // User explicitly selected a different person name; create a new patient.
         patientObj = await createPatient({
           name: formData.name,
           age: parseInt(formData.age),
@@ -259,15 +286,53 @@ export default function ReceptionistView({
           address: formData.address,
           medical_conditions: formData.notes || 'Registered via Reception desk'
         });
-        setPatients(prev => [...prev, patientObj]);
+      } else if (shouldCreateNew) {
+        patientObj = await createPatient({
+          name: formData.name,
+          age: parseInt(formData.age),
+          gender: formData.gender,
+          phone: formData.phone,
+          whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
+          location: formData.location,
+          address: formData.address,
+          medical_conditions: formData.notes || 'Registered via Reception desk'
+        });
+      } else {
+        // prefer the explicitly selected foundPatient, else use firstMatch
+        patientObj = foundPatient || firstMatch;
+        if (!patientObj) {
+          // No existing patient — create one
+          patientObj = await createPatient({
+            name: formData.name,
+            age: parseInt(formData.age),
+            gender: formData.gender,
+            phone: formData.phone,
+            whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
+            location: formData.location,
+            address: formData.address,
+            medical_conditions: formData.notes || 'Registered via Reception desk'
+          });
+        }
       }
+
+      // Update patients state: replace existing record with same id, or append
+      setPatients(prev => {
+        if (!patientObj) return prev;
+        const existingIndex = prev.findIndex(p => String(p.id) === String(patientObj.id));
+        if (existingIndex !== -1) {
+          const copy = [...prev];
+          copy[existingIndex] = patientObj;
+          return copy;
+        }
+        return [patientObj, ...prev];
+      });
 
       if (type === 'book' && !formData.doctor_id) {
         toast.warn('Please assign a doctor to book an appointment.'); return;
       }
 
       const appointmentData = {
-        patientId: patientObj.id,
+        patientId: Number(patientObj.id),
         doctorId: formData.doctor_id ? parseInt(formData.doctor_id) : null,
         appointmentDate: formData.date,
         appointmentType: formData.appointmentType,
@@ -278,13 +343,15 @@ export default function ReceptionistView({
 
       const newAppt = await createAppointment(appointmentData);
       
-      // Ensure doctor info is preserved in local state
+      // Ensure doctor and patient info is preserved in local state
       const doctorObj = allDoctors.find(d => String(d.id) === String(formData.doctor_id));
       const normalizedNewAppt = {
         ...newAppt,
+        patient: patientObj,
+        patientId: Number(patientObj.id),
         doctor: doctorObj,
         doctorId: formData.doctor_id ? parseInt(formData.doctor_id, 10) : newAppt.doctorId || newAppt.doctor_id,
-        doctor_name: doctorObj?.user?.fullName || doctorObj?.name
+        doctor_name: doctorObj?.user?.fullName || doctorObj?.name || newAppt.doctor_name
       };
       setAppointments(prev => [...prev, normalizedNewAppt]);
 
@@ -396,7 +463,7 @@ export default function ReceptionistView({
     
     const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
     const matchesDoctor = filterDoctor === 'all' || String(appt.doctorId || appt.doctor_id) === String(filterDoctor);
-    const matchesStatus = filterStatus === 'all' || appt.status === filterStatus;
+    const matchesStatus = filterStatus === 'all' || String(appt.status || '').trim() === String(filterStatus).trim();
     
     return matchesSearch && matchesFilter && matchesDoctor && matchesStatus;
   });
@@ -499,6 +566,30 @@ export default function ReceptionistView({
     return digits.length > 10 ? digits.slice(-10) : digits;
   };
 
+  const isSelectingDuplicatePatient = matchingPatients.length > 0;
+
+  const chooseDuplicatePatient = (patient) => {
+    setFoundPatient(patient);
+    setShowPatientFoundAlert(true);
+    setMatchingPatients([]);
+    setFormData(prev => ({
+      ...prev,
+      name: patient.name || prev.name,
+      age: patient.age?.toString() || prev.age,
+      gender: patient.gender || prev.gender,
+      location: patient.location || prev.location,
+      address: patient.address || prev.address,
+      whatsapp: patient.whatsapp || patient.phone || prev.whatsapp,
+      phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
+    }));
+  };
+
+  const createNewPatientForPhone = () => {
+    setMatchingPatients([]);
+    setFoundPatient(null);
+    setShowPatientFoundAlert(false);
+  };
+
   const getAppointmentTypeBadge = (type) => {
     const colors = {
       'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
@@ -587,6 +678,11 @@ export default function ReceptionistView({
                 <input type="tel" required placeholder="+91 XXXXX XXXXX" value={formData.phone} onChange={handlePhoneChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
               </div>
             </div>
+            {isSelectingDuplicatePatient && (
+              <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900 font-semibold">
+                Multiple records were found for this number. Please select the correct profile from the pop-up dialog.
+              </div>
+            )}
             
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
@@ -600,6 +696,31 @@ export default function ReceptionistView({
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   className="w-full bg-slate-50 border rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-1 transition-all font-medium border-slate-200 focus:border-emerald-500 focus:ring-emerald-500"
                 />
+
+                {matchingPatients && matchingPatients.length > 0 && (
+                  <div className="absolute left-0 right-0 z-30 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                    <div className="p-2">
+                      <div className="text-xs text-slate-500 px-2 pb-2">Multiple patients match this phone — choose one:</div>
+                      <div className="flex flex-col gap-1">
+                        {matchingPatients.map(mp => (
+                          <button key={mp.id} type="button" onClick={() => chooseDuplicatePatient(mp)} className="text-left w-full px-3 py-2 hover:bg-slate-50 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-900">{mp.name || 'Unnamed Patient'}</div>
+                                <div className="text-xs text-slate-500">{mp.phone || 'No phone'} • {mp.location || 'n/a'}</div>
+                              </div>
+                              <div className="text-xs text-slate-400">ID: {mp.id}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 p-3">
+                      <button type="button" onClick={() => setMatchingPatients([])} className="text-sm text-slate-600 px-3 py-1 rounded-lg">Dismiss</button>
+                      <button type="button" onClick={createNewPatientForPhone} className="text-sm bg-emerald-600 text-white px-3 py-1 rounded-lg">Create New</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -791,16 +912,23 @@ export default function ReceptionistView({
               <textarea rows="2" value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none transition-all font-medium"></textarea>
             </div>
 
+            {isSelectingDuplicatePatient && (
+              <div className="text-center text-xs text-rose-600 font-semibold">
+                Please resolve the duplicate patient selection before saving or booking.
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4 pt-3">
-              <button type="button" onClick={() => handleAction('waiting')} className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs">
+              <button type="button" onClick={() => handleAction('waiting')} disabled={isSelectingDuplicatePatient} className={`bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs ${isSelectingDuplicatePatient ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <Clock className="w-4 h-4" /> Save to Waiting
               </button>
-              <button type="button" onClick={() => handleAction('book')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs">
+              <button type="button" onClick={() => handleAction('book')} disabled={isSelectingDuplicatePatient} className={`bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs ${isSelectingDuplicatePatient ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <UserCheck className="w-4 h-4" /> Book Appointment
               </button>
             </div>
           </div>
         </div>
+
+      
 
         {/* Right Column: Registry Tables */}
         <div className="lg:col-span-7 space-y-6">
@@ -894,7 +1022,7 @@ export default function ReceptionistView({
                 </div>
                 
                 {/* Filters Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all cursor-pointer" />
@@ -919,14 +1047,13 @@ export default function ReceptionistView({
                       <option value="Review">Review</option>
                     </select>
                   </div>
-
                   <div className="relative">
-                    <Check className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
                       <option value="all">All Statuses</option>
                       <option value="Scheduled">Scheduled</option>
                       <option value="Arrived">Arrived</option>
-                      <option value="Checked-in">With Doctor</option>
+                      <option value="Checked-in">Checked-in</option>
                       <option value="Completed">Completed</option>
                       <option value="Cancelled">Cancelled</option>
                     </select>

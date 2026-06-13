@@ -20,19 +20,45 @@ const formatPhoneNumber = (phone) => {
 };
 
 export const getPatientByPhone = async (phone) => {
-    const formattedPhone = formatPhoneNumber(phone);
+    const cleaned = phone ? phone.toString().replace(/\D/g, '') : '';
+    const candidates = [];
+    // 1) If input already has country code (starts with 91 and length>10), try with +
+    if (cleaned.length > 10 && cleaned.startsWith('91')) candidates.push('+' + cleaned);
+    // 2) If input is 10 digits, try +91 + last10
+    if (cleaned.length === 10) candidates.push('+91' + cleaned);
+    // 3) Try raw cleaned digits
+    if (cleaned) candidates.push(cleaned);
+
+    for (const candidate of candidates) {
+        try {
+            const url = `${API_URL}/phone/${encodeURIComponent(candidate)}`;
+            console.debug('getPatientByPhone trying', candidate, url);
+            const response = await fetch(url, { headers: getAuthHeader() });
+            if (!response.ok) {
+                if (response.status === 404) continue;
+                console.warn('getPatientByPhone fetch failed for', candidate, response.status);
+                continue;
+            }
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('Error fetching patient for', candidate, error);
+            continue;
+        }
+    }
+
+    // final attempt: try original input as-is
     try {
-        const response = await fetch(`${API_URL}/phone/${encodeURIComponent(formattedPhone)}`, {
-            headers: getAuthHeader()
-        });
+        const url = `${API_URL}/phone/${encodeURIComponent(phone)}`;
+        console.debug('getPatientByPhone final attempt', phone, url);
+        const response = await fetch(url, { headers: getAuthHeader() });
         if (!response.ok) {
             if (response.status === 404) return null;
             throw new Error('Failed to fetch patient');
         }
-        const result = await response.json();
-        return result;
+        return await response.json();
     } catch (error) {
-        console.error('Error fetching patient:', error);
+        console.error('Error fetching patient (final):', error);
         return null;
     }
 };
