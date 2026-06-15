@@ -515,7 +515,13 @@ export default function App() {
         }
       }
 
-      setConsultations(prev => [...prev, { ...newCons, id: createdConsultation.id }]);
+      // Normalize added consultation to include both snake_case and camelCase followup fields
+      setConsultations(prev => [...prev, {
+        ...newCons,
+        id: createdConsultation.id,
+        followup_date: newCons.followup_date || newCons.followupDate || null,
+        followupDate: newCons.followup_date || newCons.followupDate || null
+      }]);
       toast.success('Consultation saved successfully!');
       return createdConsultation;
     } catch (error) {
@@ -539,7 +545,18 @@ export default function App() {
   const handleAddDietChart = (newDiet) => setDietCharts(prev => [...prev, newDiet]);
 
   const handleScheduleDetox = (newSession, patientObj) => {
-    setDetoxSessions(prev => [...prev, newSession]);
+    // Normalize detox session fields for consistent consumers
+    const normalized = {
+      ...newSession,
+      id: newSession.id,
+      patient_id: newSession.patient_id || newSession.patientId || (patientObj && patientObj.id) || null,
+      patientId: newSession.patientId || newSession.patient_id || (patientObj && patientObj.id) || null,
+      followup_date: newSession.followup_date || newSession.followupDate || null,
+      followupDate: newSession.followupDate || newSession.followup_date || null,
+      doctorId: newSession.doctorId || newSession.doctor_id || null,
+      doctor_id: newSession.doctor_id || newSession.doctorId || null
+    };
+    setDetoxSessions(prev => [...prev, normalized]);
     const waLog = {
       id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
       type: 'Session Reminder', message_text: `Hello ${patientObj.name}, your ${newSession.type} session is scheduled for ${newSession.scheduled_date}. Technician: ${newSession.technician}. - Manthrralaya's Wellness`,
@@ -644,7 +661,8 @@ export default function App() {
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':
-        return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment} />;
+        return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment}   consultations={consultations}  
+      detoxSessions={detoxSessions}/>;
       case 'consultations':
         return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} currentUser={currentUser} />;
       case 'my-patient-records':
@@ -687,6 +705,7 @@ export default function App() {
             whatsappLogs={whatsappLogs}
             setWhatsappLogs={setWhatsappLogs}
             consultations={consultations}
+             detoxSessions={detoxSessions} 
           />
         );
       case 'doctor-master':

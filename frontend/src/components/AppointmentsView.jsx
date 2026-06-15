@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPlus } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPlus, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 
-export default function AppointmentsView({ appointments, patients, doctors, onAddAppointment, onCheckIn, onCancelAppointment }) {
+export default function AppointmentsView({ 
+  appointments, 
+  patients, 
+  doctors, 
+  onAddAppointment, 
+  onCheckIn, 
+  onCancelAppointment,
+  consultations = [],
+  detoxSessions = []
+}) {
   const [isBooking, setIsBooking] = useState(false);
+  const [showFollowups, setShowFollowups] = useState(true);
   
   const [formData, setFormData] = useState({
     patient_id: '',
@@ -14,23 +24,122 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
     notes: ''
   });
 
-  // Debug: Log appointments and patients
-  useEffect(() => {
-    console.log('=== AppointmentsView Debug ===');
-    console.log('Appointments:', appointments);
-    console.log('Patients:', patients);
-    console.log('Doctors:', doctors);
+  // Helper function to get next follow-up from consultations or detox sessions
+  const getNextFollowup = (patientId) => {
+    // First check consultations
+    const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
+    const latestCons = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
     
-    if (appointments?.length > 0 && patients?.length > 0) {
-      console.log('Checking patient matching:');
-      appointments.forEach(appt => {
-        const patientId = appt.patientId || appt.patient_id;
-        console.log(`Appointment ${appt.id}: Looking for patient ID ${patientId} (type: ${typeof patientId})`);
-        const foundPatient = patients.find(p => String(p.id) === String(patientId));
-        console.log(`  Found: ${foundPatient?.name || 'NOT FOUND'}`);
+    if (latestCons && (latestCons.followup_date || latestCons.followupDate)) {
+      const followupDate = latestCons.followup_date || latestCons.followupDate;
+      const isDetoxRecommended = latestCons.detox_recommended || latestCons.detoxRecommended;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const followupDateObj = new Date(followupDate);
+      
+      if (!isNaN(followupDateObj.getTime()) && followupDateObj >= today) {
+        return {
+          scheduled_date: followupDate,
+          doctor_name: latestCons.detox_doctor_name || latestCons.detoxDoctorName || latestCons.doctor_name,
+          doctor_id: latestCons.detox_doctor_id || latestCons.detoxDoctorId || latestCons.doctor_id,
+          appointment_type: isDetoxRecommended ? 'Detox' : 'Review',
+          source: 'consultation',
+          notes: latestCons.followup_remarks || latestCons.followupRemarks || 'Follow-up from consultation',
+          isPending: true
+        };
+      }
+    }
+    
+    // Check detox sessions for follow-up dates
+    const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+    const latestDetox = [...ptDetox].sort((a, b) => {
+      const dateA = a.sessionDate ? new Date(a.sessionDate).getTime() : 0;
+      const dateB = b.sessionDate ? new Date(b.sessionDate).getTime() : 0;
+      return dateB - dateA;
+    })[0];
+    
+    // CRITICAL: Use followupDate (camelCase) - this matches your data structure
+    const detoxFollowupDate = latestDetox?.followupDate || latestDetox?.followup_date;
+    
+    if (latestDetox && detoxFollowupDate) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const followupDateObj = new Date(detoxFollowupDate);
+      
+      if (!isNaN(followupDateObj.getTime()) && followupDateObj >= today) {
+        // Format the date to YYYY-MM-DD for display
+        const formattedDate = followupDateObj.toISOString().split('T')[0];
+        
+        return {
+          scheduled_date: formattedDate,
+          doctor_name: latestDetox.doctor?.user?.fullName || latestDetox.doctorName,
+          doctor_id: latestDetox.doctorId || latestDetox.doctor_id,
+          appointment_type: 'Review',
+          source: 'detox',
+          notes: latestDetox.followupRemarks || latestDetox.followup_remarks || 'Follow-up after detox session',
+          isPending: true
+        };
+      }
+    }
+    
+    return null;
+  };
+
+  // Combine booked appointments with pending follow-ups
+  const getAllAppointmentsWithFollowups = () => {
+    const bookedAppointments = appointments.map(appt => ({
+      ...appt,
+      isFollowup: false,
+      displayType: 'booked'
+    }));
+    
+    const pendingFollowups = [];
+    
+    // Only add follow-ups if showFollowups is true
+    if (showFollowups) {
+      patients.forEach(patient => {
+        const nextFollowup = getNextFollowup(patient.id);
+        if (nextFollowup && nextFollowup.isPending) {
+          // Check if there's already a booked appointment for this follow-up date
+          const hasExistingAppointment = appointments.some(appt => 
+            String(appt.patient_id || appt.patientId) === String(patient.id) &&
+            (appt.appointmentDate === nextFollowup.scheduled_date || 
+             appt.date === nextFollowup.scheduled_date)
+          );
+          
+          if (!hasExistingAppointment) {
+            pendingFollowups.push({
+              id: `followup-${patient.id}-${nextFollowup.scheduled_date}`,
+              patient_id: patient.id,
+              patientId: patient.id,
+              doctor_id: nextFollowup.doctor_id,
+              doctorId: nextFollowup.doctor_id,
+              appointmentDate: nextFollowup.scheduled_date,
+              date: nextFollowup.scheduled_date,
+              appointmentType: nextFollowup.appointment_type,
+              status: 'Scheduled',
+              notes: nextFollowup.notes,
+              doctor_name: nextFollowup.doctor_name,
+              isFollowup: true,
+              followupSource: nextFollowup.source,
+              displayType: 'followup'
+            });
+          }
+        }
       });
     }
-  }, [appointments, patients]);
+    
+    // Combine and sort by date
+    const all = [...bookedAppointments, ...pendingFollowups];
+    return all.sort((a, b) => {
+      const dateA = a.appointmentDate || a.date;
+      const dateB = b.appointmentDate || b.date;
+      return new Date(dateA) - new Date(dateB);
+    });
+  };
+
+  const allItems = getAllAppointmentsWithFollowups();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -76,19 +185,26 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
     }
   };
 
-  // Helper function to find patient by ID (handles both camelCase and snake_case)
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '--';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   const findPatient = (appointment) => {
     if (!appointment) return {};
     const pid = appointment.patientId || appointment.patient_id;
 
-    // 1. Try lookup in master patients list by ID
     const masterPt = patients?.find(p => String(p.id) === String(pid));
     if (masterPt) return masterPt;
 
-    // 2. Fallback to nested patient data if included by backend
     if (appointment.patient || appointment.Patient) return appointment.patient || appointment.Patient;
 
-    // 3. Fallback to name lookup if available
     const nameToMatch = appointment.patient_name || appointment.patient?.name;
     if (nameToMatch) {
       return patients?.find(p => p.name === nameToMatch) || {};
@@ -97,7 +213,6 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
     return {};
   };
 
-  // Helper function to find doctor by ID
   const findDoctor = (appointment) => {
     const doctorId = appointment.doctorId || appointment.doctor_id;
     if (!doctorId) return null;
@@ -120,16 +235,27 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
             Manage daily schedules, patient arrivals, and doctor queues.
           </p>
         </div>
-        {/* <button
-          onClick={() => setIsBooking(!isBooking)}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
-        >
-          {isBooking ? <CalendarIcon className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {isBooking ? 'View Schedule' : 'Book Appointment'}
-        </button> */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowFollowups(!showFollowups)}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${
+              showFollowups 
+                ? 'bg-emerald-600 text-white' 
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            {showFollowups ? 'Hide Follow-ups' : 'Show Follow-ups'}
+          </button>
+          <button
+            onClick={() => setIsBooking(!isBooking)}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
+          >
+            {isBooking ? <CalendarIcon className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {isBooking ? 'View Schedule' : 'Book Appointment'}
+          </button>
+        </div>
       </div>
-
-    
 
       {isBooking ? (
         <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm text-left max-w-2xl mx-auto">
@@ -207,7 +333,6 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date</label>
                 <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
-              
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reason / Intake Notes</label>
@@ -228,34 +353,47 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-emerald-600" />
-            <h3 className="font-bold text-slate-800">Master Schedule Log</h3>
+          <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-bold text-slate-800">Master Schedule Log</h3>
+            </div>
+            <div className="text-xs text-slate-500">
+              {allItems.filter(i => !i.isFollowup).length} booked | {allItems.filter(i => i.isFollowup).length} pending follow-ups
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="bg-white border-b border-slate-200 text-slate-500 font-semibold uppercase text-xs tracking-wider">
-                  <th className="py-3 px-4"> Date</th>
+                  <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Patient Profile</th>
                   <th className="py-3 px-4">Appointment Type</th>
                   <th className="py-3 px-4">Assigned Doctor</th>
-                  <th className="py-3 px-4">Intake Notes</th>
+                  <th className="py-3 px-4">Notes</th>
                   <th className="py-3 px-4">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {appointments.map(appt => {
+                {allItems.map(appt => {
                   const pt = findPatient(appt);
                   const doctor = findDoctor(appt);
-                  const doctorName = doctor?.user?.fullName || doctor?.name || 'Not Assigned';
+                  const doctorName = doctor?.user?.fullName || doctor?.name || appt.doctor_name || 'Not Assigned';
+                  const isFollowup = appt.isFollowup;
+                  const displayDate = formatDate(appt.date || appt.appointmentDate);
                   
                   return (
-                    <tr key={appt.id} className="hover:bg-slate-50 transition-colors">
+                    <tr key={appt.id} className={`hover:bg-slate-50 transition-colors ${isFollowup ? 'bg-amber-50/30' : ''}`}>
                       <td className="py-3 px-4">
-                        
-                        <span className="text-slate-500">{appt.date || (appt.appointmentDate ? new Date(appt.appointmentDate).toISOString().split('T')[0] : '--')}</span>
+                        <span className={`${isFollowup ? 'font-semibold text-amber-700' : 'text-slate-500'}`}>
+                          {displayDate}
+                        </span>
+                        {isFollowup && (
+                          <div className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                            Pending Follow-up {appt.followupSource === 'detox' ? '(from detox)' : '(recommended)'}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-bold text-slate-800 block">{pt.name || 'Unknown Patient'}</span>
@@ -265,25 +403,41 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                         </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${appt.appointmentType === 'Detox' ? 'border-teal-200 bg-teal-50 text-teal-700' : appt.appointmentType === 'Review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-purple-200 bg-purple-50 text-purple-700'}`}>
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                          appt.appointmentType === 'Detox' ? 'border-teal-200 bg-teal-50 text-teal-700' : 
+                          appt.appointmentType === 'Review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 
+                          'border-purple-200 bg-purple-50 text-purple-700'
+                        }`}>
                           {appt.appointmentType || 'General'}
+                          {isFollowup && appt.followupSource === 'detox' && (
+                            <span className="ml-1 text-[9px] font-normal">(from detox)</span>
+                          )}
+                          {isFollowup && appt.followupSource === 'consultation' && (
+                            <span className="ml-1 text-[9px] font-normal">(recommended)</span>
+                          )}
                         </span>
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-semibold text-slate-700 block">
-                          {doctorName}
+                          {doctorName || appt.doctor_name || 'Not Assigned'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate">
-                        {appt.notes || '-'}
+                      <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate" title={appt.notes}>
+                        {appt.notes || (isFollowup ? 'Follow-up recommended' : '-')}
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getStatusColor(appt.status)}`}>
-                          {appt.status}
-                        </span>
+                        {isFollowup ? (
+                          <span className="px-2.5 py-1 rounded-md text-xs font-bold border bg-amber-100 text-amber-700 border-amber-200">
+                            Pending
+                          </span>
+                        ) : (
+                          <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getStatusColor(appt.status)}`}>
+                            {appt.status}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right space-x-2">
-                        {appt.status === 'Scheduled' && (
+                        {!isFollowup && appt.status === 'Scheduled' && (
                           <>
                             <button onClick={() => onCheckIn(appt.id, false, false)} className="text-emerald-600 hover:bg-emerald-50 font-bold px-2.5 py-1.5 rounded-lg border border-transparent hover:border-emerald-200 transition-colors">
                               Check-in
@@ -293,8 +447,26 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                             </button>
                           </>
                         )}
-                        {appt.status === 'Checked-in' && (
+                        {!isFollowup && appt.status === 'Checked-in' && (
                           <span className="text-slate-400 font-medium italic">Awaiting Consult</span>
+                        )}
+                        {isFollowup && (
+                          <button 
+                            onClick={() => {
+                              setFormData({
+                                patient_id: pt.id,
+                                doctor_id: appt.doctor_id,
+                                appointmentType: appt.appointmentType,
+                                date: appt.date,
+                                notes: appt.notes,
+                                time: '10:00 AM'
+                              });
+                              setIsBooking(true);
+                            }}
+                            className="text-emerald-600 hover:bg-emerald-50 font-bold px-2.5 py-1.5 rounded-lg border border-emerald-200 transition-colors"
+                          >
+                            Book Now
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -302,8 +474,8 @@ export default function AppointmentsView({ appointments, patients, doctors, onAd
                 })}
               </tbody>
             </table>
-            {appointments.length === 0 && (
-              <div className="py-12 text-center text-slate-500">No appointments found</div>
+            {allItems.length === 0 && (
+              <div className="py-12 text-center text-slate-500">No appointments or pending follow-ups found</div>
             )}
           </div>
         </div>

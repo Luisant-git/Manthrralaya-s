@@ -34,7 +34,8 @@ export default function ReceptionistView({
   doctors,
   whatsappLogs,
   setWhatsappLogs,
-  consultations = []
+  consultations = [],
+  detoxSessions = []
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -78,7 +79,6 @@ export default function ReceptionistView({
   const [phoneDebounce, setPhoneDebounce] = useState(null);
 
   // Create a robust list of available doctors (Master list + Extraction from Appointments)
-  // This ensures the list isn't empty even if the master fetch is restricted or delayed.
   const availableDoctors = doctors ? doctors.filter(d => d.status === 'Available') : [];
   const allDoctors = doctors ? [...doctors] : [];
   
@@ -102,27 +102,189 @@ export default function ReceptionistView({
     });
   }
 
-  // Debug: Log doctors data
-  useEffect(() => {
-    console.log('Doctors received:', doctors);
-    console.log('Doctors count:', doctors?.length);
-  }, [doctors]);
+  const getDoctorLabel = (doctorId) => {
+    if (!doctorId) return '';
+    const doc = allDoctors.find(d => String(d.id) === String(doctorId));
+    if (!doc) return `Doctor ${doctorId}`;
+    const name = doc.user?.fullName || doc.name || `Doctor ${doc.id}`;
+    const specialty = doc.specialization || doc.designation || '';
+    return `${name}${specialty ? ` (${specialty})` : ''} (${doc.status || 'Unknown'})`;
+  };
 
-  // Debug: Log appointments data
-  useEffect(() => {
-    console.log('Appointments received in ReceptionistView:', appointments);
-    console.log('Total appointments:', appointments?.length);
-  }, [appointments]);
+  const getAppointmentTimestamp = (appt) => {
+    const raw = appt?.appointmentDate || appt?.date;
+    if (!raw) return 0;
+    const normalized = typeof raw === 'string' && !raw.includes('T') ? `${raw}T00:00:00` : raw;
+    const dateObj = new Date(normalized);
+    return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
+  };
 
-  // Debug: Log patients data
-  useEffect(() => {
-    console.log('Patients received:', patients);
-    console.log('Patients count:', patients?.length);
-  }, [patients]);
+ const buildPrefilledPatientForm = (patient, prev) => {
+  // Get patient's appointments (nested in patient object)
+  const patientAppointments = Array.isArray(patient.appointments) ? [...patient.appointments] : [];
+  
+  // Get the most recent appointment by date
+  const lastAppt = [...patientAppointments].sort((a, b) => {
+    const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+    const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+    return dateB - dateA;
+  })[0];
+
+  // Get consultations for this patient
+  const ptCons = consultations.filter(c => String(c.patient_id) === String(patient.id));
+  const latestCons = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  
+  // Get detox sessions for this patient
+  const ptDetoxSessions = detoxSessions ? detoxSessions.filter(ds => String(ds.patient_id) === String(patient.id) || String(ds.patientId) === String(patient.id)) : [];
+  const latestDetoxSession = [...ptDetoxSessions].sort((a, b) => {
+    const dateA = a.sessionDate ? new Date(a.sessionDate).getTime() : 0;
+    const dateB = b.sessionDate ? new Date(b.sessionDate).getTime() : 0;
+    return dateB - dateA;
+  })[0];
+
+  const defaultDate = new Date().toISOString().slice(0, 10);
+  
+  const newState = {
+    ...prev,
+    name: patient.name || prev.name,
+    age: patient.age?.toString() || prev.age,
+    gender: patient.gender || prev.gender,
+    location: patient.location || prev.location,
+    address: patient.address || prev.address,
+    whatsapp: patient.whatsapp || patient.phone || prev.whatsapp,
+    phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone,
+    doctor_id: '',
+    doctor_name: '',
+    date: defaultDate,
+    appointmentType: 'Initial consultation',
+    session: 'FN'
+  };
+
+  // Helper function to format date for input
+  const formatDateForInput = (dateValue) => {
+    if (!dateValue) return null;
+    if (typeof dateValue === 'string' && dateValue.includes('T')) {
+      return dateValue.split('T')[0];
+    }
+    const dateObj = new Date(dateValue);
+    if (!isNaN(dateObj.getTime())) {
+      return dateObj.toISOString().split('T')[0];
+    }
+    return dateValue;
+  };
+
+  // PRIORITY 1: Check for follow-up from detox session (most recent)
+  const detoxFollowupDate = latestDetoxSession?.followupDate || latestDetoxSession?.followup_date;
+  if (detoxFollowupDate) {
+    const formattedDate = formatDateForInput(detoxFollowupDate);
+    if (formattedDate) {
+      newState.date = formattedDate;
+      console.debug('[buildPrefilledPatientForm] Set detox follow-up date:', formattedDate);
+    }
+    
+    // Determine appointment type based on consultation's detox recommendation
+    const hasDetoxRecommendation = latestCons?.detox_recommended || latestCons?.detoxRecommended;
+    newState.appointmentType = hasDetoxRecommendation ? 'Detox' : 'Review';
+    
+    // Use the doctor from the detox session if available
+    if (latestDetoxSession.doctorId || latestDetoxSession.doctor_id) {
+      newState.doctor_id = latestDetoxSession.doctorId || latestDetoxSession.doctor_id;
+    } else if (latestCons?.detox_doctor_id || latestCons?.detoxDoctorId) {
+      newState.doctor_id = latestCons.detox_doctor_id || latestCons.detoxDoctorId;
+    } else if (latestCons?.doctor_id) {
+      newState.doctor_id = latestCons.doctor_id;
+    } else if (latestDetoxSession.doctor?.id) {
+      newState.doctor_id = latestDetoxSession.doctor.id;
+    }
+    
+    if (latestDetoxSession.sessionType) {
+      newState.session = latestDetoxSession.sessionType === 'morning' ? 'FN' : 'AN';
+    } else if (lastAppt?.session) {
+      newState.session = lastAppt.session;
+    }
+  }
+  // PRIORITY 2: Check for follow-up from consultation
+  else {
+    const consultationFollowupDate = latestCons?.followup_date || latestCons?.followupDate;
+    if (consultationFollowupDate) {
+      const formattedDate = formatDateForInput(consultationFollowupDate);
+      if (formattedDate) {
+        newState.date = formattedDate;
+      }
+      
+      const isDetoxRecommended = latestCons?.detox_recommended || latestCons?.detoxRecommended;
+      newState.appointmentType = isDetoxRecommended ? 'Detox' : 'Review';
+      
+      const detoxDoctorId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
+      const regularDoctorId = latestCons?.doctor_id;
+      
+      if (detoxDoctorId) {
+        newState.doctor_id = detoxDoctorId;
+      } else if (regularDoctorId) {
+        newState.doctor_id = regularDoctorId;
+      }
+      
+      if (latestCons.session) {
+        newState.session = latestCons.session;
+      } else if (lastAppt?.session) {
+        newState.session = lastAppt.session;
+      }
+    }
+    // PRIORITY 3: Detox recommendation without follow-up date
+    else if (latestCons?.detox_recommended || latestCons?.detoxRecommended) {
+      newState.appointmentType = 'Detox';
+      
+      const detoxDoctorId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
+      const regularDoctorId = latestCons?.doctor_id;
+      
+      if (detoxDoctorId) {
+        newState.doctor_id = detoxDoctorId;
+      } else if (regularDoctorId) {
+        newState.doctor_id = regularDoctorId;
+      }
+      
+      if (latestCons.session) {
+        newState.session = latestCons.session;
+      } else if (lastAppt?.session) {
+        newState.session = lastAppt.session;
+      }
+    }
+    // PRIORITY 4: Use last appointment data
+    else if (lastAppt) {
+      if (lastAppt.appointmentDate) {
+        const dateObj = new Date(lastAppt.appointmentDate);
+        if (!isNaN(dateObj.getTime())) {
+          newState.date = dateObj.toISOString().slice(0, 10);
+        }
+      }
+      
+      if (lastAppt.appointmentType) {
+        newState.appointmentType = lastAppt.appointmentType;
+      }
+      
+      if (lastAppt.doctorId || lastAppt.doctor_id) {
+        newState.doctor_id = lastAppt.doctorId || lastAppt.doctor_id;
+      } else if (lastAppt.doctor?.id) {
+        newState.doctor_id = lastAppt.doctor.id;
+      }
+      
+      newState.doctor_name = lastAppt.doctor_name || 
+                             lastAppt.doctor?.user?.fullName || 
+                             lastAppt.doctor?.name || '';
+      
+      if (lastAppt.session) {
+        newState.session = lastAppt.session;
+      }
+    }
+  }
+
+  return newState;
+};
 
   const fetchPatientByPhone = async (phoneNumber) => {
     if (!phoneNumber || phoneNumber.trim() === '') {
       setFoundPatient(null);
+      setMatchingPatients([]);
       return;
     }
 
@@ -130,52 +292,44 @@ export default function ReceptionistView({
     try {
       const patientResp = await getPatientByPhone(phoneNumber);
       console.log('fetchPatientByPhone result:', patientResp);
+      
       if (Array.isArray(patientResp) && patientResp.length > 1) {
-        // Multiple patients match this phone — let user pick the right one
+        // Multiple patients match - show dropdown for selection
         setMatchingPatients(patientResp);
         setFoundPatient(null);
         setShowPatientFoundAlert(false);
         setIsFetchingPatient(false);
         return;
       }
+      
       const patient = Array.isArray(patientResp) ? patientResp[0] : patientResp;
       if (patient) {
         setMatchingPatients([]);
         setFoundPatient(patient);
         setShowPatientFoundAlert(true);
         
-        // Find latest follow-up info from consultations
-        const ptCons = consultations.filter(c => String(c.patient_id) === String(patient.id));
-        const latestCons = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-
-        // Find last appointment to guess preferred session
-        const ptAppts = appointments.filter(a => String(a.patient_id || a.patientId) === String(patient.id));
-        const lastAppt = [...ptAppts].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-
         const shouldAutoFill = !formData.name.trim() || formData.name.trim() === String(patient.name || '').trim();
         if (shouldAutoFill) {
-          setFormData(prev => {
-            const newState = {
-              ...prev,
-              name: patient.name,
-              age: patient.age.toString(),
-              gender: patient.gender || '',
-              location: patient.location || '',
-              address: patient.address || '',
-              whatsapp: patient.whatsapp || patient.phone,
-              phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
-            };
-
-            if (latestCons) {
-              if (latestCons.followup_date) newState.date = latestCons.followup_date;
-              if (latestCons.detox_doctor_id || latestCons.doctor_id) {
-                newState.doctor_id = latestCons.detox_doctor_id || latestCons.doctor_id;
-              }
-              newState.appointmentType = latestCons.detox_recommended ? 'Detox' : (latestCons.followup_date ? 'Review' : prev.appointmentType);
-              if (lastAppt) newState.session = lastAppt.session || 'FN';
-            }
-            return newState;
-          });
+          const newState = buildPrefilledPatientForm(patient, formData);
+          setFormData(newState);
+          
+          // Set doctor search term from patient's last appointment
+          const patientAppointments = patient.appointments || [];
+          const lastAppt = [...patientAppointments].sort((a, b) => {
+            const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+            const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+            return dateB - dateA;
+          })[0];
+          
+          if (lastAppt?.doctor?.user?.fullName) {
+            setDoctorSearchTerm(lastAppt.doctor.user.fullName);
+          } else if (newState.doctor_name) {
+            setDoctorSearchTerm(newState.doctor_name);
+          } else if (newState.doctor_id) {
+            setDoctorSearchTerm(getDoctorLabel(newState.doctor_id));
+          } else {
+            setDoctorSearchTerm('');
+          }
         }
         
         setTimeout(() => setShowPatientFoundAlert(false), 5000);
@@ -183,6 +337,7 @@ export default function ReceptionistView({
         setFoundPatient(null);
       }
     } catch (error) {
+      console.error('Error fetching patient:', error);
       setFoundPatient(null);
       setMatchingPatients([]);
     } finally {
@@ -200,6 +355,7 @@ export default function ReceptionistView({
         fetchPatientByPhone(formData.phone);
       } else {
         setFoundPatient(null);
+        setMatchingPatients([]);
       }
     }, 800);
     
@@ -210,7 +366,6 @@ export default function ReceptionistView({
     };
   }, [formData.phone]);
 
-  // Synchronization for Searchable Doctor Field
   useEffect(() => {
     const doc = doctors?.find(d => String(d.id) === String(formData.doctor_id));
     if (doc) {
@@ -222,7 +377,6 @@ export default function ReceptionistView({
     }
   }, [formData.doctor_id, doctors]);
 
-  // Close doctor dropdown on click outside
   useEffect(() => {
     const handleClickOutside = () => setShowDoctorDropdown(false);
     if (showDoctorDropdown) {
@@ -249,9 +403,55 @@ export default function ReceptionistView({
     }));
   };
 
-  const normalizePhone = (phone) => {
-    if (!phone) return '';
-    return phone.toString().replace(/\D/g, '');
+  const chooseDuplicatePatient = (patient) => {
+    console.log('[chooseDuplicatePatient] Selected:', patient.name, 'ID:', patient.id);
+    
+    setMatchingPatients([]);
+    setFoundPatient(patient);
+    setShowPatientFoundAlert(true);
+    
+    const newState = buildPrefilledPatientForm(patient, formData);
+    console.log('[chooseDuplicatePatient] Form populated with:', newState.name, 'Date:', newState.date);
+    
+    setFormData(newState);
+    
+    const patientAppointments = patient.appointments || [];
+    const lastAppt = [...patientAppointments].sort((a, b) => {
+      const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+      const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+      return dateB - dateA;
+    })[0];
+    
+    if (lastAppt?.doctor?.user?.fullName) {
+      setDoctorSearchTerm(lastAppt.doctor.user.fullName);
+    } else if (newState.doctor_name) {
+      setDoctorSearchTerm(newState.doctor_name);
+    } else if (newState.doctor_id) {
+      setDoctorSearchTerm(getDoctorLabel(newState.doctor_id));
+    } else {
+      setDoctorSearchTerm('');
+    }
+  };
+
+  const createNewPatientForPhone = () => {
+    setMatchingPatients([]);
+    setFoundPatient(null);
+    setShowPatientFoundAlert(false);
+    setFormData(prev => ({
+      ...prev,
+      name: '',
+      age: '',
+      gender: '',
+      location: '',
+      address: '',
+      whatsapp: prev.phoneAsWhatsapp ? prev.phone : '',
+      doctor_id: '',
+      date: new Date().toISOString().split('T')[0],
+      appointmentType: 'Initial consultation',
+      session: 'FN',
+      notes: ''
+    }));
+    setDoctorSearchTerm('');
   };
 
   const handleAction = async (type) => {
@@ -262,9 +462,6 @@ export default function ReceptionistView({
     if (!formData.phone.trim()) { toast.warn('Patient Phone is required.'); return; }
 
     try {
-      // Determine patientObj: if user selected a matching patient, use it.
-      // If the entered name does not match any existing patient on the same phone,
-      // create a fresh patient record for this phone instead.
       let patientObj = null;
       const resp = await getPatientByPhone(formData.phone).catch(() => null);
       const matches = Array.isArray(resp) ? resp : (resp ? [resp] : []);
@@ -275,7 +472,6 @@ export default function ReceptionistView({
       const shouldCreateNew = !hasNameMatch && normalizedName !== '';
 
       if (foundPatient && normalizedName !== String(foundPatient.name || '').trim()) {
-        // User explicitly selected a different person name; create a new patient.
         patientObj = await createPatient({
           name: formData.name,
           age: parseInt(formData.age),
@@ -298,10 +494,8 @@ export default function ReceptionistView({
           medical_conditions: formData.notes || 'Registered via Reception desk'
         });
       } else {
-        // prefer the explicitly selected foundPatient, else use firstMatch
         patientObj = foundPatient || firstMatch;
         if (!patientObj) {
-          // No existing patient — create one
           patientObj = await createPatient({
             name: formData.name,
             age: parseInt(formData.age),
@@ -315,7 +509,6 @@ export default function ReceptionistView({
         }
       }
 
-      // Update patients state: replace existing record with same id, or append
       setPatients(prev => {
         if (!patientObj) return prev;
         const existingIndex = prev.findIndex(p => String(p.id) === String(patientObj.id));
@@ -328,7 +521,8 @@ export default function ReceptionistView({
       });
 
       if (type === 'book' && !formData.doctor_id) {
-        toast.warn('Please assign a doctor to book an appointment.'); return;
+        toast.warn('Please assign a doctor to book an appointment.'); 
+        return;
       }
 
       const appointmentData = {
@@ -343,15 +537,19 @@ export default function ReceptionistView({
 
       const newAppt = await createAppointment(appointmentData);
       
-      // Ensure doctor and patient info is preserved in local state
       const doctorObj = allDoctors.find(d => String(d.id) === String(formData.doctor_id));
+      const appointmentDateValue = newAppt.appointmentDate || newAppt.date || appointmentData.appointmentDate;
       const normalizedNewAppt = {
         ...newAppt,
         patient: patientObj,
         patientId: Number(patientObj.id),
+        patient_id: String(patientObj.id),
         doctor: doctorObj,
         doctorId: formData.doctor_id ? parseInt(formData.doctor_id, 10) : newAppt.doctorId || newAppt.doctor_id,
-        doctor_name: doctorObj?.user?.fullName || doctorObj?.name || newAppt.doctor_name
+        doctor_id: formData.doctor_id ? parseInt(formData.doctor_id, 10) : newAppt.doctorId || newAppt.doctor_id,
+        doctor_name: doctorObj?.user?.fullName || doctorObj?.name || newAppt.doctor_name,
+        appointmentDate: appointmentDateValue,
+        date: getAppointmentDateOnly({ appointmentDate: appointmentDateValue })
       };
       setAppointments(prev => [...prev, normalizedNewAppt]);
 
@@ -397,12 +595,15 @@ export default function ReceptionistView({
 
         const updatedStatus = await updateAppointmentStatus(waitingAppt.id, 'Scheduled');
         const selectedDoc = allDoctors.find(d => String(d.id) === String(doctorIdValue));
+        const appointmentDateValue = modalBookingData.date || waitingAppt.appointmentDate || waitingAppt.date;
         const mergedUpdate = {
           ...waitingAppt,
           ...updatedStatus,
           doctorId: doctorIdValue,
           doctor: selectedDoc || updatedStatus.doctor || waitingAppt.doctor,
-          doctor_name: selectedDoc?.user?.fullName || selectedDoc?.name || updatedStatus.doctor_name || updatedStatus.doctor?.user?.fullName || updatedStatus.doctor?.name
+          doctor_name: selectedDoc?.user?.fullName || selectedDoc?.name || updatedStatus.doctor_name || updatedStatus.doctor?.user?.fullName || updatedStatus.doctor?.name,
+          appointmentDate: appointmentDateValue,
+          date: getAppointmentDateOnly({ appointmentDate: appointmentDateValue })
         };
 
         setAppointments(prev => prev.map(a => a.id === waitingAppt.id ? mergedUpdate : a));
@@ -418,15 +619,18 @@ export default function ReceptionistView({
     try {
       const updated = await updateAppointmentStatus(apptId, 'Arrived');
       setAppointments(prev => prev.map(a => a.id === apptId ? { ...a, ...updated } : a));
+      toast.success('Patient checked in successfully');
     } catch (error) {
       toast.error('Check-in failed');
     }
   };
 
   const handleCancelAppointment = async (apptId) => {
+    if (!window.confirm('Are you sure you want to cancel this appointment?')) return;
     try {
       const updated = await updateAppointmentStatus(apptId, 'Cancelled');
       setAppointments(prev => prev.map(a => a.id === apptId ? { ...a, ...updated } : a));
+      toast.success('Appointment cancelled');
     } catch (error) {
       toast.error('Cancellation failed');
     }
@@ -437,14 +641,25 @@ export default function ReceptionistView({
     try {
       await deleteAppointment(apptId);
       setAppointments(prev => prev.filter(a => a.id !== apptId));
+      toast.success('Inquiry removed');
     } catch (error) {
       toast.error('Delete failed');
     }
   };
 
+  const getAppointmentDateOnly = (appt) => {
+    const raw = appt?.appointmentDate || appt?.date;
+    if (!raw) return '';
+    if (typeof raw === 'string') {
+      return raw.includes('T') ? raw.split('T')[0] : raw;
+    }
+    const dateObj = new Date(raw);
+    return isNaN(dateObj.getTime()) ? '' : dateObj.toISOString().slice(0, 10);
+  };
+
   const activeBookings = appointments?.filter(a => {
     if (!a) return false;
-    const apptDate = a.appointmentDate ? (typeof a.appointmentDate === 'string' ? a.appointmentDate.split('T')[0] : a.appointmentDate) : a.date;
+    const apptDate = getAppointmentDateOnly(a);
     return a.status !== 'Waiting' && apptDate === filterDate;
   }) || [];
 
@@ -494,7 +709,7 @@ export default function ReceptionistView({
       return [
         index + 1,
         pt.name || '0',
-        pt.phone ? String(pt.phone).replace(/\\D/g, '').slice(-10) : '0',
+        pt.phone ? String(pt.phone).replace(/\D/g, '').slice(-10) : '0',
         appt.session || 'FN',
         appt.appointmentType || '-',
         appt.notes || '-',
@@ -515,14 +730,14 @@ export default function ReceptionistView({
       headStyles: { fillColor: [59, 63, 113] },
       styles: { fontSize: 8, overflow: 'linebreak' },
       columnStyles: {
-        5: { cellWidth: 50 } // Allocate specific width to Notes to enforce wrapping
+        5: { cellWidth: 50 }
       },
       margin: { bottom: 25 },
       didDrawCell: function(data) {
         if (data.column.index === 7 && data.section === 'body') {
           doc.setDrawColor(100);
           doc.setLineWidth(0.3);
-          const boxSize = 3; // decreased box size
+          const boxSize = 3;
           doc.rect(
             data.cell.x + data.cell.width / 2 - boxSize / 2, 
             data.cell.y + data.cell.height / 2 - boxSize / 2, 
@@ -568,28 +783,6 @@ export default function ReceptionistView({
 
   const isSelectingDuplicatePatient = matchingPatients.length > 0;
 
-  const chooseDuplicatePatient = (patient) => {
-    setFoundPatient(patient);
-    setShowPatientFoundAlert(true);
-    setMatchingPatients([]);
-    setFormData(prev => ({
-      ...prev,
-      name: patient.name || prev.name,
-      age: patient.age?.toString() || prev.age,
-      gender: patient.gender || prev.gender,
-      location: patient.location || prev.location,
-      address: patient.address || prev.address,
-      whatsapp: patient.whatsapp || patient.phone || prev.whatsapp,
-      phoneAsWhatsapp: !patient.whatsapp || patient.whatsapp === patient.phone
-    }));
-  };
-
-  const createNewPatientForPhone = () => {
-    setMatchingPatients([]);
-    setFoundPatient(null);
-    setShowPatientFoundAlert(false);
-  };
-
   const getAppointmentTypeBadge = (type) => {
     const colors = {
       'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
@@ -616,6 +809,8 @@ export default function ReceptionistView({
       notes: ''
     });
     setFoundPatient(null);
+    setMatchingPatients([]);
+    setDoctorSearchTerm('');
   };
 
   return (
@@ -671,13 +866,14 @@ export default function ReceptionistView({
 
           <div className="space-y-4 text-left">
 
-             <div>
+            <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input type="tel" required placeholder="+91 XXXXX XXXXX" value={formData.phone} onChange={handlePhoneChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
               </div>
             </div>
+            
             {isSelectingDuplicatePatient && (
               <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900 font-semibold">
                 Multiple records were found for this number. Please select the correct profile from the pop-up dialog.
@@ -699,25 +895,54 @@ export default function ReceptionistView({
 
                 {matchingPatients && matchingPatients.length > 0 && (
                   <div className="absolute left-0 right-0 z-30 mt-2 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-                    <div className="p-2">
-                      <div className="text-xs text-slate-500 px-2 pb-2">Multiple patients match this phone — choose one:</div>
-                      <div className="flex flex-col gap-1">
-                        {matchingPatients.map(mp => (
-                          <button key={mp.id} type="button" onClick={() => chooseDuplicatePatient(mp)} className="text-left w-full px-3 py-2 hover:bg-slate-50 rounded-lg">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="text-sm font-semibold text-slate-900">{mp.name || 'Unnamed Patient'}</div>
-                                <div className="text-xs text-slate-500">{mp.phone || 'No phone'} • {mp.location || 'n/a'}</div>
+                    <div className="p-3">
+                      <div className="text-xs font-bold text-slate-600 px-2 pb-2 border-b border-slate-100 mb-2">Multiple patients found — select one:</div>
+                      <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+                        {matchingPatients.map(mp => {
+                          const mpAppointments = mp.appointments || [];
+                          const lastMpAppt = [...mpAppointments].sort((a, b) => {
+                            const dateA = a.appointmentDate ? new Date(a.appointmentDate).getTime() : 0;
+                            const dateB = b.appointmentDate ? new Date(b.appointmentDate).getTime() : 0;
+                            return dateB - dateA;
+                          })[0];
+                          
+                          return (
+                            <button 
+                              key={mp.id} 
+                              type="button" 
+                              onClick={() => chooseDuplicatePatient(mp)} 
+                              className="text-left w-full px-3 py-2 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-200"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="font-bold text-slate-800 text-sm">
+                                    {mp.name || 'Unnamed Patient'}
+                                    {mp.age && <span className="text-xs text-slate-500 ml-2 font-normal">({mp.age} yrs, {mp.gender || 'N/A'})</span>}
+                                  </div>
+                                 
+                                </div>
+                                <div className="text-xs text-slate-400 ml-3">ID: {mp.id}</div>
                               </div>
-                              <div className="text-xs text-slate-400">ID: {mp.id}</div>
-                            </div>
-                          </button>
-                        ))}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 p-3">
-                      <button type="button" onClick={() => setMatchingPatients([])} className="text-sm text-slate-600 px-3 py-1 rounded-lg">Dismiss</button>
-                      <button type="button" onClick={createNewPatientForPhone} className="text-sm bg-emerald-600 text-white px-3 py-1 rounded-lg">Create New</button>
+                      <button 
+                        type="button" 
+                        onClick={() => setMatchingPatients([])} 
+                        className="text-sm text-slate-600 px-3 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={createNewPatientForPhone} 
+                        className="text-sm bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-colors"
+                      >
+                        Create New Patient
+                      </button>
                     </div>
                   </div>
                 )}
@@ -748,8 +973,6 @@ export default function ReceptionistView({
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Address</label>
               <input type="text" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
             </div>
-
-           
 
             <div className="flex items-center space-x-2.5 py-1">
               <input id="phoneAsWhatsapp" type="checkbox" checked={formData.phoneAsWhatsapp} onChange={handleCheckboxChange} className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer" />
@@ -912,11 +1135,7 @@ export default function ReceptionistView({
               <textarea rows="2" value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none transition-all font-medium"></textarea>
             </div>
 
-            {isSelectingDuplicatePatient && (
-              <div className="text-center text-xs text-rose-600 font-semibold">
-                Please resolve the duplicate patient selection before saving or booking.
-              </div>
-            )}
+            
             <div className="grid grid-cols-2 gap-4 pt-3">
               <button type="button" onClick={() => handleAction('waiting')} disabled={isSelectingDuplicatePatient} className={`bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 font-bold py-3 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs ${isSelectingDuplicatePatient ? 'opacity-60 cursor-not-allowed' : ''}`}>
                 <Clock className="w-4 h-4" /> Save to Waiting
@@ -927,8 +1146,6 @@ export default function ReceptionistView({
             </div>
           </div>
         </div>
-
-      
 
         {/* Right Column: Registry Tables */}
         <div className="lg:col-span-7 space-y-6">
@@ -959,7 +1176,6 @@ export default function ReceptionistView({
                       const assignedDoc = allDoctors.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
                       const assignedDocName = assignedDoc?.user?.fullName || assignedDoc?.name || appt.doctor_name;
                       
-                      // Find follow-up recommendation for this patient
                       const ptCons = consultations.filter(c => String(c.patient_id) === String(pt.id));
                       const latestFollowup = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
                       const fDate = latestFollowup?.followup_date;
@@ -976,7 +1192,7 @@ export default function ReceptionistView({
                             {fDate ? (
                               <div className="mt-1.5 p-1.5 bg-indigo-50 rounded-lg border border-indigo-100">
                                 <span className="text-indigo-600 text-[9px] font-bold block uppercase">Recommended Follow-up:</span>
-                                <span className="text-slate-700 text-[10px] font-bold block">{fDate}</span>
+                                <span className="text-slate-700 text-[10px] font-bold block">{new Date(fDate).toLocaleDateString()}</span>
                                 {fDocName && (
                                   <span className="text-slate-500 text-[9px] block">With: Dr. {fDocName}</span>
                                 )}
@@ -1010,7 +1226,6 @@ export default function ReceptionistView({
                 <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredActiveBookings.length} / {activeBookings.length} Total</span>
               </div>
               <div className="space-y-3">
-                {/* Search and Action Row */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1021,7 +1236,6 @@ export default function ReceptionistView({
                   </button>
                 </div>
                 
-                {/* Filters Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1032,9 +1246,10 @@ export default function ReceptionistView({
                     <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <select value={filterDoctor} onChange={(e) => setFilterDoctor(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
                       <option value="all">All Doctors</option>
-                      {availableDoctors.map(d => (
-                        <option key={d.id} value={d.id}>Dr. {d.name}</option>
-                      ))}
+                      {availableDoctors.map(d => {
+                        const name = d.user?.fullName || d.name || `Doctor ${d.id}`;
+                        return <option key={d.id} value={d.id}>Dr. {name}</option>;
+                      })}
                     </select>
                   </div>
                   
@@ -1100,18 +1315,18 @@ export default function ReceptionistView({
                             {isCheckedIn && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-semibold"><Check className="w-3.5 h-3.5" /> With Doctor</span>}
                             {isCompleted && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 px-3 py-1 text-xs font-semibold"><Check className="w-3.5 h-3.5" /> Completed</span>}
                             {isCancelled && <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-3 py-1 text-xs font-semibold"><X className="w-3.5 h-3.5" /> Cancelled</span>}
-                          </td>
+                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <strong className="text-slate-800 block">{appt.appointmentDate ? (typeof appt.appointmentDate === 'string' ? appt.appointmentDate.split('T')[0] : new Date(appt.appointmentDate).toISOString().split('T')[0]) : appt.date || todayDate}</strong>
+                            <strong className="text-slate-800 block">{getAppointmentDateOnly(appt)}</strong>
                             <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
-                          </td>
+                           </td>
                           <td className="py-3 px-4 align-top min-w-0">
                             <span className="font-bold text-slate-800 block text-sm truncate">{pt.name || 'Unknown Patient'}</span>
                             <span className="text-slate-500 font-medium block truncate">{formatPhoneWithoutCountryCode(pt.phone)} {renderPatientMeta(pt)}</span>
-                          </td>
+                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
                             <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType || 'General'}</span>
-                          </td>
+                           </td>
                           <td className="py-3 px-4 align-top min-w-0 whitespace-nowrap">
                             <span className="font-semibold text-slate-700 block truncate">
                               {appt?.doctor?.user?.fullName ||
@@ -1123,17 +1338,17 @@ export default function ReceptionistView({
                                 })() ||
                                 'Not Assigned'}
                             </span>
-                          </td>
+                           </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
                             {getStatusBadge(appt.status)}
-                          </td>
+                           </td>
                           <td className="py-3 px-4 text-right space-x-1.5 whitespace-nowrap">
                             {isScheduled && <button onClick={() => handleCancelAppointment(appt.id)} className="text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold px-2.5 py-1.5 rounded-lg border border-rose-200 transition-colors">Cancel</button>}
                             {isArrived && <span className="text-amber-600 font-bold italic px-2">Waiting in Lobby</span>}
                             {isCheckedIn && <span className="text-emerald-600 font-bold italic px-2">In Consultation</span>}
                             {isCompleted && <span className="text-slate-400 font-medium italic px-2">Finished</span>}
                             {isCancelled && <span className="text-slate-400 line-through italic px-2">Cancelled</span>}
-                          </td>
+                           </td>
                         </tr>
                       );
                     })}
