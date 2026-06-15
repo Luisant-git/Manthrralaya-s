@@ -62,6 +62,18 @@ export default function PatientsView({ appointments = [], followups = [], consul
     return sorted[0]?.appointmentType || 'General';
   };
 
+  const getLatestAppointmentNote = (patientId) => {
+    if (!appointments || appointments.length === 0) return null;
+    const sorted = appointments
+      .filter(a => String(a.patientId || a.patient_id) === String(patientId))
+      .sort((a, b) => {
+        const dateA = new Date(a.appointmentDate || a.date || 0);
+        const dateB = new Date(b.appointmentDate || b.date || 0);
+        return dateB - dateA;
+      });
+    return sorted[0]?.notes || null;
+  };
+
   const getFollowupInfo = (patientId) => {
     // 1. Check consultations for receptionistFollowup
     const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
@@ -642,9 +654,29 @@ export default function PatientsView({ appointments = [], followups = [], consul
 
               <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                 <span className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Primary Medical Conditions / Notes</span>
-                <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
-                  {viewingPatient.medical_conditions || 'No specific medical conditions recorded.'}
-                </p>
+                <div className="space-y-3">
+                  {viewingPatient.medical_conditions && (
+                    <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+                      {viewingPatient.medical_conditions}
+                    </p>
+                  )}
+                  {(() => {
+                    const note = getLatestAppointmentNote(viewingPatient.id);
+                    if (note) {
+                      return (
+                        <div className={viewingPatient.medical_conditions ? "pt-2 border-t border-slate-200" : ""}>
+                          <span className="block text-[10px] font-bold text-emerald-600 uppercase tracking-wider mb-1">Latest Booking Note (Call/Reason):</span>
+                          <p className="text-slate-600 text-sm italic leading-relaxed">
+                            "{note}"
+                          </p>
+                        </div>
+                      );
+                    }
+                    return !viewingPatient.medical_conditions && (
+                      <p className="text-slate-400 text-sm italic">No specific medical conditions or appointment notes recorded.</p>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
             
