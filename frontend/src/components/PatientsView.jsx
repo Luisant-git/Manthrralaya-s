@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, UserPlus, Activity, FileText, Eye, X, Loader2, RefreshCw } from 'lucide-react';
 import { getAllPatients, createPatient } from '../api/patientApi';
 import { toast } from 'react-toastify';
-
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
 export default function PatientsView({ appointments = [], followups = [], consultations = [], onAddPatient, onSelectPatient, onRefreshConsultations }) {
@@ -42,11 +41,25 @@ export default function PatientsView({ appointments = [], followups = [], consul
     fetchPatients();
   }, []);
 
+  const getAppointmentTypeBadge = (type) => {
+    const colors = {
+      'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
+      'Detox': 'bg-teal-50 text-teal-600 border-teal-200',
+      'Review': 'bg-amber-50 text-amber-600 border-amber-200'
+    };
+    return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || 'bg-slate-50 text-slate-600 border-slate-200'}`;
+  };
+
   const getLatestAppointmentType = (patientId) => {
+    if (!appointments || appointments.length === 0) return 'No Record';
     const sorted = appointments
-      .filter(a => a.patientId === patientId && a.appointmentType)
-      .sort((a, b) => new Date(b.appointmentDate) - new Date(a.appointmentDate));
-    return sorted[0]?.appointmentType || 'No appointment type';
+      .filter(a => String(a.patientId || a.patient_id) === String(patientId))
+      .sort((a, b) => {
+        const dateA = new Date(a.appointmentDate || a.date || 0);
+        const dateB = new Date(b.appointmentDate || b.date || 0);
+        return dateB - dateA;
+      });
+    return sorted[0]?.appointmentType || 'General';
   };
 
   const getFollowupInfo = (patientId) => {
@@ -105,7 +118,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
       const info = getFollowupInfo(patient.id);
       return info && info.status === 'Pending';
     }
-    return appointments.some(appt => String(appt.patientId) === String(patient.id) && appt.appointmentType === tab.type);
+    return appointments.some(appt => String(appt.patientId || appt.patient_id) === String(patient.id) && appt.appointmentType === tab.type);
   };
 
   // New Patient Form State
@@ -489,8 +502,11 @@ export default function PatientsView({ appointments = [], followups = [], consul
                       <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
                       <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone?.replace(/\D/g, '').slice(-10)}</td>
                       <td className="py-3 px-4 text-slate-600 font-medium">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10)}</td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">
-                        {getLatestAppointmentType(pt.id)}
+                      <td className="py-3 px-4">
+                        {(() => {
+                          const type = getLatestAppointmentType(pt.id);
+                          return <span className={getAppointmentTypeBadge(type)}>{type}</span>;
+                        })()}
                       </td>
                       <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
                       <td className="py-3 px-4 text-slate-600 font-medium">{pt.gender || 'N/A'}</td>
