@@ -386,11 +386,11 @@ export default function ReceptionistView({
   }, [showDoctorDropdown]);
 
   const handlePhoneChange = (e) => {
-    const val = e.target.value;
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
     setFormData(prev => ({
       ...prev,
-      phone: val,
-      whatsapp: prev.phoneAsWhatsapp ? val : prev.whatsapp
+      phone: digits,
+      whatsapp: prev.phoneAsWhatsapp ? digits : prev.whatsapp
     }));
   };
 
@@ -781,6 +781,27 @@ export default function ReceptionistView({
     return digits.length > 10 ? digits.slice(-10) : digits;
   };
 
+  const normalizePhone = (phone) => {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    return digits.length > 10 ? digits.slice(-10) : digits;
+  };
+
+  const phoneDigits = normalizePhone(formData.phone || '');
+  const isPhoneValid = phoneDigits.length === 10;
+  const phoneValidationMessage = formData.phone.trim().length === 0
+    ? ''
+    : phoneDigits.length === 10
+      ? 'Valid number'
+      : phoneDigits.length < 10
+        ? `${10 - phoneDigits.length} more digit${10 - phoneDigits.length === 1 ? '' : 's'} needed`
+        : `Using last 10 digits`;
+  const phoneBorderClass = formData.phone.trim().length === 0
+    ? 'border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+    : isPhoneValid
+      ? 'border-emerald-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-100'
+      : 'border-rose-400 focus:border-rose-500 focus:ring-1 focus:ring-rose-100';
+
   const isSelectingDuplicatePatient = matchingPatients.length > 0;
 
   const getAppointmentTypeBadge = (type) => {
@@ -870,8 +891,23 @@ export default function ReceptionistView({
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                <input type="tel" required placeholder="+91 XXXXX XXXXX" value={formData.phone} onChange={handlePhoneChange} className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
+                <input
+                  type="tel"
+                  required
+                  placeholder="Enter 10 digit mobile"
+                  value={formData.phone}
+                  onChange={handlePhoneChange}
+                  className={`w-full bg-slate-50 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-800 focus:outline-none transition-all font-medium ${phoneBorderClass}`}
+                />
+                {isPhoneValid && (
+                  <Check className="absolute right-3.5 top-3.5 w-4 h-4 text-emerald-600" />
+                )}
               </div>
+              {phoneValidationMessage && (
+                <p className={`mt-2 text-xs font-semibold ${isPhoneValid ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {phoneValidationMessage}
+                </p>
+              )}
             </div>
             
             {isSelectingDuplicatePatient && (
