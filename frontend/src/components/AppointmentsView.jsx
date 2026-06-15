@@ -247,13 +247,13 @@ export default function AppointmentsView({
             <Calendar className="w-4 h-4" />
             {showFollowups ? 'Hide Follow-ups' : 'Show Follow-ups'}
           </button>
-          <button
+          {/* <button
             onClick={() => setIsBooking(!isBooking)}
             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
           >
             {isBooking ? <CalendarIcon className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             {isBooking ? 'View Schedule' : 'Book Appointment'}
-          </button>
+          </button> */}
         </div>
       </div>
 

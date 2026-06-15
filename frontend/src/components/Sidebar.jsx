@@ -25,7 +25,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
     { id: 'patients', name: 'Patient Directory', icon: Users, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
     // { id: 'phone-calls', name: 'Inquiries & Leads', icon: PhoneCall, roles: ['admin'] },
     { id: 'change-my-pin', name: 'Change My PIN', icon: Lock, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
-    // { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin'] },
+    { id: 'appointments', name: 'Appointments', icon: CalendarDays, roles: ['admin'] },
     { id: 'consultations', name: 'Consultations', icon: Stethoscope, roles: ['admin', 'doctor'] },
     { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin', 'therapist'] },
     { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor', 'therapist'] },
