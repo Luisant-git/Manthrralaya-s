@@ -140,7 +140,7 @@ export default function UnifiedPatientRecords({
       .filter(c => String(c.patient_id || c.patientId) === String(patientId))
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
     
-    if (latestCons && latestCons.detox_recommended && (latestCons.followup_date || latestCons.followupDate)) {
+    if (latestCons && (latestCons.followup_date || latestCons.followupDate)) {
       return { scheduled_date: latestCons.followup_date || latestCons.followupDate };
     }
 
@@ -863,23 +863,34 @@ export default function UnifiedPatientRecords({
                             </div>
                           )}
 
-                          {(currentConsultation.detox_recommended || currentConsultation.detoxRecommended) && (
-                            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                          {(currentConsultation.detox_recommended || currentConsultation.detoxRecommended || currentConsultation.followup_date || currentConsultation.followupDate) && (
+                            <div className={`rounded-xl p-4 border ${currentConsultation.detox_recommended || currentConsultation.detoxRecommended ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
                               <div className="flex items-center gap-2 mb-3">
-                                <Star className="w-4 h-4 text-emerald-600" />
-                                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
+                                {currentConsultation.detox_recommended || currentConsultation.detoxRecommended ? (
+                                  <>
+                                    <Star className="w-4 h-4 text-emerald-600" />
+                                    <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Detox Recommended</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <RefreshCw className="w-4 h-4 text-amber-600" />
+                                    <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Follow-up Review</span>
+                                  </>
+                                )}
                               </div>
                               <div className="space-y-2 text-sm text-slate-700">
-                                <div>
-                                  <span className="font-semibold text-slate-800">Doctor:</span> {
-                                    currentConsultation.detox_doctor_name || 
-                                    currentConsultation.detoxDoctorName || 
-                                    currentConsultation.doctor_name ||
-                                    currentConsultation.doctor?.user?.fullName ||
-                                    availableDoctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
-                                    'Assigned Provider'
-                                  }
-                                </div>
+                                {(currentConsultation.detox_recommended || currentConsultation.detoxRecommended) && (
+                                  <div>
+                                    <span className="font-semibold text-slate-800">Doctor:</span> {
+                                      currentConsultation.detox_doctor_name || 
+                                      currentConsultation.detoxDoctorName || 
+                                      currentConsultation.doctor_name ||
+                                      currentConsultation.doctor?.user?.fullName ||
+                                      availableDoctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
+                                      'Assigned Provider'
+                                    }
+                                  </div>
+                                )}
                                 {(currentConsultation.followup_date || currentConsultation.followupDate) && (
                                   <div><span className="font-semibold text-slate-800">Follow-up Date:</span> {formatDate(currentConsultation.followup_date || currentConsultation.followupDate)}</div>
                                 )}

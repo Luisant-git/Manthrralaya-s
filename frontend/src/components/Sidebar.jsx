@@ -29,7 +29,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
     { id: 'consultations', name: 'Consultations', icon: Stethoscope, roles: ['admin', 'doctor'] },
     { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin', 'therapist'] },
     { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor', 'therapist'] },
-    { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin', 'receptionist'] },
+    // { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin', 'receptionist'] },
     // { id: 'reports', name: 'Reports & Analytics', icon: FileBarChart, roles: ['admin'] },
     // { id: 'reviews', name: 'Patient Feedback', icon: Star, roles: ['admin'] }
   ];

@@ -15,6 +15,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   
   // Forms states
   const [consultationNotes, setConsultationNotes] = useState('');
+  const [reviewRecommended, setReviewRecommended] = useState(false);
   const [medicalHistory, setMedicalHistory] = useState('');
   const [detoxProcedure, setDetoxProcedure] = useState('');
   const [dietPlanNote, setDietPlanNote] = useState('');
@@ -281,6 +282,12 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
   const handleCompleteConsultation = async () => {
     if (!activeAppt || !activePt) return;
+
+    if (!detoxRecommended && !reviewRecommended) {
+      toast.warn('Please select either "Recommend Detox" or "Recommend Review" before finalizing.');
+      return;
+    }
+
     setIsSaving(true);
     
     try {
@@ -302,8 +309,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         detox_recommended: detoxRecommended,
         detox_doctor_id: detoxRecommended && detoxDoctorId ? parseInt(detoxDoctorId) : null,
         detox_doctor_name: detoxRecommended && selectedDetoxDoctor ? selectedDetoxDoctor.name : null,
-        followup_date: detoxRecommended ? detoxFollowupDate : null,
-        followup_remarks: detoxRecommended ? detoxFollowupRemarks : null
+        followup_date: (detoxRecommended || reviewRecommended) ? detoxFollowupDate : null,
+        followup_remarks: (detoxRecommended || reviewRecommended) ? detoxFollowupRemarks : null
       };
 
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
@@ -336,6 +343,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       setHomeCare('');
       setDiet({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
       setDetoxRecommended(false);
+      setReviewRecommended(false);
       setDetoxDoctorId('');
       setDetoxFollowupDate(new Date().toISOString().split('T')[0]);
       setDetoxFollowupRemarks('');
@@ -501,7 +509,16 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     {/* 3. Detox Recommendation */}
                     <div className="p-5 bg-emerald-50 border-y border-emerald-100">
                       <div className="flex items-center gap-3">
-                        <input type="checkbox" id="detoxCheck" checked={detoxRecommended} onChange={e => setDetoxRecommended(e.target.checked)} className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500" />
+                        <input 
+                          type="checkbox" 
+                          id="detoxCheck" 
+                          checked={detoxRecommended} 
+                          onChange={e => {
+                            setDetoxRecommended(e.target.checked);
+                            if (e.target.checked) setReviewRecommended(false);
+                          }} 
+                          className="w-5 h-5 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500" 
+                        />
                         <label htmlFor="detoxCheck" className="font-bold text-slate-800 text-sm">Recommend Detox Program</label>
                       </div>
                       {detoxRecommended && (
@@ -527,6 +544,39 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         </div>
                       )}
                     </div>
+
+                    {/* 4. Review Recommendation (Conditional) */}
+                    {!detoxRecommended && (
+                      <div className="p-5 bg-amber-50 border-b border-amber-100">
+                        <div className="flex items-center gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="reviewCheck" 
+                            checked={reviewRecommended} 
+                            onChange={e => {
+                              setReviewRecommended(e.target.checked);
+                              if (e.target.checked) setDetoxRecommended(false);
+                            }} 
+                            className="w-5 h-5 text-amber-600 border-slate-300 rounded focus:ring-amber-500" 
+                          />
+                          <label htmlFor="reviewCheck" className="font-bold text-slate-800 text-sm">Recommend Review / Follow-up</label>
+                        </div>
+                        {reviewRecommended && (
+                          <div className="mt-3 ml-8 space-y-3">
+                            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <label className="block text-xs font-semibold text-slate-600">Follow-up Date</label>
+                                <input type="date" value={detoxFollowupDate} onChange={e => setDetoxFollowupDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500" />
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <label className="block text-xs font-semibold text-slate-600">Remarks for Receptionist</label>
+                              <textarea value={detoxFollowupRemarks} onChange={e => setDetoxFollowupRemarks(e.target.value)} rows={3} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500" placeholder="Enter review/follow-up instructions..." />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Save Button */}
                     <div className="p-5 bg-slate-50 flex justify-end">
@@ -649,28 +699,41 @@ export default function ConsultationsView({ appointments, patients, doctors, con
             </div>
             <div>
               <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                <Calendar className="w-3 h-3" /> Detox Recommendation
+                                <Calendar className="w-3 h-3" /> Recommendation
               </div>
-              <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm min-h-[100px]">
-                {record.detox_recommended ? (
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <span className="font-semibold text-slate-700 min-w-[100px]">Detox Doctor:</span>
-                      <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-semibold text-slate-700 min-w-[100px]">Follow-up Date:</span>
-                      <span className="text-slate-600">{record.followup_date || 'Not scheduled'}</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                      <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-slate-500 italic">No detox recommendation.</span>
-                )}
-              </div>
+                              <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended ? 'bg-white border-slate-200' : 'bg-amber-50/50 border-amber-100'}`}>
+                                {record.detox_recommended ? (
+                                  <div className="space-y-2">
+                                    <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
+                                      <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
+                                      <span className="text-slate-600">{record.followup_date || 'Not scheduled'}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                                      <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
+                                    </div>
+                                  </div>
+                                ) : (record.followup_date || record.followupDate) ? (
+                                  <div className="space-y-2">
+                                    <div className="text-amber-700 font-bold text-xs uppercase mb-1">Follow-up Review</div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
+                                      <span className="text-slate-600">{record.followup_date || record.followupDate}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                                      <span className="text-slate-600">{record.followup_remarks || record.followupRemarks || 'No remarks'}</span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500 italic">No recommendation recorded.</span>
+                                )}
+                              </div>
             </div>
           </div>
         </div>
