@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock, Droplets } from 'lucide-react';
+import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock, Droplets, Download } from 'lucide-react';
 import { Sun, Moon, SunMoon } from 'lucide-react';
+import { generateConsultationPDF, generateDetoxPDF } from '../utils/pdfGenerator';
 
 export default function UnifiedPatientRecords({
   patients = [],
@@ -589,7 +590,9 @@ export default function UnifiedPatientRecords({
                       </td>
                       <td className="py-4 px-4 align-top">
                         <div className="text-slate-600">{pt.phone?.replace(/\D/g, '').slice(-10) || 'No phone'}</div>
-                        <div className="text-xs text-slate-500 mt-1">{pt.email || 'No email'}</div>
+                        {pt.email && pt.email.toLowerCase() !== 'n/a' && (
+                          <div className="text-xs text-slate-500 mt-1">{pt.email}</div>
+                        )}
                       </td>
                       <td className="py-4 px-4 align-top">
                         {nextFollowup ? (
@@ -714,10 +717,12 @@ export default function UnifiedPatientRecords({
                         <Phone className="w-4 h-4 text-emerald-600" />
                         <span className="text-slate-700">{selectedPatient.phone?.replace(/\D/g, '').slice(-10) || 'No phone'}</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Mail className="w-4 h-4 text-emerald-600" />
-                        <span className="text-slate-700 truncate max-w-[200px]">{selectedPatient.email || 'No email'}</span>
-                      </div>
+                      {selectedPatient.email && selectedPatient.email.toLowerCase() !== 'n/a' && (
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-emerald-600" />
+                          <span className="text-slate-700 truncate max-w-[200px]">{selectedPatient.email}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <CalendarIcon className="w-4 h-4 text-emerald-600" />
@@ -776,8 +781,26 @@ export default function UnifiedPatientRecords({
                         </>
                       )}
                     </div>
-                    <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                      {historySubTab === 'consultations' ? `${patientConsultations.length} total` : `${patientDetoxSessions.length} total`}
+                    <div className="flex items-center gap-3">
+                      {historySubTab === 'consultations' && currentConsultation && (
+                        <button 
+                          onClick={() => generateConsultationPDF(currentConsultation, selectedPatient)}
+                          className="bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Full PDF
+                        </button>
+                      )}
+                      {historySubTab === 'detox' && currentDetoxSession && (
+                        <button 
+                          onClick={() => generateDetoxPDF(currentDetoxSession, selectedPatient)}
+                          className="bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Full PDF
+                        </button>
+                      )}
+                      <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                        {historySubTab === 'consultations' ? `${patientConsultations.length} total` : `${patientDetoxSessions.length} total`}
+                      </div>
                     </div>
                   </div>
 
@@ -806,8 +829,13 @@ export default function UnifiedPatientRecords({
 
                           {(currentConsultation.consultation_notes || currentConsultation.consultationNotes) && (currentConsultation.consultation_notes || currentConsultation.consultationNotes) !== '<br>' && (
                             <div>
-                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                <Activity className="w-3.5 h-3.5" /> Consultation Notes
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                  <Activity className="w-3.5 h-3.5" /> Consultation Notes
+                                </div>
+                                <button onClick={() => generateConsultationPDF(currentConsultation, 'Consultation Notes')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <Download className="w-3 h-3" /> Download
+                                </button>
                               </div>
                               <div 
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
@@ -818,8 +846,13 @@ export default function UnifiedPatientRecords({
 
                           {(currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) && (currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) !== '<br>' && (
                             <div>
-                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                <ClipboardList className="w-3.5 h-3.5" /> Medical History
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                  <ClipboardList className="w-3.5 h-3.5" /> Medical History
+                                </div>
+                                <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical History')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <Download className="w-3 h-3" /> Download
+                                </button>
                               </div>
                               <div 
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
@@ -830,8 +863,13 @@ export default function UnifiedPatientRecords({
 
                           {(currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) && (currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) !== '<br>' && (
                             <div>
-                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                <ClipboardList className="w-3.5 h-3.5" /> Diet Plan
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                  <ClipboardList className="w-3.5 h-3.5" /> Diet Plan
+                                </div>
+                                <button onClick={() => generateConsultationPDF(currentConsultation, 'Diet Plan')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <Download className="w-3 h-3" /> Download
+                                </button>
                               </div>
                               <div 
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
@@ -842,8 +880,13 @@ export default function UnifiedPatientRecords({
 
                           {(currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) && (currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) !== '<br>' && (
                             <div>
-                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                                <RefreshCw className="w-3.5 h-3.5" /> Detox Procedure
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                  <RefreshCw className="w-3.5 h-3.5" /> Detox Procedure
+                                </div>
+                                <button onClick={() => generateConsultationPDF(currentConsultation, 'Detox Procedure')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                  <Download className="w-3 h-3" /> Download
+                                </button>
                               </div>
                               <div 
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"

@@ -75,20 +75,24 @@ export const addTemplateFooter = (doc) => {
   doc.text("We count our success in the smiles of suffering humanity", pageWidth / 2, pageHeight - 13, { align: 'center' });
 };
 
-export const generateConsultationPDF = (data) => {
+export const generateConsultationPDF = (data, specificTopic = null) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
   
   const rawTopics = [
-    { title: 'Medical History', content: stripHtml(data.medical_history) },
-    { title: 'Consultation Notes', content: stripHtml(data.consultation_notes) },
-    { title: 'Detox Procedure', content: stripHtml(data.detox_procedure) },
-    { title: 'Diet Plan Note', content: stripHtml(data.diet_plan_note) },
+    { title: 'Medical History', content: stripHtml(data.medical_history || data.medicalHistoryNotes) },
+    { title: 'Consultation Notes', content: stripHtml(data.consultation_notes || data.consultationNotes) },
+    { title: 'Detox Procedure', content: stripHtml(data.detox_procedure || data.detoxProcedureNotes) },
+    { title: 'Diet Plan', content: stripHtml(data.diet_plan_note || data.dietPlanNotes) },
     { title: 'Home Care Guidelines', content: data.home_care ? data.home_care.toString().trim() : 'None' }
   ];
 
-  const topics = rawTopics.filter(t => t.content && t.content !== 'None' && t.content.trim() !== '');
+  let topics = rawTopics.filter(t => t.content && t.content !== 'None' && t.content.trim() !== '');
+
+  if (specificTopic) {
+    topics = topics.filter(t => t.title === specificTopic);
+  }
 
   if (topics.length === 0) {
     topics.push({ title: 'Clinical Notes', content: 'No clinical notes were recorded for this session.' });
@@ -140,7 +144,60 @@ export const generateConsultationPDF = (data) => {
     }
   });
 
-  doc.save(`Consultation_${data.patient_name.replace(/\s+/g, '_')}_${data.date}.pdf`);
+  const fileName = specificTopic 
+    ? `${data.patient_name}_${specificTopic.replace(/\s+/g, '_')}_${data.date}.pdf`
+    : `${data.patient_name}_Consultation_${data.date}.pdf`;
+    
+  doc.save(fileName);
+};
+
+export const generateSingleTopicPDF = (data, title, htmlContent) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+  
+  addTemplateHeader(doc, "CLINICAL REPORT");
+  addTemplateFooter(doc);
+  
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  
+  doc.text(`Date: ${data.date}`, pageWidth - 14, 65, { align: 'right' });
+  doc.text(`Patient Name: ${data.patient_name}`, 14, 72);
+  doc.text(`Consulting Doctor: ${data.doctor_name}`, 14, 79);
+
+  let currentY = 95;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text(title, 14, currentY);
+  currentY += 10;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  
+  const content = stripHtml(htmlContent);
+  const splitText = doc.splitTextToSize(content === 'None' || !content ? 'No notes recorded.' : content, pageWidth - 28);
+  
+  for (let i = 0; i < splitText.length; i++) {
+    if (currentY > pageHeight - 30) {
+      doc.addPage();
+      addTemplateHeader(doc, "CLINICAL REPORT");
+      addTemplateFooter(doc);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(0);
+      doc.text(`Date: ${data.date}`, pageWidth - 14, 65, { align: 'right' });
+      doc.text(`Patient Name: ${data.patient_name}`, 14, 72);
+      doc.text(`Consulting Doctor: ${data.doctor_name}`, 14, 79);
+      currentY = 95;
+      doc.setFontSize(11);
+    }
+    doc.text(splitText[i], 14, currentY);
+    currentY += 6;
+  }
+
+  doc.save(`${title.replace(/\s+/g, '_')}_${data.patient_name.replace(/\s+/g, '_')}_${data.date}.pdf`);
 };
 
 export const generateDetoxPDF = (data) => {
