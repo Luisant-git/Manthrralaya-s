@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search } from 'lucide-react';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall } from 'lucide-react';
 
 export default function DashboardView({ 
   patients, 
@@ -86,6 +86,41 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
+
+  // Calculate today's followups based on actionDate (3 days before)
+  const todayFollowUps = React.useMemo(() => {
+    const list = [];
+    (patients || []).forEach(pt => {
+      let ptFollowup = null;
+      const ptCons = (consultations || []).filter(c => String(c.patient_id || c.patientId) === String(pt.id));
+      const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+      
+      if (latestCons) {
+        const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
+        if (rec && (rec.followupDate || rec.followup_date)) {
+          ptFollowup = { patient: pt, date: rec.followupDate || rec.followup_date, status: rec.status || 'Pending', type: 'Review' };
+        } else if (latestCons.followup_date || latestCons.followupDate) {
+          ptFollowup = { patient: pt, date: latestCons.followup_date || latestCons.followupDate, status: 'Pending', type: latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review' };
+        }
+      }
+      
+      if (!ptFollowup) {
+        const fup = (followups || []).filter(f => String(f.patient_id) === String(pt.id))
+          .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
+        if (fup) ptFollowup = { patient: pt, date: fup.scheduled_date || fup.date, status: fup.status || 'Pending', type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review' };
+      }
+      
+      if (ptFollowup && ptFollowup.status === 'Pending') {
+        const scheduledDateObj = new Date(ptFollowup.date);
+        const actionDateObj = new Date(scheduledDateObj);
+        actionDateObj.setDate(scheduledDateObj.getDate() - 3);
+        ptFollowup.actionDate = actionDateObj.toISOString().split('T')[0];
+        list.push(ptFollowup);
+      }
+    });
+    // Sort by action date (oldest first, so overdue are at the top)
+    return list.sort((a, b) => new Date(a.actionDate) - new Date(b.actionDate));
+  }, [patients, consultations, followups]);
   
   // Get today's appointments - FIXED: Strict doctor filtering
   const todayAppointments = appointments.filter(a => {
@@ -231,7 +266,6 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
     if (!pt) return '';
     const parts = [];
     if (pt.age) parts.push(`${pt.age} yrs`);
-    if (pt.location && pt.location !== 'n/a') parts.push(pt.location);
     return parts.length > 0 ? `(${parts.join(' • ')})` : '';
   };
 
@@ -631,7 +665,8 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
           </>
         ) : (
           // Receptionist View - Today's Appointments with Search and Filter
-          <div className="lg:col-span-3 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+          <>
+          <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Today's Appointments</h2>
@@ -677,82 +712,225 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
                   No active schedules found matching your criteria.
                 </div>
               ) : (
-                <table className="w-full min-w-[720px] text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider sticky top-0">
-                      <th className="py-2.5 px-4">Action</th>
-                      <th className="py-2.5 px-4">Date & Session</th>
-                      <th className="py-2.5 px-4">Patient Details</th>
-                      <th className="py-2.5 px-4">Appointment Type</th>
-                      <th className="py-2.5 px-4">Status</th>
-                      <th className="py-2.5 px-4">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
+                <div className="w-full">
+                  {/* MOBILE/TABLET CARD VIEW (Visible below xl screens) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 xl:hidden">
                     {filteredReceptionistAppointments.slice().reverse().map(appt => {
                       const pid = appt.patientId || appt.patient_id;
                       let pt = patients.find(p => String(p.id) === String(pid));
-                      
-                      if (!pt && appt.patient) {
-                        pt = appt.patient;
-                      }
+                      if (!pt && appt.patient) pt = appt.patient;
                       
                       const isArrived = appt.status === 'Arrived';
                       const isCheckedIn = appt.status === 'Checked-in';
                       const isCompleted = appt.status === 'Completed';
                       const isCancelled = appt.status === 'Cancelled';
-                      
+
                       return (
-                        <tr key={appt.id} className="hover:bg-slate-50 transition-colors align-top">
-                          <td className="py-3 px-4 align-top whitespace-nowrap">
+                        <div key={`card-${appt.id}`} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:border-emerald-200 hover:shadow-md transition-all">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <span className="font-bold text-slate-800 text-sm block">{pt?.name || 'Unknown Patient'}</span>
+                              <span className="text-slate-500 text-xs block mt-0.5">{formatPhoneWithoutCountryCode(pt?.phone) || 'No phone'}</span>
+                              <div className="mt-1">{renderPatientMeta(pt)}</div>
+                            </div>
+                            <div className="shrink-0">{getStatusBadge(appt.status)}</div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Date</span>
+                              <span className="font-semibold text-slate-700">{appt.date || todayDate}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Session</span>
+                              <span className="font-semibold text-slate-700">{appt.session || 'FN'}</span>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Type</span>
+                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType || 'General'}</span>
+                            </div>
+                          </div>
+
+                          {appt.notes && (
+                            <div className="text-xs text-slate-600 bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
+                              <span className="font-semibold text-amber-700/70 mr-1">Note:</span>
+                              {appt.notes}
+                            </div>
+                          )}
+
+                          <div className="pt-3 border-t border-slate-100 mt-auto flex items-center justify-between">
                             {!isArrived && !isCheckedIn && !isCompleted && !isCancelled ? (
                               <button
                                 onClick={() => onCheckIn(appt.id, false, false)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1"
+                                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                               >
-                                <CheckCircle className="w-3 h-3" />
-                                Check-in
+                                <CheckCircle className="w-4 h-4" />
+                                Mark as Arrived
                               </button>
                             ) : (isArrived || isCheckedIn) ? (
-                              <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1">
-                                <CheckCircle className="w-3 h-3" />
-                                {isArrived ? 'Arrived' : 'With Doctor'}
+                              <span className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-lg w-full justify-center border border-emerald-100">
+                                <CheckCircle className="w-4 h-4" />
+                                {isArrived ? 'Patient Arrived' : 'With Doctor'}
                               </span>
                             ) : isCompleted ? (
-                              <span className="text-slate-400 text-xs">Completed</span>
+                              <span className="text-slate-500 text-xs font-bold w-full text-center bg-slate-50 py-1.5 rounded-lg border border-slate-100">Completed</span>
                             ) : isCancelled ? (
-                              <span className="text-rose-400 text-xs">Cancelled</span>
+                              <span className="text-rose-500 text-xs font-bold w-full text-center bg-rose-50 py-1.5 rounded-lg border border-rose-100">Cancelled</span>
                             ) : null}
-                          </td>
-                          <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <strong className="text-slate-800 block">{appt.date || todayDate}</strong>
-                            <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
-                          </td>
-                          <td className="py-3 px-4 align-top min-w-0">
-                            <span className="font-bold text-slate-800 block text-sm truncate">{pt?.name || 'Unknown Patient'}</span>
-                            <span className="text-slate-500 font-medium block truncate">
-                              {formatPhoneWithoutCountryCode(pt?.phone) || 'No phone'} {renderPatientMeta(pt)}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>
-                              {appt.appointmentType || 'General'}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 align-top whitespace-nowrap">
-                            {getStatusBadge(appt.status)}
-                          </td>
-                          <td className="py-3 px-4 align-top text-slate-600 text-sm max-w-[250px] break-words">
-                            {appt.notes || 'No notes available.'}
-                          </td>
-                        </tr>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* DESKTOP TABLE VIEW (Visible on xl screens and above) */}
+                  <table className="hidden xl:table w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase text-[10px] tracking-wider">
+                        <th className="py-3 px-4 rounded-tl-lg">Action</th>
+                        <th className="py-3 px-4">Date & Session</th>
+                        <th className="py-3 px-4">Patient Details</th>
+                        <th className="py-3 px-4">Type</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 rounded-tr-lg">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredReceptionistAppointments.slice().reverse().map(appt => {
+                        const pid = appt.patientId || appt.patient_id;
+                        let pt = patients.find(p => String(p.id) === String(pid));
+                        if (!pt && appt.patient) pt = appt.patient;
+                        
+                        const isArrived = appt.status === 'Arrived';
+                        const isCheckedIn = appt.status === 'Checked-in';
+                        const isCompleted = appt.status === 'Completed';
+                        const isCancelled = appt.status === 'Cancelled';
+                        
+                        return (
+                          <tr key={`row-${appt.id}`} className="hover:bg-slate-50 transition-colors align-middle group">
+                            <td className="py-3 px-4 whitespace-nowrap w-[140px]">
+                              {!isArrived && !isCheckedIn && !isCompleted && !isCancelled ? (
+                                <button
+                                  onClick={() => onCheckIn(appt.id, false, false)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 shadow-sm"
+                                >
+                                  <CheckCircle className="w-3 h-3" />
+                                  Check-in
+                                </button>
+                              ) : (isArrived || isCheckedIn) ? (
+                                <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-md w-fit border border-emerald-100">
+                                  <CheckCircle className="w-3 h-3" />
+                                  {isArrived ? 'Arrived' : 'With Doctor'}
+                                </span>
+                              ) : isCompleted ? (
+                                <span className="text-slate-400 text-xs font-medium bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">Completed</span>
+                              ) : isCancelled ? (
+                                <span className="text-rose-400 text-xs font-medium bg-rose-50 px-2.5 py-1 rounded-md border border-rose-100">Cancelled</span>
+                              ) : null}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <strong className="text-slate-800 block">{appt.date || todayDate}</strong>
+                              <span className="text-slate-500 block text-[11px] font-medium mt-0.5">Session: {appt.session || 'FN'}</span>
+                            </td>
+                            <td className="py-3 px-4 min-w-[180px]">
+                              <span className="font-bold text-slate-800 block text-sm truncate">{pt?.name || 'Unknown Patient'}</span>
+                              <span className="text-slate-500 font-medium flex items-center gap-2 mt-0.5">
+                                {formatPhoneWithoutCountryCode(pt?.phone) || 'No phone'}
+                                {renderPatientMeta(pt)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>
+                                {appt.appointmentType || 'General'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              {getStatusBadge(appt.status)}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 text-xs max-w-[200px] leading-relaxed">
+                              {appt.notes ? (
+                                <span className="line-clamp-2" title={appt.notes}>{appt.notes}</span>
+                              ) : (
+                                <span className="text-slate-300 italic">No notes</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
+
+          {/* Right Column: Follow-ups List */}
+          <div className="lg:col-span-1 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-slate-900">Follow-ups List</h2>
+              <span className="text-xs font-semibold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                {todayFollowUps.length} Pending
+              </span>
+            </div>
+            
+            <p className="text-xs text-slate-500 mb-4 pb-3 border-b border-slate-100">
+              Pending follow-up calls (calculated 3 days before scheduled appointment).
+            </p>
+
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+              {todayFollowUps.length === 0 ? (
+                <div className="text-center py-8">
+                  <PhoneCall className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">No pending follow-ups.</p>
+                </div>
+              ) : (
+                todayFollowUps.slice(0, 15).map((item, idx) => {
+                  const isOverdue = item.actionDate < todayDate;
+                  const isToday = item.actionDate === todayDate;
+                  
+                  return (
+                  <div key={idx} className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer group" onClick={() => onNavigateToTab('follow-ups')}>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="font-bold text-slate-800 text-sm truncate pr-2 flex items-center gap-2">
+                        {item.patient?.name || 'Unknown'}
+                        {isOverdue && <span className="px-1.5 py-0.5 rounded text-[9px] bg-rose-100 text-rose-700 font-bold uppercase tracking-widest">Overdue</span>}
+                        {isToday && <span className="px-1.5 py-0.5 rounded text-[9px] bg-blue-100 text-blue-700 font-bold uppercase tracking-widest">Today</span>}
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded border font-bold uppercase tracking-wider shrink-0 ${item.type === 'Detox' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                        {item.type}
+                      </span>
+                    </div>
+                    
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs mt-2 pt-2 border-t border-slate-200/60 gap-2">
+                      <div className="flex items-center gap-1.5 text-slate-600 font-medium bg-white px-2 py-1 rounded-md border border-slate-100 shadow-sm w-fit">
+                        <PhoneCall className="w-3.5 h-3.5 text-slate-400" />
+                        {formatPhoneWithoutCountryCode(item.patient?.phone) || 'No Phone'}
+                      </div>
+                      <div className="text-left sm:text-right">
+                        <span className={`font-bold ${isOverdue ? 'text-rose-600' : isToday ? 'text-blue-600' : 'text-slate-800'}`}>
+                          Call: {new Date(item.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                        </span>
+                        <span className="text-[11px] font-medium text-slate-500 ml-1.5 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                          Appt: {new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })
+              )}
+              
+              {todayFollowUps.length > 0 && (
+                <button 
+                  onClick={() => onNavigateToTab('follow-ups')}
+                  className="w-full mt-4 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-50 hover:text-emerald-600 transition-colors"
+                >
+                  Manage All Follow-ups
+                </button>
+              )}
+            </div>
+          </div>
+          </>
         )}
       </div>
     </div>

@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp } from 'lucide-react';
+import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp, Download } from 'lucide-react';
 import { createDetoxSession, getAllDetoxSessions } from '../api/detoxSessionApi';
 import { getAllConsultations } from '../api/consultationApi';
 import { toast } from 'react-toastify';
-import { generateDetoxPDF } from '../utils/pdfGenerator';
+import { generateDetoxPDF, generateConsultationPDF, generateSingleTopicPDF } from '../utils/pdfGenerator';
 
 export default function DetoxView({ 
   appointments = [], 
@@ -857,7 +857,27 @@ export default function DetoxView({
                     )}
 
                     {/* Save Button */}
-                    <div className="p-5 bg-slate-50 flex justify-end">
+                    <div className="p-5 bg-slate-50 flex justify-end gap-3">
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          const draftSession = {
+                            patient_name: activePt.name,
+                            doctorName: activeAppt?.doctor_name || currentUser?.fullName || 'Assigned Provider',
+                            sessionNumber: getPatientSessionCount(activePt.id).completed + 1,
+                            sessionType: sessionType,
+                            sessionDate: new Date().toISOString().split('T')[0],
+                            detoxNotes: detoxNotes,
+                            followupDate: followupDate,
+                            followupRemarks: followupRemarks
+                          };
+                          generateDetoxPDF(draftSession);
+                        }}
+                        className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
+                        title="Download current input as PDF without saving"
+                      >
+                        <Download className="w-4 h-4 text-emerald-600" /> Export Draft PDF
+                      </button>
                       <button
                         onClick={handleSaveDetoxSession}
                         disabled={!canAddSession || !detoxNotes.trim() || isSaving || getPatientSessionCount(activePt.id).completed >= 3}
@@ -939,8 +959,18 @@ export default function DetoxView({
                 Patient: {activePt.name} • ID: {activePt.id}
               </div>
             </div>
-            <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-              Provider: {session.doctorName || 'Assigned Provider'}
+            <div className="flex items-center gap-2">
+              <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+                Provider: {session.doctorName || 'Assigned Provider'}
+              </div>
+              <button 
+                type="button"
+                onClick={() => generateDetoxPDF({ ...session, patient_name: activePt.name })}
+                className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
+                title="Download Full PDF Report"
+              >
+                <Download className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -1062,30 +1092,58 @@ export default function DetoxView({
                                   <h4 className="text-xl font-bold text-slate-900 mt-1">{activePt.name}</h4>
                                   <div className="text-sm text-slate-600">Patient ID: P-{activePt.id}</div>
                                 </div>
-                                <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                                  Provider: {record.doctor_name || 'Assigned Provider'}
+                                <div className="flex items-center gap-2">
+                                  <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+                                    Provider: {record.doctor_name || 'Assigned Provider'}
+                                  </div>
+                                  <button 
+                                    type="button"
+                                    onClick={() => generateConsultationPDF({ ...record, patient_name: activePt.name })}
+                                    className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
+                                    title="Download Full PDF Report"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </button>
                                 </div>
                               </div>
 
                               {/* Row 1: Consultation Notes & Medical History */}
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                    <Activity className="w-3 h-3" /> Consultation Notes
+                                <div className="group">
+                                  <div className="flex items-center justify-between mb-2 h-6">
+                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
+                                      <Activity className="w-3 h-3 text-emerald-600" /> Consultation Notes
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Consultation Notes', record.consultation_notes)}
+                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
+                                      title="Download Consultation Notes">
+                                      <Download className="w-3 h-3" /> Export PDF
+                                    </button>
                                   </div>
                                   <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px]" 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
                                     dangerouslySetInnerHTML={{ 
                                       __html: record.consultation_notes || '<p class="text-slate-500 italic">No notes recorded.</p>' 
                                     }} 
                                   />
                                 </div>
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                    <FileText className="w-3 h-3" /> Medical History
+                                <div className="group">
+                                  <div className="flex items-center justify-between mb-2 h-6">
+                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
+                                      <FileText className="w-3 h-3 text-emerald-600" /> Medical History
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Medical History', record.medical_history)}
+                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
+                                      title="Download Medical History">
+                                      <Download className="w-3 h-3" /> Export PDF
+                                    </button>
                                   </div>
                                   <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px]" 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
                                     dangerouslySetInnerHTML={{ 
                                       __html: record.medical_history || '<p class="text-slate-500 italic">No medical history recorded.</p>' 
                                     }} 
@@ -1095,23 +1153,41 @@ export default function DetoxView({
 
                               {/* Row 2: Detox Procedure Note & Diet Plan Note */}
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                    <Droplets className="w-3 h-3" /> Detox Procedure Note
+                                <div className="group">
+                                  <div className="flex items-center justify-between mb-2 h-6">
+                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
+                                      <Droplets className="w-3 h-3 text-emerald-600" /> Detox Procedure Note
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Detox Procedure Note', record.detox_procedure)}
+                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
+                                      title="Download Detox Procedure Notes">
+                                      <Download className="w-3 h-3" /> Export PDF
+                                    </button>
                                   </div>
                                   <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px]" 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
                                     dangerouslySetInnerHTML={{ 
                                       __html: record.detox_procedure || '<p class="text-slate-500 italic">No detox procedure notes recorded.</p>' 
                                     }} 
                                   />
                                 </div>
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                    <ClipboardList className="w-3 h-3" /> Diet Plan Note
+                                <div className="group">
+                                  <div className="flex items-center justify-between mb-2 h-6">
+                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
+                                      <ClipboardList className="w-3 h-3 text-emerald-600" /> Diet Plan Note
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Diet Plan Note', record.diet_plan_note)}
+                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
+                                      title="Download Diet Plan Notes">
+                                      <Download className="w-3 h-3" /> Export PDF
+                                    </button>
                                   </div>
                                   <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px]" 
+                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
                                     dangerouslySetInnerHTML={{ 
                                       __html: record.diet_plan_note || '<p class="text-slate-500 italic">No diet plan note recorded.</p>' 
                                     }} 

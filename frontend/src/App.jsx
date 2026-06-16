@@ -19,6 +19,7 @@ import LoginView from './components/LoginView';
 import ReceptionistView from './components/ReceptionistView';
 import DoctorMasterView from './components/DoctorMasterView';
 import UserManagementView from './components/UserManagementView';
+import FollowUpsView from './components/FollowUpsView';
 import ChangeMyPin from './components/ChangeMyPin';
 import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
@@ -657,7 +658,9 @@ export default function App() {
       case 'dashboard':
         return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} doctors={doctors} />;
       case 'patients':
-        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} />;
+        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} initialTab="all" />;
+      case 'follow-ups':
+        return <FollowUpsView patients={patients} consultations={consultations} followups={followups} detoxSessions={detoxSessions} onRefresh={fetchAllData} />;
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':
