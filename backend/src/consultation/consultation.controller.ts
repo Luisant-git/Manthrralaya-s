@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { ConsultationService } from './consultation.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { UpdateConsultationDto } from './dto/update-consultation.dto';
@@ -6,6 +6,9 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@ne
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @ApiTags('consultations')
 @ApiBearerAuth()
@@ -104,4 +107,24 @@ export class ConsultationController {
 async cleanupDuplicates() {
   return this.consultationService.cleanupDuplicates();
 }
+
+  @Post(':id/upload-pdf')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('File is required');
+
+    const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
+    await fs.promises.mkdir(uploadsDir, { recursive: true });
+    const dest = path.join(uploadsDir, `consultation-${id}.pdf`);
+    await fs.promises.writeFile(dest, file.buffer);
+
+    // Trigger upload + send
+    await this.consultationService.sendPdfForConsultation(id, file.buffer, `consultation-${id}.pdf`);
+
+    return { message: 'Uploaded and scheduled WhatsApp send' };
+  }
 }

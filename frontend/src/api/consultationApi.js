@@ -91,3 +91,20 @@ export const updateReceptionistFollowup = async (consultationId, data) => {
     }
     return response.json();
 };
+
+export const uploadConsultationPdf = async (consultationId, formData) => {
+    const response = await fetch(`${API_URL}/${consultationId}/upload-pdf`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: formData
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to upload consultation PDF');
+    }
+
+    return response.json();
+};

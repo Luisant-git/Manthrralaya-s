@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAllDetoxSessions } from '../api/detoxSessionApi';
-import { generateConsultationPDF, generateDetoxPDF, generateSingleTopicPDF } from '../utils/pdfGenerator';
+import { generateConsultationPDF, generateDetoxPDF, generateSingleTopicPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
+import { uploadConsultationPdf } from '../api/consultationApi';
 
 export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole, currentUser }) {
   const [selectedApptId, setSelectedApptId] = useState('');
@@ -316,11 +317,21 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
       
       try {
-        generateConsultationPDF(newCons);
-        toast.success("Consultation PDF generated successfully");
+        // Build PDF blob and upload to backend to trigger WhatsApp send
+        const { blob, fileName } = await buildConsultationPdfBlob(newCons);
+        const formData = new FormData();
+        formData.append('file', blob, fileName);
+        if (savedConsultation?.id) {
+          await uploadConsultationPdf(savedConsultation.id, formData);
+          toast.success('Consultation PDF sent via WhatsApp');
+        } else {
+          // Fallback: save locally
+          generateConsultationPDF(newCons);
+          toast.success('Consultation saved; PDF generated locally');
+        }
       } catch (pdfError) {
-        console.error("PDF Generation error", pdfError);
-        toast.error("Failed to generate PDF, but consultation was saved.");
+        console.error('PDF Generation/Upload error', pdfError);
+        toast.error('Failed to generate or send PDF, but consultation was saved.');
       }
 
       if (diet.breakfast !== '') {

@@ -3,6 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { UpdateConsultationDto } from './dto/update-consultation.dto';
 import { ReceptionistFollowupService } from '../receptionist-followup/receptionist-followup.service';
+import { sendWhatsappTemplateMessage, uploadWhatsappMediaFromFile, uploadWhatsappMediaBuffer } from '../common/whatsapp.util';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class ConsultationService {
@@ -11,105 +14,200 @@ export class ConsultationService {
     private receptionistFollowupService: ReceptionistFollowupService,
   ) {}
 
-  async create(createConsultationDto: CreateConsultationDto) {
-    // Check if patient exists
-    const patient = await this.prisma.patient.findUnique({
-      where: { id: createConsultationDto.patientId }
-    });
-    if (!patient) {
-      throw new NotFoundException(`Patient with ID ${createConsultationDto.patientId} not found`);
-    }
+ 
 
-    // Check if doctor exists
-    const doctor = await this.prisma.doctor.findUnique({
-      where: { id: createConsultationDto.doctorId }
-    });
-    if (!doctor) {
-      throw new NotFoundException(`Doctor with ID ${createConsultationDto.doctorId} not found`);
-    }
+async create(createConsultationDto: CreateConsultationDto) {
 
-    // If detox doctor is provided, check if exists
-    if (createConsultationDto.detoxDoctorId) {
-      const detoxDoctor = await this.prisma.doctor.findUnique({
-        where: { id: createConsultationDto.detoxDoctorId }
-      });
-      if (!detoxDoctor) {
-        throw new NotFoundException(`Detox doctor with ID ${createConsultationDto.detoxDoctorId} not found`);
-      }
-    }
-
-    // CRITICAL FIX: Check if consultation already exists for this appointment
-    if (createConsultationDto.appointmentId) {
-      const existingConsultation = await this.prisma.consultation.findFirst({
-        where: { appointmentId: createConsultationDto.appointmentId }
-      });
-      
-      if (existingConsultation) {
-        // Instead of throwing error, return the existing consultation
-        console.log(`⚠️ Consultation already exists for appointment ${createConsultationDto.appointmentId}, returning existing record`);
-        return this.prisma.consultation.findUnique({
-          where: { id: existingConsultation.id },
-          include: {
-            patient: true,
-            doctor: {
-              include: {
-                user: true
-              }
-            },
-            appointment: true,
-            detoxDoctor: {
-              include: {
-                user: true
-              }
-            },
-            receptionistFollowup: true
-          }
-        });
-      }
-    }
-
-    const consultation = await this.prisma.consultation.create({
-      data: {
-        patientId: createConsultationDto.patientId,
-        doctorId: createConsultationDto.doctorId,
-        appointmentId: createConsultationDto.appointmentId,
-        consultationNotes: createConsultationDto.consultationNotes,
-        medicalHistoryNotes: createConsultationDto.medicalHistoryNotes,
-        detoxProcedureNotes: createConsultationDto.detoxProcedureNotes,
-        dietPlanNotes: createConsultationDto.dietPlanNotes,
-        homecareGuideliness: createConsultationDto.homecareGuideliness,
-        detoxRecommended: createConsultationDto.detoxRecommended || false,
-        detoxDoctorId: createConsultationDto.detoxDoctorId || null,
-        followupDate: createConsultationDto.followupDate ? new Date(createConsultationDto.followupDate) : null,
-        followupRemarks: createConsultationDto.followupRemarks,
-      },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        },
-        appointment: true,
-        detoxDoctor: {
-          include: {
-            user: true
-          }
-        },
-        receptionistFollowup: true
-      }
-    });
-
-    // Update appointment status to Completed if appointment exists
-    if (createConsultationDto.appointmentId) {
-      await this.prisma.appointment.update({
-        where: { id: createConsultationDto.appointmentId },
-        data: { status: 'Completed' }
-      });
-    }
-
-    return consultation;
+  const patient = await this.prisma.patient.findUnique({
+    where: { id: createConsultationDto.patientId }
+  });
+  if (!patient) {
+    throw new NotFoundException(`Patient not found`);
   }
+
+  // Upload provided PDF buffer for an existing consultation and send via WhatsApp
+  
+
+  const doctor = await this.prisma.doctor.findUnique({
+    where: { id: createConsultationDto.doctorId },
+    include: { user: true } // ✅ important (for doctor name)
+  });
+  if (!doctor) {
+    throw new NotFoundException(`Doctor not found`);
+  }
+
+  if (createConsultationDto.detoxDoctorId) {
+    const detoxDoctor = await this.prisma.doctor.findUnique({
+      where: { id: createConsultationDto.detoxDoctorId }
+    });
+    if (!detoxDoctor) {
+      throw new NotFoundException(`Detox doctor not found`);
+    }
+  }
+
+  // Prevent duplicate
+  if (createConsultationDto.appointmentId) {
+    const existingConsultation = await this.prisma.consultation.findFirst({
+      where: { appointmentId: createConsultationDto.appointmentId }
+    });
+
+    if (existingConsultation) {
+      return this.prisma.consultation.findUnique({
+        where: { id: existingConsultation.id },
+        include: {
+          patient: true,
+          doctor: { include: { user: true } },
+          appointment: true,
+          detoxDoctor: { include: { user: true } },
+          receptionistFollowup: true
+        }
+      });
+    }
+  }
+
+  const consultation = await this.prisma.consultation.create({
+    data: {
+      patientId: createConsultationDto.patientId,
+      doctorId: createConsultationDto.doctorId,
+      appointmentId: createConsultationDto.appointmentId,
+      consultationNotes: createConsultationDto.consultationNotes,
+      medicalHistoryNotes: createConsultationDto.medicalHistoryNotes,
+      detoxProcedureNotes: createConsultationDto.detoxProcedureNotes,
+      dietPlanNotes: createConsultationDto.dietPlanNotes,
+      homecareGuideliness: createConsultationDto.homecareGuideliness,
+      detoxRecommended: createConsultationDto.detoxRecommended || false,
+      detoxDoctorId: createConsultationDto.detoxDoctorId || null,
+      followupDate: createConsultationDto.followupDate
+        ? new Date(createConsultationDto.followupDate)
+        : null,
+      followupRemarks: createConsultationDto.followupRemarks,
+    },
+    include: {
+      patient: true,
+      doctor: { include: { user: true } },
+      appointment: true,
+      detoxDoctor: { include: { user: true } },
+      receptionistFollowup: true
+    }
+  });
+
+  // ✅ Update appointment status
+  if (createConsultationDto.appointmentId) {
+    await this.prisma.appointment.update({
+      where: { id: createConsultationDto.appointmentId },
+      data: { status: 'Completed' }
+    });
+  }
+
+  // 🔥 ✅ WhatsApp Consultation PDF Send
+  if (consultation.patient?.phone) {
+
+    const consultationDate = new Date(
+      consultation.consultationDate
+    ).toLocaleDateString('en-GB');
+
+    const doctorName =
+      consultation.doctor?.user?.fullName || 'Duty Doctor';
+
+    // Try to locate uploaded PDF for this consultation and upload it to WhatsApp media endpoint
+    let mediaId: string | undefined = undefined;
+    try {
+      const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
+      const pdfPath = path.join(uploadsDir, `consultation-${consultation.id}.pdf`);
+      try {
+        await fs.promises.stat(pdfPath);
+        mediaId = await uploadWhatsappMediaFromFile(pdfPath);
+        console.log('Uploaded consultation PDF to WhatsApp media id:', mediaId);
+      } catch (e) {
+        // file not found or upload failed; continue without media
+        console.warn('No consultation PDF found or upload failed for', pdfPath, e?.message || e);
+      }
+    } catch (err) {
+      console.error('Error preparing PDF for WhatsApp upload:', err?.message || err);
+    }
+
+    sendWhatsappTemplateMessage(
+      consultation.patient.whatsapp || consultation.patient.phone,
+      'manthrayala_consultation_summary',
+      [
+        consultation.patient.name,
+        consultationDate,
+        'Consultation',
+        doctorName
+      ],
+      'en',
+      mediaId,              // optional PDF attachment
+      `consultation-${consultation.id}.pdf`
+    ).catch(err =>
+      console.error('WhatsApp send failed:', err)
+    );
+  }
+
+  return consultation;
+}
+
+  // In consultation.service.ts
+
+async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: string) {
+  const consultation = await this.prisma.consultation.findUnique({
+    where: { id: consultationId },
+    include: { patient: true, doctor: { include: { user: true } } }
+  });
+  
+  if (!consultation) {
+    throw new NotFoundException(`Consultation ${consultationId} not found`);
+  }
+  
+  if (!consultation.patient?.phone) {
+    console.warn('Patient phone missing, cannot send WhatsApp');
+    return { success: false, message: 'Patient phone missing' };
+  }
+
+  // Validate buffer
+  if (!buffer || buffer.length === 0) {
+    console.warn('PDF Buffer is empty or invalid, skipping WhatsApp send');
+    return { success: false, message: 'PDF buffer empty' };
+  }
+
+  try {
+    // Try to upload to WhatsApp
+    let mediaId: string | undefined;
+    let uploadSuccess = false;
+    
+    try {
+      const mimeType = filename.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream';
+      mediaId = await uploadWhatsappMediaBuffer(buffer, filename, mimeType);
+      uploadSuccess = true;
+      console.log('Uploaded media id for consultation:', mediaId);
+    } catch (uploadError: any) {
+      console.error('Failed to upload media to WhatsApp:', uploadError.message);
+      // Continue without media
+    }
+
+    const consultationDate = new Date(consultation.consultationDate).toLocaleDateString('en-GB');
+    const doctorName = consultation.doctor?.user?.fullName || 'Duty Doctor';
+
+    // Send template message with or without media
+    const result = await sendWhatsappTemplateMessage(
+      consultation.patient.whatsapp || consultation.patient.phone,
+      'manthrayala_consultation_summary',
+      [consultation.patient.name, consultationDate, 'Consultation', doctorName],
+      'en',
+      uploadSuccess ? mediaId : undefined,
+      filename
+    );
+    
+    return { 
+      success: true, 
+      mediaUploaded: uploadSuccess,
+      mediaId: mediaId
+    };
+  } catch (err: any) {
+    console.error('Failed to send consultation PDF:', err?.message || err);
+    // Don't throw - we want the consultation to still be saved
+    return { success: false, message: err?.message || 'Unknown error' };
+  }
+}
 
   // Add a method to cleanup duplicate consultations
   async cleanupDuplicates() {

@@ -75,7 +75,7 @@ export const addTemplateFooter = (doc) => {
   doc.text("We count our success in the smiles of suffering humanity", pageWidth / 2, pageHeight - 13, { align: 'center' });
 };
 
-export const generateConsultationPDF = (data, specificTopic = null) => {
+const buildConsultationDoc = (data, specificTopic = null) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
@@ -147,8 +147,19 @@ export const generateConsultationPDF = (data, specificTopic = null) => {
   const fileName = specificTopic 
     ? `${data.patient_name}_${specificTopic.replace(/\s+/g, '_')}_${data.date}.pdf`
     : `${data.patient_name}_Consultation_${data.date}.pdf`;
-    
+
+  return { doc, fileName };
+};
+
+export const generateConsultationPDF = (data, specificTopic = null) => {
+  const { doc, fileName } = buildConsultationDoc(data, specificTopic);
   doc.save(fileName);
+};
+
+export const buildConsultationPdfBlob = async (data, specificTopic = null) => {
+  const { doc, fileName } = buildConsultationDoc(data, specificTopic);
+  const blob = doc.output('blob');
+  return { blob, fileName };
 };
 
 export const generateSingleTopicPDF = (data, title, htmlContent) => {
