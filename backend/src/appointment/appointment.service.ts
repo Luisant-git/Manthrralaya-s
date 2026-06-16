@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
+import { sendWhatsappTemplateMessage } from '../common/whatsapp.util';
 
 
 @Injectable()
@@ -36,7 +37,7 @@ export class AppointmentService {
       }
     }
 
-    return this.prisma.appointment.create({
+    const appointment = await this.prisma.appointment.create({
       data: {
         patientId: createAppointmentDto.patientId,
         doctorId: createAppointmentDto.doctorId,
@@ -55,6 +56,29 @@ export class AppointmentService {
         }
       }
     });
+
+    // Send WhatsApp Confirmation
+    if (appointment.patient?.phone) {
+      // Run asynchronously without waiting for it to finish to avoid blocking the API response
+      // Format date
+      const appointmentDate = new Date(appointment.appointmentDate).toLocaleDateString('en-GB'); // DD/MM/YYYY
+      const doctorName = appointment.doctor?.user?.fullName || 'Duty Doctor';
+
+      sendWhatsappTemplateMessage(
+        appointment.patient.whatsapp || appointment.patient.phone,
+        'manthrayala_appointment_confirmation',
+        [
+          appointment.patient.name,      // {{1}} Name
+          appointmentDate,               // {{2}} Date
+          appointment.session || 'FN',   // {{3}} Time/Session
+          appointment.appointmentType || 'Consultation', // {{4}} Consultation Type
+          doctorName                     // {{5}} Doctor
+        ],
+        'en'
+      ).catch(err => console.error('Failed to send WA confirmation:', err));
+    }
+
+    return appointment;
   }
 
   async findAll() {
