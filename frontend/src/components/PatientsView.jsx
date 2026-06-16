@@ -4,10 +4,10 @@ import { getAllPatients, createPatient } from '../api/patientApi';
 import { toast } from 'react-toastify';
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
-export default function PatientsView({ appointments = [], followups = [], consultations = [], onAddPatient, onSelectPatient, onRefreshConsultations }) {
+export default function PatientsView({ appointments = [], followups = [], consultations = [], onAddPatient, onSelectPatient, onRefreshConsultations, initialTab = 'all' }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTab, setSelectedTab] = useState('all');
+  const [selectedTab, setSelectedTab] = useState(initialTab);
   const [viewingPatient, setViewingPatient] = useState(null);
   const [patients, setPatients] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,7 +17,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     { id: 'all', label: 'All' },
     { id: 'consultation', label: 'Consultation', type: 'Initial consultation' },
     { id: 'detox', label: 'Detox', type: 'Detox' },
-    { id: 'followup', label: 'Follow-up', type: 'Followup' }
+    { id: 'review', label: 'Review', type: 'Review' }
   ];
 
   // Fetch patients from backend
@@ -488,96 +488,119 @@ export default function PatientsView({ appointments = [], followups = [], consul
             </div>
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                  <th className="py-3 px-4">Patient ID</th>
-                  <th className="py-3 px-4">Name</th>
-                  <th className="py-3 px-4">Phone No</th>
-                  <th className="py-3 px-4">WhatsApp</th>
-                  <th className="py-3 px-4">Type</th>
-                  <th className="py-3 px-4">Age</th>
-                  <th className="py-3 px-4">Gender</th>
-                  <th className="py-3 px-4">Location</th>
-                  <th className="py-3 px-4">Next Follow-up Date</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredPatients.map(pt => {
-                  const fupInfo = getFollowupInfo(pt.id);
-                  return (
-                    <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
-                      <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone?.replace(/\D/g, '').slice(-10)}</td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10)}</td>
-                      <td className="py-3 px-4">
-                        {(() => {
-                          const type = getLatestAppointmentType(pt.id);
-                          return <span className={getAppointmentTypeBadge(type)}>{type}</span>;
-                        })()}
-                      </td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.gender || 'N/A'}</td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">{pt.location || 'n/a'}</td>
-                      <td className="py-3 px-4">
-                        {fupInfo && fupInfo.date ? (
-                          <div className="flex flex-col">
-                            <span className={`text-sm font-bold tracking-tight ${fupInfo.status === 'Pending' ? 'text-amber-600' : fupInfo.status === 'Completed' ? 'text-emerald-600' : 'text-slate-400 line-through'}`}>
-                              {new Date(fupInfo.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">{fupInfo.status}</span>
+          {/* Main List Container */}
+          <div className="w-full">
+            {filteredPatients.length === 0 ? (
+              <div className="py-12 text-center text-slate-500">
+                No patients found matching your search.
+              </div>
+            ) : (
+              <>
+                {/* MOBILE/TABLET CARD VIEW (Visible below xl screens) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 xl:hidden bg-slate-50">
+                  {filteredPatients.map(pt => {
+                    const type = getLatestAppointmentType(pt.id);
+                    return (
+                      <div key={pt.id} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:border-emerald-200 hover:shadow-md transition-all">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <span className="font-bold text-slate-800 text-sm block">{pt.name}</span>
+                            <span className="text-emerald-600 font-mono text-xs font-bold block mt-0.5">P-{pt.id}</span>
                           </div>
-                        ) : (
-                          <span className="text-slate-400 italic text-sm">No follow-up</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end items-center gap-2">
-                          {fupInfo && fupInfo.date && (
-                            <button 
-                              onClick={() => {
-                                 setEditingPatient(pt);
-                                 setEditingConsultationId(fupInfo.consultationId);
-                                 setEditingFollowupDate(fupInfo.date);
-                                 setEditingFollowupNotes(fupInfo.notes);
-                                 setEditingFollowupStatus(fupInfo.status);
-                              }}
-                              title="Edit Follow-up"
-                              className="text-slate-500 bg-white shadow-sm border border-slate-200 hover:border-emerald-300 hover:text-emerald-600 font-semibold p-1.5 rounded-lg transition-all flex items-center justify-center"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                            </button>
-                          )}
+                          <span className={getAppointmentTypeBadge(type)}>{type}</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Phone</span>
+                            <span className="font-medium text-slate-700">{pt.phone?.replace(/\D/g, '').slice(-10) || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">WhatsApp</span>
+                            <span className="font-medium text-slate-700">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10) || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Age</span>
+                            <span className="font-medium text-slate-700">{pt.age || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Gender</span>
+                            <span className="font-medium text-slate-700">{pt.gender || 'N/A'}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 mt-auto flex items-center justify-between gap-2">
                           <button 
                             onClick={() => setViewingPatient(pt)}
-                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-blue-200"
+                            className="flex-1 text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 font-semibold px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                           >
                             <Eye className="w-4 h-4" /> View
                           </button>
                           <button 
                             onClick={() => onSelectPatient && onSelectPatient(pt)}
-                            className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
+                            className="flex-1 text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 font-semibold px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5"
                           >
                             <Activity className="w-4 h-4" /> Timeline
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filteredPatients.length === 0 && (
-                  <tr>
-                    <td colSpan="10" className="py-12 text-center text-slate-500">
-                      No patients found matching your search.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* DESKTOP TABLE VIEW (Visible on xl screens and above) */}
+                <div className="hidden xl:block overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <th className="py-3 px-4">Patient ID</th>
+                        <th className="py-3 px-4">Name</th>
+                        <th className="py-3 px-4">Phone No</th>
+                        <th className="py-3 px-4">WhatsApp</th>
+                        <th className="py-3 px-4">Type</th>
+                        <th className="py-3 px-4">Age</th>
+                        <th className="py-3 px-4">Gender</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredPatients.map(pt => {
+                        const type = getLatestAppointmentType(pt.id);
+                        return (
+                          <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
+                            <td className="py-3 px-4 font-bold text-slate-800">{pt.name}</td>
+                            <td className="py-3 px-4 text-slate-600 font-medium">{pt.phone?.replace(/\D/g, '').slice(-10)}</td>
+                            <td className="py-3 px-4 text-slate-600 font-medium">{(pt.whatsapp || pt.phone)?.replace(/\D/g, '').slice(-10)}</td>
+                            <td className="py-3 px-4">
+                              <span className={getAppointmentTypeBadge(type)}>{type}</span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-600 font-medium">{pt.age}</td>
+                            <td className="py-3 px-4 text-slate-600 font-medium">{pt.gender || 'N/A'}</td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex justify-end items-center gap-2">
+                                <button 
+                                  onClick={() => setViewingPatient(pt)}
+                                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-blue-200"
+                                >
+                                  <Eye className="w-4 h-4" /> View
+                                </button>
+                                <button 
+                                  onClick={() => onSelectPatient && onSelectPatient(pt)}
+                                  className="text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 font-semibold px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1.5 border border-transparent hover:border-emerald-200"
+                                >
+                                  <Activity className="w-4 h-4" /> Timeline
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
