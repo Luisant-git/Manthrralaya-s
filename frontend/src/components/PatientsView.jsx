@@ -51,6 +51,12 @@ export default function PatientsView({ appointments = [], followups = [], consul
   };
 
   const getLatestAppointmentType = (patientId) => {
+    // Prioritize pending follow-ups (recommended or edited)
+    const fupInfo = getFollowupInfo(patientId);
+    if (fupInfo && fupInfo.status === 'Pending') {
+      return fupInfo.type;
+    }
+
     if (!appointments || appointments.length === 0) return 'No Record';
     const sorted = appointments
       .filter(a => String(a.patientId || a.patient_id) === String(patientId))
@@ -80,6 +86,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
     
     if (latestCons) {
+      const isDetox = latestCons.detox_recommended || latestCons.detoxRecommended;
       const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
       if (rec && (rec.followupDate || rec.followup_date)) {
         return {
@@ -88,7 +95,8 @@ export default function PatientsView({ appointments = [], followups = [], consul
           date: rec.followupDate || rec.followup_date,
           status: rec.status || 'Pending',
           notes: rec.notes || '',
-          source: 'receptionist'
+          source: 'receptionist',
+          type: isDetox ? 'Detox' : 'Review'
         };
       }
       
@@ -99,7 +107,8 @@ export default function PatientsView({ appointments = [], followups = [], consul
           date: latestCons.followup_date || latestCons.followupDate,
           status: 'Pending',
           notes: latestCons.followup_remarks || latestCons.followupRemarks || '',
-          source: 'doctor'
+          source: 'doctor',
+          type: isDetox ? 'Detox' : 'Review'
         };
       }
     }
@@ -115,7 +124,8 @@ export default function PatientsView({ appointments = [], followups = [], consul
             date: fup.scheduled_date,
             status: fup.status || 'Pending',
             notes: fup.notes,
-            source: 'derived'
+            source: 'derived',
+            type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review'
         };
     }
 

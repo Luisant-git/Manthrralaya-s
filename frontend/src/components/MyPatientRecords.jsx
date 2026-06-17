@@ -124,10 +124,25 @@ export default function UnifiedPatientRecords({
   };
 
   const getLatestAppointment = (patientId) => {
+    // Check for pending follow-up first to show intended "Type"
+    const nextFollowup = getNextFollowup(patientId);
+    
+    // Find the latest booked appointment
     const sorted = appointments
       .filter(a => String(a.patient_id || a.patientId) === String(patientId) && a.appointmentType)
-      .sort((a, b) => new Date(b.date) - new Date(a.date));
-    return sorted[0] || null;
+      .sort((a, b) => new Date(b.date || b.appointmentDate || 0) - new Date(a.date || a.appointmentDate || 0));
+    
+    const latestAppt = sorted[0];
+
+    // If there's a pending follow-up that hasn't been booked yet, show its type
+    if (nextFollowup && (!latestAppt || new Date(nextFollowup.scheduled_date) >= new Date(latestAppt.date || latestAppt.appointmentDate))) {
+      return { 
+        appointmentType: nextFollowup.appointmentType,
+        date: nextFollowup.scheduled_date 
+      };
+    }
+
+    return latestAppt || null;
   };
 
   const getNextFollowup = (patientId) => {
@@ -139,10 +154,14 @@ export default function UnifiedPatientRecords({
 
     const latestCons = consultations
       .filter(c => String(c.patient_id || c.patientId) === String(patientId))
-      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+      .sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
     
-    if (latestCons && (latestCons.followup_date || latestCons.followupDate)) {
-      return { scheduled_date: latestCons.followup_date || latestCons.followupDate };
+    const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+    if (latestCons && (rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate)) {
+      return { 
+        scheduled_date: rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate,
+        appointmentType: (latestCons.detox_recommended || latestCons.detoxRecommended) ? 'Detox' : 'Review'
+      };
     }
 
     return null;
