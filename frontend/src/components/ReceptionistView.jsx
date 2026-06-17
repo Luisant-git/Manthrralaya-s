@@ -173,7 +173,33 @@ export default function ReceptionistView({
     return dateValue;
   };
 
-  // PRIORITY 1: Check for follow-up from detox session (most recent)
+  // PRIORITY 1: Check for follow-up edited by receptionist (highest priority)
+  const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+  if (rec && (rec.followupDate || rec.followup_date)) {
+    const formattedDate = formatDateForInput(rec.followupDate || rec.followup_date);
+    if (formattedDate) {
+      newState.date = formattedDate;
+      const isDetox = latestCons?.detox_recommended || latestCons?.detoxRecommended;
+      newState.appointmentType = isDetox ? 'Detox' : 'Review';
+      
+      const dDocId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
+      const rDocId = latestCons?.doctor_id;
+      if (dDocId) {
+        newState.doctor_id = dDocId;
+      } else if (rDocId) {
+        newState.doctor_id = rDocId;
+      }
+      
+      if (latestCons.session) {
+        newState.session = latestCons.session;
+      } else if (lastAppt?.session) {
+        newState.session = lastAppt.session;
+      }
+      return newState;
+    }
+  }
+
+  // PRIORITY 2: Check for follow-up from detox session (most recent)
   const detoxFollowupDate = latestDetoxSession?.followupDate || latestDetoxSession?.followup_date;
   if (detoxFollowupDate) {
     const formattedDate = formatDateForInput(detoxFollowupDate);
@@ -203,7 +229,7 @@ export default function ReceptionistView({
       newState.session = lastAppt.session;
     }
   }
-  // PRIORITY 2: Check for follow-up from consultation
+  // PRIORITY 3: Check for follow-up from consultation
   else {
     const consultationFollowupDate = latestCons?.followup_date || latestCons?.followupDate;
     if (consultationFollowupDate) {
@@ -1455,7 +1481,7 @@ export default function ReceptionistView({
                                     ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
                                     : 'bg-rose-50 border-rose-200 text-rose-600'
                                 }`}>
-                                  {d.status}
+                                   {d.status}
                                 </span>
                               </div>
                             </button>

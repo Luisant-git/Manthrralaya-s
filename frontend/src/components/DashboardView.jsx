@@ -98,11 +98,13 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
       if (latestCons) {
         const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
         if (rec && (rec.followupDate || rec.followup_date)) {
-          ptFollowup = { patient: pt, date: rec.followupDate || rec.followup_date, status: rec.status || 'Pending', type: 'Review' };
+          const isDetox = latestCons.detox_recommended || latestCons.detoxRecommended;
+          ptFollowup = { patient: pt, date: rec.followupDate || rec.followup_date, status: rec.status || 'Pending', type: isDetox ? 'Detox' : 'Review' };
         } else if (latestCons.followup_date || latestCons.followupDate) {
           ptFollowup = { patient: pt, date: latestCons.followup_date || latestCons.followupDate, status: 'Pending', type: latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review' };
         }
       }
+      
       
       if (!ptFollowup) {
         const fup = (followups || []).filter(f => String(f.patient_id) === String(pt.id))
@@ -120,7 +122,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
     });
     // Sort by action date (oldest first, so overdue are at the top)
     return list.sort((a, b) => new Date(a.actionDate) - new Date(b.actionDate));
-  }, [patients, consultations, followups]);
+  }, [patients, consultations, followups, detoxSessions]);
   
   // Get today's appointments - FIXED: Strict doctor filtering
   const todayAppointments = appointments.filter(a => {

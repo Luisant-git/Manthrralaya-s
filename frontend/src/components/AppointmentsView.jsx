@@ -30,8 +30,10 @@ export default function AppointmentsView({
     const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
     const latestCons = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
     
-    if (latestCons && (latestCons.followup_date || latestCons.followupDate)) {
-      const followupDate = latestCons.followup_date || latestCons.followupDate;
+    const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+
+    if (latestCons && (rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate)) {
+      const followupDate = rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate;
       const isDetoxRecommended = latestCons.detox_recommended || latestCons.detoxRecommended;
       
       const today = new Date();

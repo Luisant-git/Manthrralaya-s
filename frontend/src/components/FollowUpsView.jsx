@@ -3,7 +3,7 @@ import { Search, CalendarDays, Clock, Activity, FileText, CheckCircle, X, PhoneC
 import { updateReceptionistFollowup, sendFollowupReminder } from '../api/consultationApi';
 import { toast } from 'react-toastify';
 
-export default function FollowUpsView({ patients = [], consultations = [], followups = [], detoxSessions = [], onRefresh }) {
+export default function FollowUpsView({ patients = [], consultations = [], appointments = [], followups = [], detoxSessions = [], onRefresh }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('Pending');
 
@@ -25,11 +25,59 @@ export default function FollowUpsView({ patients = [], consultations = [], follo
     patients.forEach(pt => {
       let ptFollowup = null;
       
-      // 1. Check latest consultation
+      // Pre-calculate latest consultation for fallback/linking
       const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(pt.id));
       const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
-      
-      if (latestCons) {
+
+      // Check detox sessions for explicit follow-up (highest priority)
+      const ptDetoxSessions = detoxSessions ? detoxSessions.filter(ds => String(ds.patient_id || ds.patientId) === String(pt.id)) : [];
+      const latestDetox = [...ptDetoxSessions].sort((a, b) => new Date(b.sessionDate || b.date || 0) - new Date(a.sessionDate || a.date || 0))[0];
+      if (latestDetox && (latestDetox.followupDate || latestDetox.followup_date)) {
+        const detoxApptId = latestDetox.appointmentId || latestDetox.appointment_id;
+        const detoxConsId = latestDetox.consultationId || latestDetox.consultation_id;
+        
+        let linkedConsultationId = detoxConsId || null;
+        let detoxDate = latestDetox.followupDate || latestDetox.followup_date;
+        let detoxStatus = latestDetox.status || 'Pending';
+        let detoxNotes = latestDetox.notes || latestDetox.followupRemarks || '';
+        
+        // Try linking via appointment if direct consultationId is missing
+        if (!linkedConsultationId && detoxApptId) {
+          const consFromAppt = consultations.find(c => String(c.appointment_id || c.appointmentId) === String(detoxApptId));
+          if (consFromAppt) {
+            linkedConsultationId = consFromAppt.id;
+          }
+        }
+        
+        // CRITICAL FALLBACK: If still no ID, use the patient's latest consultation
+        // This ensures the "Edit" button appears and status can be managed.
+        if (!linkedConsultationId && latestCons) {
+          linkedConsultationId = latestCons.id;
+        }
+
+        // If a linked consultation is found, check its receptionistFollowup for status/notes
+        if (linkedConsultationId) {
+          const linkedConsObj = consultations.find(c => String(c.id) === String(linkedConsultationId));
+          const rec = linkedConsObj?.receptionistFollowup || linkedConsObj?.receptionist_followup;
+          if (rec && (rec.followupDate || rec.followup_date)) {
+            detoxDate = rec.followupDate || rec.followup_date; // Show edited date if available
+            detoxStatus = rec.status || detoxStatus; // Prioritize receptionist status
+            detoxNotes = rec.notes || rec.notes_text || detoxNotes;
+          }
+        }
+        ptFollowup = {
+          id: latestDetox.id || `detox-${latestDetox.id}`, // Keep original detox ID for uniqueness
+          consultationId: linkedConsultationId, // Use the derived consultation ID for editability
+          patient: pt,
+          date: detoxDate,
+          status: detoxStatus,
+          notes: detoxNotes,
+          type: 'Detox',
+          source: 'DetoxSession'
+        };
+      }
+
+      if (latestCons && !ptFollowup) {
         const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
         if (rec && (rec.followupDate || rec.followup_date)) {
           ptFollowup = {
@@ -65,7 +113,7 @@ export default function FollowUpsView({ patients = [], consultations = [], follo
         if (fup) {
           ptFollowup = {
             id: fup.id,
-            consultationId: fup.id?.startsWith('FUP-C-') ? parseInt(fup.id.split('-')[2]) : null,
+            consultationId: fup.id?.startsWith('FUP-C-') ? parseInt(fup.id.split('-')[2]) : (latestCons?.id || null),
             patient: pt,
             date: fup.scheduled_date || fup.date,
             status: fup.status || 'Pending',
@@ -88,8 +136,8 @@ export default function FollowUpsView({ patients = [], consultations = [], follo
       }
     });
     
-    return list;
-  }, [patients, consultations, followups]);
+    return list; // Do not filter here, let the UI handle showing/hiding the edit button
+  }, [patients, consultations, followups, detoxSessions, appointments]); // Add appointments to dependencies
 
   // Filter based on search and status
   const filteredList = masterFollowUps.filter(f => {
@@ -382,14 +430,25 @@ export default function FollowUpsView({ patients = [], consultations = [], follo
                         notes: editNotes || null, 
                         status: editStatus || 'Pending' 
                       });
-                      // Trigger WhatsApp follow-up reminder send
-                      try {
-                        await sendFollowupReminder(editingFup.consultationId);
-                        toast.success('Follow-up updated and WhatsApp reminder sent');
-                      } catch (remErr) {
-                        console.error('Failed to send followup reminder', remErr);
-                        toast.warning('Follow-up updated but failed to send WhatsApp reminder');
+
+                      // Only send WhatsApp template when there is an actual change
+                      // and the updated status is not 'Cancelled'
+                      const prevDate = editingFup.date ? new Date(editingFup.date).toISOString().split('T')[0] : null;
+                      const newDate = editDate ? new Date(editDate).toISOString().split('T')[0] : null;
+                      const changed = prevDate !== newDate || (editingFup.status || '') !== (editStatus || '') || (editingFup.notes || '') !== (editNotes || '');
+
+                      if (changed && (editStatus || 'Pending') !== 'Cancelled') {
+                        try {
+                          await sendFollowupReminder(editingFup.consultationId);
+                          toast.success('Follow-up updated and WhatsApp reminder sent');
+                        } catch (remErr) {
+                          console.error('Failed to send followup reminder', remErr);
+                          toast.warning('Follow-up updated but failed to send WhatsApp reminder');
+                        }
+                      } else {
+                        toast.success('Follow-up updated');
                       }
+
                       if (onRefresh) await onRefresh();
                       setEditingFup(null);
                     } catch (err) { toast.error('Failed to save'); } finally { setIsUpdating(false); }
