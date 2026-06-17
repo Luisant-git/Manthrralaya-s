@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, CalendarDays, Clock, Activity, FileText, CheckCircle, X, PhoneCall, Filter, User } from 'lucide-react';
-import { updateReceptionistFollowup } from '../api/consultationApi';
+import { updateReceptionistFollowup, sendFollowupReminder } from '../api/consultationApi';
 import { toast } from 'react-toastify';
 
 export default function FollowUpsView({ patients = [], consultations = [], followups = [], detoxSessions = [], onRefresh }) {
@@ -382,7 +382,14 @@ export default function FollowUpsView({ patients = [], consultations = [], follo
                         notes: editNotes || null, 
                         status: editStatus || 'Pending' 
                       });
-                      toast.success('Follow-up updated successfully');
+                      // Trigger WhatsApp follow-up reminder send
+                      try {
+                        await sendFollowupReminder(editingFup.consultationId);
+                        toast.success('Follow-up updated and WhatsApp reminder sent');
+                      } catch (remErr) {
+                        console.error('Failed to send followup reminder', remErr);
+                        toast.warning('Follow-up updated but failed to send WhatsApp reminder');
+                      }
                       if (onRefresh) await onRefresh();
                       setEditingFup(null);
                     } catch (err) { toast.error('Failed to save'); } finally { setIsUpdating(false); }

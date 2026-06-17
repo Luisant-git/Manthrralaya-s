@@ -108,3 +108,19 @@ export const uploadConsultationPdf = async (consultationId, formData) => {
 
     return response.json();
 };
+
+export const sendFollowupReminder = async (consultationId) => {
+    const response = await fetch(`${config.API_BASE_URL}/receptionist-followup/${consultationId}/send-reminder`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to send followup reminder');
+    }
+
+    return response.json();
+};
