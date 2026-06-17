@@ -499,14 +499,14 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes</h3>
                       <div>
                         <div className="flex items-center justify-between gap-3 mb-2">
-                          <label className="block text-xs font-semibold text-slate-600">Consultation Notes</label>
+                          <label className="block text-xs font-semibold text-slate-600">Patient Medical History</label>
                           <button type="button" onClick={appendLatestHistoryToCurrent} disabled={!latestHistory} className={`text-xs font-semibold ${historyAppended ? 'text-slate-400 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-700'} disabled:text-slate-400`}>
                             {latestHistory ? (historyAppended ? 'Latest history already added' : 'Add latest history notes') : 'No previous history available'}
                           </button>
                         </div>
-                        <RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." />
+                        <RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." />
                       </div>
-                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label><RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." /></div>
                       <div><label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label><RichTextEditor editorRef={detoxProcedureEditorRef} content={detoxProcedure} setContent={setDetoxProcedure} placeholder="Enter detox procedure notes..." /></div>
                     </div>
 
