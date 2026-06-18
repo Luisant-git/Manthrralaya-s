@@ -139,6 +139,9 @@ export class AdminService {
               lastLogin: true,
             }
           }
+      },
+      orderBy: {
+        createdAt: 'desc'
         }
       });
       return { success: true, count: doctors.length, data: doctors };
@@ -156,6 +159,9 @@ export class AdminService {
         isActive: true,
         createdAt: true,
         lastLogin: true,
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
     });
     return { success: true, count: users.length, data: users };

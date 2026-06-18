@@ -15,6 +15,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
     const [editingId, setEditingId] = useState(null);
     const [resetPinUser, setResetPinUser] = useState(null);
     const [newPin, setNewPin] = useState('');
+    const [showPin, setShowPin] = useState(false); // New state for PIN visibility
     const [confirmPin, setConfirmPin] = useState('');
     const [isReseting, setIsReseting] = useState(false);
     const [showNewPin, setShowNewPin] = useState(false);
@@ -26,7 +27,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    const [formData, setFormData] = useState({
+    const initialFormData = {
         fullName: '',
         username: '',
         email: '',
@@ -34,7 +35,8 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
         pin: '',
         phone: '',
         specialization: ''
-    });
+    };
+    const [formData, setFormData] = useState(initialFormData);
     
     const [status, setStatus] = useState({ loading: false, error: '', success: false });
 
@@ -54,17 +56,20 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                 let allStaff = [...(receptionists.data || []), ...(doctors.data || []), ...(therapists.data || [])];
                 
                 // Filter for "My Account" if requested
+                // This filter should happen before the general sort if it's meant to isolate the user.
                 if (activeFilter === 'my-account' && currentUser) {
                     const currentUserId = currentUser.userId || currentUser.id;
                     allStaff = allStaff.filter(item => (item.user?.id || item.id) === currentUserId);
                 }
 
-                // Sort current user to top for visibility
-                if (activeFilter !== 'my-account' && currentUser) {
-                    const currentUserId = currentUser.userId || currentUser.id;
-                    allStaff.sort((a, b) => (a.user?.id || a.id) === currentUserId ? -1 : 1);
-                }
-                
+                // Sort all staff by createdAt in descending order to show latest created on top.
+                // This ensures the most recently added staff member is always visible at the top.
+                allStaff.sort((a, b) => {
+                    const dateA = new Date(a.user?.createdAt || a.createdAt);
+                    const dateB = new Date(b.user?.createdAt || b.createdAt);
+                    return dateB.getTime() - dateA.getTime();
+                });
+
                 setStaff(allStaff);
             } else {
                 const response = await userApi.getUsersByRole(activeFilter);
@@ -74,6 +79,12 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
         } catch (err) {
             console.error(err);
         }
+    };
+
+    const clearForm = () => {
+        setFormData(initialFormData);
+        setEditingId(null);
+        setStatus({ loading: false, error: '', success: false });
     };
 
     const handleChange = (e) => {
@@ -122,6 +133,10 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
             return setStatus({ ...status, error: 'Name, Username and Email are required.' });
         }
 
+        if (formData.phone && formData.phone.length !== 10) {
+            return setStatus({ ...status, error: 'Phone number must be exactly 10 digits.' });
+        }
+
         if (!editingId && !formData.pin.trim()) {
             return setStatus({ ...status, error: 'Security PIN is required for new registration.' });
         }
@@ -136,7 +151,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
             
             setStatus({ loading: false, error: '', success: true, message: editingId ? 'Staff updated' : 'Staff created' });
             setFormData({ fullName: '', username: '', email: '', role: 'RECEPTIONIST', pin: '', phone: '', specialization: '' });
-            setEditingId(null);
+            clearForm(); // Clear form after successful submission
             setShowAddForm(false);
             loadStaff();
             
@@ -204,7 +219,12 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                     <p className="text-slate-500 text-sm">Manage clinic personnel, access roles, and account security.</p>
                 </div>
                 <button 
-                    onClick={() => setShowAddForm(!showAddForm)}
+                    onClick={() => { 
+                        setShowAddForm(!showAddForm); 
+                        if (!showAddForm) { // If we are about to show the form
+                            clearForm(); 
+                        }
+                    }}
                     className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm"
                 >
                     <UserPlus className="w-4 h-4" />
@@ -279,6 +299,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                             <thead className="bg-slate-50 border-b border-slate-100">
                                 <tr>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Staff Member</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Login ID</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Contact Info</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">Status</th>
                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
@@ -297,7 +318,6 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                                     <div>
                                                         <div className="text-sm font-bold text-slate-800">{user.fullName}</div>
                                                         <div className="flex flex-col">
-                                                            <span className="text-[10px] text-slate-500 font-bold lowercase">Login ID: @{user.username || 'no-username'}</span>
                                                             {activeFilter === 'my-account' && <span className="text-[10px] text-slate-400 lowercase">Email: {user.email}</span>}
                                                         </div>
                                                         <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">{user.role}</div>
@@ -305,7 +325,10 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-sm text-slate-600 font-medium">{user.email}</div>
+                                                <div className="text-base font-bold text-slate-600 normal-case">{user.username || 'no-username'}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-base text-slate-600 font-medium normal-case">{user.email}</div>
                                                 <div className="text-xs text-slate-400">{user.phone || 'No phone'}</div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
@@ -417,7 +440,7 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
             ) : (
                 <div className="max-w-2xl mx-auto animate-fadeIn">
                     <button 
-                        onClick={() => { setShowAddForm(false); setEditingId(null); }}
+                        onClick={() => { setShowAddForm(false); clearForm(); }}
                         className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm mb-6 transition-colors group"
                     >
                         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Back to Staff List
@@ -492,9 +515,15 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                         type="tel"
                                         name="phone"
                                         required
-                                        placeholder="+91 98765 43210"
+                                        placeholder="10-digit number"
                                         value={formData.phone}
-                                        onChange={handleChange}
+                                        onChange={(e) => {
+                                            const value = e.target.value.replace(/\D/g, ''); // Allow only digits
+                                            if (value.length <= 10) {
+                                                handleChange({ target: { name: 'phone', value: value } });
+                                            }
+                                        }}
+                                        maxLength={10}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                                     />
                                 </div>
@@ -532,22 +561,33 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                 </div>
                             )}
 
-                            <div className="pt-2">
-                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
-                                    Security Access PIN (4 Digits) {editingId ? '(Optional)' : <span className="text-rose-500">*</span>}
-                                </label>
-                                <input 
-                                    type="password" 
-                                    name="pin" 
-                                    required={!editingId}
-                                    maxLength={4} 
-                                    placeholder={editingId ? "•••• (Leave blank to keep current)" : "••••"}
-                                    value={formData.pin} 
-                                    onChange={handleChange} 
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-lg text-slate-800 text-center tracking-widest focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold"
-                                />
-                                {editingId && <p className="text-[10px] text-slate-400 mt-1">Only enter a value if you wish to change the existing PIN.</p>}
-                            </div>
+                            {!editingId && (
+                                <div className="pt-2">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                                        Security Access PIN (4 Digits) <span className="text-rose-500">*</span> 
+                                    </label>
+                                    <div className="relative">
+                                        <input 
+                                            type={showPin ? "text" : "password"} 
+                                            name="pin" 
+                                            required
+                                            maxLength={4} 
+                                            placeholder="••••"
+                                            value={formData.pin} 
+                                            onChange={(e) => {
+                                                const value = e.target.value.replace(/\D/g, ''); // Allow only digits
+                                                if (value.length <= 4) {
+                                                    handleChange({ target: { name: 'pin', value: value } });
+                                                }
+                                            }} 
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-lg text-slate-800 text-center tracking-widest focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-bold pr-10"
+                                        />
+                                        <button type="button" onClick={() => setShowPin(!showPin)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            {showPin ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="flex justify-end pt-4 gap-3">
                                 <button 
@@ -581,12 +621,12 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                     <p className="text-white-100 text-xs mt-1">
                                         Security update for <span className="font-bold text-white">{resetPinUser.fullName}</span>
                                     </p>
-                                    <p className="text-white/70 text-[10px] uppercase font-bold tracking-widest mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                                        <span>Role: <span className="text-white">{resetPinUser.role}</span></span>
+                                    <p className="text-white/70 text-sm font-bold mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                        <span className="uppercase tracking-widest">Role: <span className="text-white">{resetPinUser.role}</span></span>
                                         <span>•</span>
-                                        <span>Login ID: <span className="text-white">@{resetPinUser.username || 'no-username'}</span></span>
-                                        <span>•</span>
-                                        <span>Email: <span className="text-white">{resetPinUser.email}</span></span>
+                                        <span className="uppercase tracking-widest">Login ID: <span className="text-white normal-case">{resetPinUser.username || 'no-username'}</span></span>
+                                       
+                                        <span className="uppercase tracking-widest">Email: <span className="text-white normal-case">{resetPinUser.email}</span></span>
                                     </p>
                                 </div>
                                 <button 
