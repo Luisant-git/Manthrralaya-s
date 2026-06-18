@@ -374,7 +374,7 @@ export default function AppointmentsView({
                   <th className="py-3 px-4">Assigned Doctor</th>
                   <th className="py-3 px-4">Notes</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -438,39 +438,7 @@ export default function AppointmentsView({
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        {!isFollowup && appt.status === 'Scheduled' && (
-                          <>
-                            <button onClick={() => onCheckIn(appt.id, false, false)} className="text-emerald-600 hover:bg-emerald-50 font-bold px-2.5 py-1.5 rounded-lg border border-transparent hover:border-emerald-200 transition-colors">
-                              Check-in
-                            </button>
-                            <button onClick={() => onCancelAppointment(appt.id)} className="text-rose-600 hover:bg-rose-50 font-bold px-2.5 py-1.5 rounded-lg border border-transparent hover:border-rose-200 transition-colors">
-                              Cancel
-                            </button>
-                          </>
-                        )}
-                        {!isFollowup && appt.status === 'Checked-in' && (
-                          <span className="text-slate-400 font-medium italic">Awaiting Consult</span>
-                        )}
-                        {isFollowup && (
-                          <button 
-                            onClick={() => {
-                              setFormData({
-                                patient_id: pt.id,
-                                doctor_id: appt.doctor_id,
-                                appointmentType: appt.appointmentType,
-                                date: appt.date,
-                                notes: appt.notes,
-                                time: '10:00 AM'
-                              });
-                              setIsBooking(true);
-                            }}
-                            className="text-emerald-600 hover:bg-emerald-50 font-bold px-2.5 py-1.5 rounded-lg border border-emerald-200 transition-colors"
-                          >
-                            Book Now
-                          </button>
-                        )}
-                      </td>
+                     
                     </tr>
                   );
                 })}

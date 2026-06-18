@@ -184,11 +184,11 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
     return matchesSearch && matchesStatus;
   });
 
-  // Calculate dashboard counts
+  // Calculate dashboard counts (ONLY PENDING items count for review/detox)
   const todayCount = filteredList.filter(f => f.actionDate === today).length;
   const tomorrowCount = filteredList.filter(f => f.actionDate === tomorrow).length;
-  const detoxCount = filteredList.filter(f => f.type === 'Detox').length;
-  const reviewCount = filteredList.filter(f => f.type === 'Review').length;
+  const detoxCount = filteredList.filter(f => f.type === 'Detox' && f.status === 'Pending').length;
+  const reviewCount = filteredList.filter(f => f.type === 'Review' && f.status === 'Pending').length;
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredList.length / itemsPerPage);
@@ -606,7 +606,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
               <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
                 <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-2">
                   <Stethoscope className="w-4 h-4" /> Doctor's Original Notes
-                  
+                  <span className="ml-auto text-[10px] text-emerald-400 font-normal">Read Only</span>
                 </div>
                 {editingFup.doctorDate && (
                   <div className="text-sm font-semibold text-emerald-800 mt-1 flex items-center gap-1.5">
@@ -702,14 +702,16 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                       const notesUpdated = prevNotes !== (editNotes || '');
                       const dateUpdated = prevDate !== newDate;
                       
+                      // If cancelled, also clear the follow-up date
+                      const isCancelled = editStatus === 'Cancelled';
                       await updateReceptionistFollowup(editingFup.consultationId, { 
-                        followupDate: editDate || null, 
+                        followupDate: isCancelled ? null : (editDate || null), 
                         notes: editNotes || null, 
                         status: editStatus || 'Pending'
                       });
 
                       const shouldSendReminder = 
-                        editStatus !== 'Cancelled' && 
+                        !isCancelled && 
                         dateUpdated;
 
                       if (shouldSendReminder) {
@@ -721,11 +723,11 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                           toast.warning('Date updated but failed to send WhatsApp reminder');
                         }
                       } else {
-                        if (editStatus === 'Cancelled') {
-                          toast.success('Follow-up cancelled successfully');
-                        } else if (notesUpdated && editStatus !== 'Cancelled') {
+                        if (isCancelled) {
+                          toast.success('Follow-up cancelled successfully. Follow-up date cleared from patient record.');
+                        } else if (notesUpdated && !isCancelled) {
                           toast.success('Notes updated successfully');
-                        } else if (dateUpdated && editStatus !== 'Cancelled') {
+                        } else if (dateUpdated && !isCancelled) {
                           toast.success('Follow-up date updated successfully');
                         } else if (prevStatus !== editStatus) {
                           toast.success('Follow-up status updated successfully');

@@ -151,6 +151,17 @@ export default function UnifiedPatientRecords({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // FIRST: Check if receptionist has cancelled/completed the follow-up for this patient
+    // This takes priority over everything else
+    const latestCons = consultations
+      .filter(c => String(c.patient_id || c.patientId) === String(patientId))
+      .sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+    
+    const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+    if (rec && (rec.status === 'Cancelled' || rec.status === 'Completed')) {
+      return null; // Receptionist cancelled/completed it - no follow-up
+    }
+
     // 1. Check for future booked appointments first (the next scheduled visit)
     const futureAppt = appointments
       .filter(a => {
@@ -174,16 +185,22 @@ export default function UnifiedPatientRecords({
       .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
 
     if (fromFollowups) return fromFollowups;
-
-    const latestCons = consultations
-      .filter(c => String(c.patient_id || c.patientId) === String(patientId))
-      .sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
     
-    const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
-    const fDate = rec?.followupDate || rec?.followup_date || latestCons?.followup_date || latestCons?.followupDate;
-    if (latestCons && fDate && new Date(fDate) >= today) {
+    // Determine the effective follow-up date:
+    // If receptionist has acted (rec exists), use ONLY their date (may be null)
+    // Otherwise fall back to the doctor's original date
+    let effectiveDate = null;
+    if (rec) {
+      // Receptionist has handled this follow-up - use ONLY their data (status is not cancelled at this point)
+      effectiveDate = rec.followupDate || rec.followup_date;
+    } else {
+      // No receptionist action - use doctor's original follow-up
+      effectiveDate = latestCons?.followup_date || latestCons?.followupDate;
+    }
+    
+    if (latestCons && effectiveDate && new Date(effectiveDate) >= today) {
       return { 
-        scheduled_date: fDate,
+        scheduled_date: effectiveDate,
         appointmentType: (latestCons.detox_recommended || latestCons.detoxRecommended) ? 'Detox' : 'Review'
       };
     }

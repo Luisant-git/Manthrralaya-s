@@ -82,7 +82,6 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   const totalPatients = patients?.length ?? 0;
   const todaysAppts = appointments?.filter(a => a.date === todayDate).length ?? 0;
   const activeStays = stayManagement?.filter(s => s.status === 'Admitted').length ?? 0;
-  const pendingFollowups = followups?.filter(f => f.status === 'Pending').length ?? 0;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -503,7 +502,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Pending Reviews</span>
                 <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-3xl font-extrabold text-slate-800">{pendingFollowups}</span>
+                <span className="text-3xl font-extrabold text-slate-800">{todayFollowUps.length}</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">

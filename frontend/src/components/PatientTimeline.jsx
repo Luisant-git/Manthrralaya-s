@@ -69,6 +69,47 @@ export default function PatientTimeline({
       color: 'bg-indigo-500',
       description: `Consultation details: ${detoxDetail}`
     });
+
+    // Add receptionist follow-up events from consultations
+    const rec = c.receptionistFollowup || c.receptionist_followup;
+    if (rec) {
+      const rawRecDate = rec.followupDate || rec.followup_date;
+      const recDate = rawRecDate ? (typeof rawRecDate === 'string' ? rawRecDate.split('T')[0] : new Date(rawRecDate).toISOString().split('T')[0]) : null;
+      const recNotes = rec.notes || rec.notes_text || '';
+      const recStatus = rec.status || 'Pending';
+      
+      if (recStatus === 'Cancelled') {
+        timelineEvents.push({
+          date: recDate || (c.date?.split('T')[0] || c.date),
+          time: 'Reception Update',
+          type: 'followup_cancelled',
+          title: 'Follow-up Cancelled',
+          icon: X,
+          color: 'bg-rose-500',
+          description: `Follow-up appointment was cancelled.${recNotes ? ` Reason/Notes: ${recNotes}` : ''}`
+        });
+      } else if (recStatus === 'Completed') {
+        timelineEvents.push({
+          date: recDate || (c.date?.split('T')[0] || c.date),
+          time: 'Reception Update',
+          type: 'followup_completed',
+          title: 'Follow-up Completed',
+          icon: RefreshCw,
+          color: 'bg-emerald-500',
+          description: `Follow-up was completed.${recNotes ? ` Notes: ${recNotes}` : ''}`
+        });
+      } else if (recDate) {
+        timelineEvents.push({
+          date: recDate,
+          time: 'Reception Update',
+          type: 'followup_scheduled',
+          title: 'Follow-up Scheduled by Reception',
+          icon: RefreshCw,
+          color: 'bg-amber-500',
+          description: `Next follow-up scheduled on ${recDate}. Status: ${recStatus}.${recNotes ? ` Notes: ${recNotes}` : ''}`
+        });
+      }
+    }
   });
 
   detoxSessions.filter(d => String(d.patient_id || d.patientId) === String(patient.id)).forEach(d => {
