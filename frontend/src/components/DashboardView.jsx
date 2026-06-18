@@ -500,7 +500,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
 
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
-                <span className="text-sm font-semibold text-slate-500 block">Pending Reviews</span>
+                <span className="text-sm font-semibold text-slate-500 block">Pending Follow-ups</span>
                 <div className="flex items-baseline space-x-2 mt-1">
                 <span className="text-3xl font-extrabold text-slate-800">{todayFollowUps.length}</span>
                 </div>
