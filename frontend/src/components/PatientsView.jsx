@@ -51,15 +51,19 @@ export default function PatientsView({ appointments = [], followups = [], consul
   };
 
   const getLatestAppointmentType = (patientId) => {
-    // Prioritize pending follow-ups (recommended or edited)
-    const fupInfo = getFollowupInfo(patientId);
-    if (fupInfo && fupInfo.status === 'Pending') {
-      return fupInfo.type;
-    }
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // Include everything through the end of today
 
     if (!appointments || appointments.length === 0) return 'No Record';
     const sorted = appointments
-      .filter(a => String(a.patientId || a.patient_id) === String(patientId))
+      .filter(a => {
+        const isPt = String(a.patientId || a.patient_id) === String(patientId);
+        if (!isPt || !a.appointmentType) return false;
+        
+        const apptDate = new Date(a.appointmentDate || a.date || 0);
+        // Include only past/today appointments or those already in lobby/consultation/done
+        return apptDate <= today || ['Arrived', 'Checked-in', 'Completed'].includes(a.status);
+      })
       .sort((a, b) => {
         const dateA = new Date(a.appointmentDate || a.date || 0);
         const dateB = new Date(b.appointmentDate || b.date || 0);
@@ -85,6 +89,29 @@ export default function PatientsView({ appointments = [], followups = [], consul
     const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
     const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
     
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+
+    // 1. Check for future booked appointments first (the next scheduled visit)
+    const futureAppt = appointments
+      .filter(a => {
+        const isPt = String(a.patientId || a.patient_id) === String(patientId);
+        if (!isPt) return false;
+        const apptDate = new Date(a.appointmentDate || a.date || 0);
+        return apptDate >= today && a.status === 'Scheduled'; // Only future or today's scheduled
+      })
+      .sort((a, b) => new Date(a.appointmentDate || a.date || 0) - new Date(b.appointmentDate || b.date || 0))[0];
+
+    if (futureAppt) {
+      return {
+        id: futureAppt.id, // Use appointment ID if it's a booked appointment
+        date: futureAppt.appointmentDate || futureAppt.date,
+        status: futureAppt.status,
+        notes: futureAppt.notes,
+        source: 'booked_appointment',
+        type: futureAppt.appointmentType
+      };
+    }
     if (latestCons) {
       const isDetox = latestCons.detox_recommended || latestCons.detoxRecommended;
       const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
@@ -92,7 +119,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
         return {
           id: rec.id,
           consultationId: latestCons.id || latestCons.consultationId,
-          date: rec.followupDate || rec.followup_date,
+          date: rec.followupDate || rec.followup_date, // This date could be in the past, but we'll filter it below
           status: rec.status || 'Pending',
           notes: rec.notes || '',
           source: 'receptionist',
@@ -102,7 +129,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
       
       if (latestCons.followup_date || latestCons.followupDate) {
         return {
-          id: null,
+          id: null, // No specific ID for doctor-recommended follow-up
           consultationId: latestCons.id || latestCons.consultationId,
           date: latestCons.followup_date || latestCons.followupDate,
           status: 'Pending',
@@ -113,10 +140,13 @@ export default function PatientsView({ appointments = [], followups = [], consul
       }
     }
     
-    // 2. Fallback to derived followups
+    // 3. Fallback to derived followups
     const fup = followups
-      .filter(f => String(f.patient_id) === String(patientId))
-      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
+      .filter(f => {
+        const fupDate = new Date(f.scheduled_date || f.date || 0);
+        return String(f.patient_id) === String(patientId) && f.status === 'Pending' && fupDate >= today;
+      })
+      .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
       
     if (fup) {
         return {
@@ -136,11 +166,14 @@ export default function PatientsView({ appointments = [], followups = [], consul
     if (selectedTab === 'all') return true;
     const tab = appointmentTabs.find(t => t.id === selectedTab);
     if (!tab) return true;
+
+    // For 'followup' tab, check if there's any pending follow-up
     if (tab.id === 'followup') {
       const info = getFollowupInfo(patient.id);
-      return info && info.status === 'Pending';
+      return info && (info.status === 'Scheduled' || info.status === 'Pending'); // Include scheduled future appointments
     }
-    return appointments.some(appt => String(appt.patientId || appt.patient_id) === String(patient.id) && appt.appointmentType === tab.type);
+    // For other clinical tabs (initial, detox, review), check the LATEST appointment type
+    return getLatestAppointmentType(patient.id) === tab.type;
   };
 
   // New Patient Form State

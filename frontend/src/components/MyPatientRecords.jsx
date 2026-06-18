@@ -31,6 +31,8 @@ export default function UnifiedPatientRecords({
   const [historyPage, setHistoryPage] = useState(1);
   const [historySubTab, setHistorySubTab] = useState('consultations');
   const [isSendingWA, setIsSendingWA] = useState(false);
+  const [showWhatsappConfirmModal, setShowWhatsappConfirmModal] = useState(false);
+  const [whatsappConsultationToSend, setWhatsappConsultationToSend] = useState(null);
   const historyItemsPerPage = 1;
 
   // New Patient Form State
@@ -127,28 +129,46 @@ export default function UnifiedPatientRecords({
   };
 
   const getLatestAppointment = (patientId) => {
-    // Check for pending follow-up first to show intended "Type"
-    const nextFollowup = getNextFollowup(patientId);
-    
-    // Find the latest booked appointment
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // Include everything through the end of today
+
+    // Find the most recent past or current appointment
     const sorted = appointments
-      .filter(a => String(a.patient_id || a.patientId) === String(patientId) && a.appointmentType)
+      .filter(a => {
+        const isPt = String(a.patient_id || a.patientId) === String(patientId);
+        if (!isPt || !a.appointmentType) return false;
+        
+        const apptDate = new Date(a.date || a.appointmentDate || 0);
+        // Include only past/today appointments or those already in lobby/consultation/done
+        return apptDate <= today || ['Arrived', 'Checked-in', 'Completed'].includes(a.status);
+      })
       .sort((a, b) => new Date(b.date || b.appointmentDate || 0) - new Date(a.date || a.appointmentDate || 0));
     
-    const latestAppt = sorted[0];
-
-    // If there's a pending follow-up that hasn't been booked yet, show its type
-    if (nextFollowup && (!latestAppt || new Date(nextFollowup.scheduled_date) >= new Date(latestAppt.date || latestAppt.appointmentDate))) {
-      return { 
-        appointmentType: nextFollowup.appointmentType,
-        date: nextFollowup.scheduled_date 
-      };
-    }
-
-    return latestAppt || null;
+    return sorted[0] || null;
   };
 
   const getNextFollowup = (patientId) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 1. Check for future booked appointments first (the next scheduled visit)
+    const futureAppt = appointments
+      .filter(a => {
+        const isPt = String(a.patient_id || a.patientId) === String(patientId);
+        if (!isPt) return false;
+        const apptDate = new Date(a.date || a.appointmentDate || 0);
+        return apptDate > today && a.status === 'Scheduled';
+      })
+      .sort((a, b) => new Date(a.date || a.appointmentDate || 0) - new Date(b.date || b.appointmentDate || 0))[0];
+
+    if (futureAppt) {
+      return {
+        scheduled_date: futureAppt.date || futureAppt.appointmentDate,
+        appointmentType: futureAppt.appointmentType
+      };
+    }
+
+    // 2. Otherwise check for pending follow-up recommendations
     const fromFollowups = followups
       .filter(f => String(f.patient_id) === String(patientId) && f.status === 'Pending')
       .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
@@ -160,9 +180,10 @@ export default function UnifiedPatientRecords({
       .sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
     
     const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
-    if (latestCons && (rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate)) {
+    const fDate = rec?.followupDate || rec?.followup_date || latestCons?.followup_date || latestCons?.followupDate;
+    if (latestCons && fDate && new Date(fDate) >= today) {
       return { 
-        scheduled_date: rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate,
+        scheduled_date: fDate,
         appointmentType: (latestCons.detox_recommended || latestCons.detoxRecommended) ? 'Detox' : 'Review'
       };
     }
@@ -177,7 +198,9 @@ export default function UnifiedPatientRecords({
     if (tab.id === 'followup') {
       return getNextFollowup(patient.id) !== null;
     }
-    return appointments.some(a => String(a.patient_id || a.patientId) === String(patient.id) && a.appointmentType === tab.type);
+    // FIX: Only check against the absolute latest appointment to avoid duplicates across tabs
+    const latestAppt = getLatestAppointment(patient.id);
+    return latestAppt && latestAppt.appointmentType === tab.type;
   };
 
   // Create a robust list of patients
@@ -300,26 +323,31 @@ export default function UnifiedPatientRecords({
     }));
   };
 
-  const handleSendToWhatsApp = async (record) => {
+  const confirmAndSendToWhatsApp = async () => {
+    if (!whatsappConsultationToSend) {
+      toast.error('No consultation selected to send.');
+      return;
+    }
     if (!selectedPatient?.phone) {
       toast.error('Patient has no phone number on record.');
       return;
     }
+    setShowWhatsappConfirmModal(false); // Close modal immediately
     setIsSendingWA(true);
     try {
-      const consData = { ...record, patient_name: selectedPatient.name };
+      const consData = { ...whatsappConsultationToSend, patient_name: selectedPatient.name };
       const { blob, fileName } = await buildConsultationPdfBlob(consData, null, ['Medical History', 'Detox Procedure']);
       const formData = new FormData();
       formData.append('file', blob, fileName);
-      if (record.id) {
-        await uploadConsultationPdf(record.id, formData);
+      if (whatsappConsultationToSend.id) {
+        await uploadConsultationPdf(whatsappConsultationToSend.id, formData);
         toast.success('Consultation PDF sent via WhatsApp successfully!');
       } else {
         toast.error('Consultation record ID not found.');
       }
     } catch (waError) {
       console.error('WhatsApp send error:', waError);
-      toast.error('Failed to send PDF via WhatsApp. Please try again.');
+      toast.error('Failed to send PDF via WhatsApp. Please try again. ' + (waError.message || ''));
     } finally {
       setIsSendingWA(false);
     }
@@ -356,6 +384,7 @@ export default function UnifiedPatientRecords({
   };
 
   return (
+    <>
     <div className="space-y-6">
       <style>{`
         .consultation-notes-content {
@@ -609,7 +638,7 @@ export default function UnifiedPatientRecords({
               <tbody className="divide-y divide-slate-100">
                 {paginatedPatients.map(pt => {
                   const latestAppointment = getLatestAppointment(pt.id);
-                  const nextFollowup = getNextFollowup(pt.id);
+                  const nextFollowup = getNextFollowup(pt.id); // This is correct for the follow-up column
                   return (
                     <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
                       <td className="py-4 px-4 align-top">
@@ -832,7 +861,10 @@ export default function UnifiedPatientRecords({
                       {historySubTab === 'consultations' && currentConsultation && (
                         <>
                           <button 
-                            onClick={() => handleSendToWhatsApp(currentConsultation)}
+                            onClick={() => {
+                              setWhatsappConsultationToSend(currentConsultation);
+                              setShowWhatsappConfirmModal(true);
+                            }}
                             disabled={isSendingWA}
                             className="bg-green-600 hover:bg-green-700 text-white hover:bg-green-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                           >
@@ -1120,5 +1152,46 @@ export default function UnifiedPatientRecords({
         </div>
       )}
     </div>
+
+    {/* WhatsApp Confirmation Modal */}
+    {showWhatsappConfirmModal && whatsappConsultationToSend && selectedPatient && (
+      <div className="fixed inset-0 z-50 overflow-y-auto" onClick={() => setShowWhatsappConfirmModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowWhatsappConfirmModal(false)}></div>
+        
+        <div className="flex min-h-full items-center justify-center p-4">
+          <div 
+            className="relative bg-white rounded-2xl shadow-xl max-w-md w-full modal-animate overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-5 h-5 text-white" />
+                <h2 className="text-lg font-bold text-white">Send via WhatsApp?</h2>
+              </div>
+              <button onClick={() => setShowWhatsappConfirmModal(false)} className="p-2 rounded-full hover:bg-white/10 transition text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-slate-700 text-sm">
+                Do you want to send the consultation PDF for <strong className="text-slate-900">{selectedPatient.name}</strong> to their WhatsApp number ({selectedPatient.phone})?
+              </p>
+             
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button onClick={() => setShowWhatsappConfirmModal(false)} className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
+                Cancel
+              </button>
+              <button onClick={confirmAndSendToWhatsApp} disabled={isSendingWA} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSendingWA ? 'Sending...' : 'Yes, Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
