@@ -75,7 +75,7 @@ export const addTemplateFooter = (doc) => {
   doc.text("We count our success in the smiles of suffering humanity", pageWidth / 2, pageHeight - 13, { align: 'center' });
 };
 
-const buildConsultationDoc = (data, specificTopic = null) => {
+const buildConsultationDoc = (data, specificTopic = null, omitTopics = []) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
@@ -88,7 +88,10 @@ const buildConsultationDoc = (data, specificTopic = null) => {
     { title: 'Home Care Guidelines', content: data.home_care ? data.home_care.toString().trim() : 'None' }
   ];
 
-  let topics = rawTopics.filter(t => t.content && t.content !== 'None' && t.content.trim() !== '');
+  const normalizedOmit = (omitTopics || []).map(t => String(t).toLowerCase());
+  const filteredTopics = rawTopics.filter(t => !normalizedOmit.includes(t.title.toLowerCase()));
+
+  let topics = filteredTopics.filter(t => t.content && t.content !== 'None' && t.content.trim() !== '');
 
   if (specificTopic) {
     topics = topics.filter(t => t.title === specificTopic);
@@ -151,13 +154,13 @@ const buildConsultationDoc = (data, specificTopic = null) => {
   return { doc, fileName };
 };
 
-export const generateConsultationPDF = (data, specificTopic = null) => {
-  const { doc, fileName } = buildConsultationDoc(data, specificTopic);
+export const generateConsultationPDF = (data, specificTopic = null, omitTopics = []) => {
+  const { doc, fileName } = buildConsultationDoc(data, specificTopic, omitTopics);
   doc.save(fileName);
 };
 
-export const buildConsultationPdfBlob = async (data, specificTopic = null) => {
-  const { doc, fileName } = buildConsultationDoc(data, specificTopic);
+export const buildConsultationPdfBlob = async (data, specificTopic = null, omitTopics = []) => {
+  const { doc, fileName } = buildConsultationDoc(data, specificTopic, omitTopics);
   const blob = doc.output('blob');
   return { blob, fileName };
 };

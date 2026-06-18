@@ -317,8 +317,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
       
       try {
-        // Build PDF blob and upload to backend to trigger WhatsApp send
-        const { blob, fileName } = await buildConsultationPdfBlob(newCons);
+        // Build PDF blob (omit sensitive sections for WhatsApp) and upload to backend to trigger WhatsApp send
+        const { blob, fileName } = await buildConsultationPdfBlob(newCons, null, ['Medical History', 'Detox Procedure']);
         const formData = new FormData();
         formData.append('file', blob, fileName);
         if (savedConsultation?.id) {
@@ -496,7 +496,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                   <>
                     {/* 1. Clinical Consultation Notes */}
                     <div className="p-5 space-y-4">
-                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes</h3>
+                      <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes </h3>
                       <div>
                         <div className="flex items-center justify-between gap-3 mb-2">
                           <label className="block text-xs font-semibold text-slate-600">Patient Medical History</label>
@@ -506,7 +506,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         </div>
                         <RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." />
                       </div>
-                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes  [Prescription]</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." /></div>
                       <div><label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label><RichTextEditor editorRef={detoxProcedureEditorRef} content={detoxProcedure} setContent={setDetoxProcedure} placeholder="Enter detox procedure notes..." /></div>
                     </div>
 
