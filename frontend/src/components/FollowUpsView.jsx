@@ -1,5 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { Search, CalendarDays, Clock, Activity, FileText, CheckCircle, X, PhoneCall, Filter, User } from 'lucide-react';
+import { 
+  Search, CalendarDays, Clock, Activity, FileText, CheckCircle, X, 
+  PhoneCall, Filter, User, Stethoscope, Edit2, Save, UserPlus, 
+  Mail, Lock, Shield, AlertCircle, Trash2, Power, UserCheck, 
+  Phone, ArrowLeft, Briefcase, Key, AlertTriangle, Eye, 
+  EyeOff, ChevronLeft, ChevronRight, FileSignature, Clipboard, 
+  Calendar, MessageSquare, PenTool, Check, Calendar as CalendarIcon,
+
+} from 'lucide-react';
 import { updateReceptionistFollowup, sendFollowupReminder } from '../api/consultationApi';
 import { toast } from 'react-toastify';
 
@@ -13,7 +21,14 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
   const [editNotes, setEditNotes] = useState('');
   const [editStatus, setEditStatus] = useState('Pending');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // View Modal State
+  const [viewingFup, setViewingFup] = useState(null);
   
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
@@ -21,17 +36,16 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
   const masterFollowUps = useMemo(() => {
     const list = [];
     
-    // Check all patients for follow-ups
     patients.forEach(pt => {
       let ptFollowup = null;
       
-      // Pre-calculate latest consultation for fallback/linking
       const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(pt.id));
       const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
 
-      // Check detox sessions for explicit follow-up (highest priority)
+      // Check detox sessions for explicit follow-up
       const ptDetoxSessions = detoxSessions ? detoxSessions.filter(ds => String(ds.patient_id || ds.patientId) === String(pt.id)) : [];
       const latestDetox = [...ptDetoxSessions].sort((a, b) => new Date(b.sessionDate || b.date || 0) - new Date(a.sessionDate || a.date || 0))[0];
+      
       if (latestDetox && (latestDetox.followupDate || latestDetox.followup_date)) {
         const detoxApptId = latestDetox.appointmentId || latestDetox.appointment_id;
         const detoxConsId = latestDetox.consultationId || latestDetox.consultation_id;
@@ -41,7 +55,6 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
         let detoxStatus = latestDetox.status || 'Pending';
         let detoxNotes = latestDetox.notes || latestDetox.followupRemarks || '';
         
-        // Try linking via appointment if direct consultationId is missing
         if (!linkedConsultationId && detoxApptId) {
           const consFromAppt = consultations.find(c => String(c.appointment_id || c.appointmentId) === String(detoxApptId));
           if (consFromAppt) {
@@ -49,62 +62,79 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           }
         }
         
-        // CRITICAL FALLBACK: If still no ID, use the patient's latest consultation
-        // This ensures the "Edit" button appears and status can be managed.
         if (!linkedConsultationId && latestCons) {
           linkedConsultationId = latestCons.id;
         }
 
-        // If a linked consultation is found, check its receptionistFollowup for status/notes
+        let receptionistData = null;
         if (linkedConsultationId) {
           const linkedConsObj = consultations.find(c => String(c.id) === String(linkedConsultationId));
           const rec = linkedConsObj?.receptionistFollowup || linkedConsObj?.receptionist_followup;
           if (rec && (rec.followupDate || rec.followup_date)) {
-            detoxDate = rec.followupDate || rec.followup_date; // Show edited date if available
-            detoxStatus = rec.status || detoxStatus; // Prioritize receptionist status
-            detoxNotes = rec.notes || rec.notes_text || detoxNotes;
+            receptionistData = {
+              date: rec.followupDate || rec.followup_date,
+              status: rec.status || detoxStatus,
+              notes: rec.notes || rec.notes_text || ''
+            };
           }
         }
+        
         ptFollowup = {
-          id: latestDetox.id || `detox-${latestDetox.id}`, // Keep original detox ID for uniqueness
-          consultationId: linkedConsultationId, // Use the derived consultation ID for editability
+          id: latestDetox.id || `detox-${latestDetox.id}`,
+          consultationId: linkedConsultationId,
           patient: pt,
-          date: detoxDate,
-          status: detoxStatus,
-          notes: detoxNotes,
+          doctorDate: detoxDate,
+          doctorNotes: detoxNotes,
+          doctorStatus: detoxStatus,
+          receptionistDate: receptionistData?.date || null,
+          receptionistNotes: receptionistData?.notes || null,
+          receptionistStatus: receptionistData?.status || null,
+          date: receptionistData?.date || detoxDate,
+          notes: receptionistData?.notes || detoxNotes,
+          status: receptionistData?.status || detoxStatus,
           type: 'Detox',
-          source: 'DetoxSession'
+          source: 'DetoxSession',
+          hasReceptionistData: !!receptionistData
         };
       }
 
       if (latestCons && !ptFollowup) {
         const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
+        let doctorDate = latestCons.followup_date || latestCons.followupDate;
+        let doctorNotes = latestCons.followup_remarks || latestCons.followupRemarks || '';
+        let doctorStatus = 'Pending';
+        
+        let receptionistData = null;
         if (rec && (rec.followupDate || rec.followup_date)) {
-          ptFollowup = {
-            id: rec.id || `rec-${latestCons.id}`,
-            consultationId: latestCons.id,
-            patient: pt,
+          receptionistData = {
             date: rec.followupDate || rec.followup_date,
             status: rec.status || 'Pending',
-            notes: rec.notes || rec.notes_text || '',
-            type: 'Review',
-            source: 'Receptionist/Doctor'
+            notes: rec.notes || rec.notes_text || ''
           };
-        } else if (latestCons.followup_date || latestCons.followupDate) {
+        }
+        
+        if (doctorDate || receptionistData) {
           ptFollowup = {
-            id: `doc-${latestCons.id}`,
+            id: rec?.id || `doc-${latestCons.id}`,
             consultationId: latestCons.id,
             patient: pt,
-            date: latestCons.followup_date || latestCons.followupDate,
-            status: 'Pending',
-            notes: latestCons.followup_remarks || latestCons.followupRemarks || '',
+            doctorDate: doctorDate || null,
+            doctorNotes: doctorNotes || '',
+            doctorStatus: doctorStatus,
+            receptionistDate: receptionistData?.date || null,
+            receptionistNotes: receptionistData?.notes || null,
+            receptionistStatus: receptionistData?.status || null,
+            date: receptionistData?.date || doctorDate,
+            notes: receptionistData?.notes || doctorNotes,
+            status: receptionistData?.status || doctorStatus,
             type: latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review',
-            source: 'Doctor'
+            source: 'Doctor',
+            hasReceptionistData: !!receptionistData
           };
         }
       }
       
-      // 2. Fallback to derived followups if no consultation followup
+      // Fallback to derived followups
       if (!ptFollowup) {
         const fup = followups
           .filter(f => String(f.patient_id) === String(pt.id))
@@ -115,29 +145,33 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             id: fup.id,
             consultationId: fup.id?.startsWith('FUP-C-') ? parseInt(fup.id.split('-')[2]) : (latestCons?.id || null),
             patient: pt,
+            doctorDate: fup.scheduled_date || fup.date,
+            doctorNotes: fup.notes || '',
+            doctorStatus: fup.status || 'Pending',
+            receptionistDate: null,
+            receptionistNotes: null,
+            receptionistStatus: null,
             date: fup.scheduled_date || fup.date,
-            status: fup.status || 'Pending',
             notes: fup.notes || '',
+            status: fup.status || 'Pending',
             type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review',
-            source: 'System'
+            source: 'System',
+            hasReceptionistData: false
           };
         }
       }
       
       if (ptFollowup) {
-        // Calculate the action date (3 days before scheduled date)
         const scheduledDateObj = new Date(ptFollowup.date);
         const actionDateObj = new Date(scheduledDateObj);
         actionDateObj.setDate(scheduledDateObj.getDate() - 3);
-        
         ptFollowup.actionDate = actionDateObj.toISOString().split('T')[0];
-        
         list.push(ptFollowup);
       }
     });
     
-    return list; // Do not filter here, let the UI handle showing/hiding the edit button
-  }, [patients, consultations, followups, detoxSessions, appointments]); // Add appointments to dependencies
+    return list;
+  }, [patients, consultations, followups, detoxSessions, appointments]);
 
   // Filter based on search and status
   const filteredList = masterFollowUps.filter(f => {
@@ -150,11 +184,22 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
     return matchesSearch && matchesStatus;
   });
 
-  // Calculate dashboard counts based on ACTION DATE (3 days before)
+  // Calculate dashboard counts
   const todayCount = filteredList.filter(f => f.actionDate === today).length;
   const tomorrowCount = filteredList.filter(f => f.actionDate === tomorrow).length;
   const detoxCount = filteredList.filter(f => f.type === 'Detox').length;
   const reviewCount = filteredList.filter(f => f.type === 'Review').length;
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredList.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedList = filteredList.slice(startIndex, startIndex + itemsPerPage);
+
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -165,7 +210,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             Follow-up Management
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Track and manage patient follow-ups, reviews, and detox schedules.
+            Track and manage patient follow-ups, next visit dates, and receptionist updates.
           </p>
         </div>
       </div>
@@ -254,27 +299,27 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
 
         {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[800px]">
+          <table className="w-full text-left text-sm border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold text-xs uppercase tracking-wider">
-                <th className="py-3 px-4">Call Patient On<br/><span className="text-[10px] text-slate-400 normal-case">(3 days before)</span></th>
-                <th className="py-3 px-4">Scheduled For</th>
-                <th className="py-3 px-4">Patient Info</th>
+                <th className="py-3 px-4">Call On</th>
+                <th className="py-3 px-4">Patient</th>
                 <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4">Notes / Remarks</th>
-                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Next Visit Date</th>
+                <th className="py-3 px-4">Follow-up Update</th>
+                <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredList.sort((a,b) => new Date(a.actionDate) - new Date(b.actionDate)).map(fup => {
+              {paginatedList.sort((a,b) => new Date(a.actionDate) - new Date(b.actionDate)).map(fup => {
                 const isToday = fup.actionDate === today;
                 const isTomorrow = fup.actionDate === tomorrow;
                 const isOverdue = fup.actionDate < today && fup.status === 'Pending';
                 
                 return (
                   <tr key={fup.id} className="hover:bg-slate-50 transition-colors align-top">
-                    <td className="py-4 px-4 whitespace-nowrap bg-slate-50/50">
+                    <td className="py-4 px-4 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className={`font-bold ${isOverdue ? 'text-rose-600' : isToday ? 'text-blue-600' : isTomorrow ? 'text-amber-600' : 'text-slate-800'}`}>
                           {new Date(fup.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
@@ -284,12 +329,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                         {isOverdue && <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider">Overdue</span>}
                       </div>
                     </td>
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      <span className="font-semibold text-slate-600">
-                        {new Date(fup.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 min-w-[200px]">
+                    <td className="py-4 px-4 min-w-[180px]">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
                           <User className="w-4 h-4 text-slate-500" />
@@ -308,12 +348,34 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                         {fup.type}
                       </span>
                     </td>
-                    <td className="py-4 px-4">
-                      <p className="text-slate-600 text-xs leading-relaxed max-w-xs break-words">
-                        {fup.notes || <span className="italic text-slate-400">No remarks provided.</span>}
-                      </p>
-                    </td>
                     <td className="py-4 px-4 whitespace-nowrap">
+                      {fup.doctorDate ? (
+                        <div className="flex items-center gap-1.5">
+                          <CalendarIcon className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="font-semibold text-emerald-700">
+                            {new Date(fup.doctorDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">Not set</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 max-w-[200px]">
+                      {fup.receptionistDate ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                             <CalendarIcon className="w-3.5 h-3.5 text-blue-500" />
+                            <span className="font-semibold text-blue-700">
+                              {new Date(fup.receptionistDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            </span>
+                          </div>
+                         
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">No update</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 whitespace-nowrap text-center">
                       <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                         fup.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' :
                         fup.status === 'Pending' ? 'bg-amber-100 text-amber-700' :
@@ -324,28 +386,40 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                       </span>
                     </td>
                     <td className="py-4 px-4 text-right whitespace-nowrap">
-                      {fup.consultationId ? (
-                        <button
-                          onClick={() => {
-                            setEditingFup(fup);
-                            setEditDate(fup.date);
-                            setEditNotes(fup.notes);
-                            setEditStatus(fup.status);
-                          }}
-                          className="bg-white text-slate-600 border border-slate-200 hover:border-emerald-300 hover:text-emerald-600 transition-colors font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 ml-auto shadow-sm"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> Edit
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">No Edit</span>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {fup.consultationId ? (
+                          <>
+                            <button
+                              onClick={() => setViewingFup(fup)}
+                              className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingFup(fup);
+                                setEditDate(fup.date);
+                                setEditNotes(fup.notes);
+                                setEditStatus(fup.status);
+                              }}
+                              className="p-2 text-emerald-500 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title="Edit Follow-up"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">No Edit</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
               })}
               {filteredList.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-slate-500">
+                  <td colSpan="7" className="py-12 text-center text-slate-500">
                     <div className="flex flex-col items-center">
                       <CalendarDays className="w-10 h-10 text-slate-300 mb-3" />
                       <p>No follow-ups found for the selected criteria.</p>
@@ -356,21 +430,196 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {filteredList.length > 0 && totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-6 px-6 pb-4">
+            <p className="text-sm text-slate-500">
+              Showing <span className="font-semibold text-slate-800">{startIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(startIndex + itemsPerPage, filteredList.length)}</span> of <span className="font-semibold text-slate-800">{filteredList.length}</span> follow-ups
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              
+              <div className="flex items-center">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => goToPage(pageNum)}
+                      className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${
+                        currentPage === pageNum 
+                          ? 'bg-emerald-600 text-white' 
+                          : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+     {viewingFup && (
+  <div
+    className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm flex items-start justify-center pt-12 z-50 animate-fadeIn"
+    onClick={() => setViewingFup(null)}
+  >
+    <div
+      className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200"
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Header - Simplified */}
+      <div className="pt-6 pb-4 px-6 flex items-center justify-between border-b border-slate-100">
+        <div>
+          <h3 className="text-base font-bold text-slate-800 leading-tight">{viewingFup.patient.name}</h3>
+          <p className="text-sm text-slate-500 font-medium mt-0.5">Follow-up Details</p>
+        </div>
+        <button
+          onClick={() => setViewingFup(null)}
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="px-6 pt-5 pb-6 space-y-4">
+
+        {/* Patient info row - simplified */}
+        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">{viewingFup.patient.name}</p>
+            <p className="text-sm text-slate-500 mt-1">{viewingFup.patient.phone?.replace(/\D/g, '').slice(-10) || 'No phone'}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded text-xs font-bold border ${viewingFup.type === 'Detox' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
+              {viewingFup.type}
+            </span>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ring-1 ${viewingFup.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : viewingFup.status === 'Pending' ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-rose-50 text-rose-700 ring-rose-200'}`}>
+              {viewingFup.status}
+            </span>
+          </div>
+        </div>
+
+        {/* Dates grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-100">
+            <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Doctor's Date</p>
+            {viewingFup.doctorDate ? (
+              <p className="text-base font-bold text-emerald-800">
+                {new Date(viewingFup.doctorDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-400 italic">Not set</p>
+            )}
+            {viewingFup.doctorNotes && (
+              <p className="text-sm text-slate-600 mt-3 leading-relaxed border-t border-emerald-100 pt-3">
+                {viewingFup.doctorNotes}
+              </p>
+            )}
+          </div>
+
+          <div className="p-4 bg-blue-50/70 rounded-xl border border-blue-100">
+            <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Reception Update</p>
+            {viewingFup.receptionistDate ? (
+              <p className="text-base font-bold text-blue-800">
+                {new Date(viewingFup.receptionistDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-400 italic">No update</p>
+            )}
+            {viewingFup.receptionistNotes && (
+              <p className="text-sm text-slate-600 mt-3 leading-relaxed border-t border-blue-100 pt-3">
+                {viewingFup.receptionistNotes}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Call action strip */}
+        <div className="flex items-center gap-3 p-4 bg-amber-50/70 rounded-xl border border-amber-100">
+          <CalendarDays className="w-5 h-5 text-amber-500 shrink-0" />
+          <div>
+            <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Call Patient On</p>
+            <p className="text-base font-bold text-amber-800 mt-0.5">
+              {new Date(viewingFup.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+        <button
+          onClick={() => setViewingFup(null)}
+          className="px-6 py-2.5 text-sm font-semibold text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* Edit Follow-up Modal */}
       {editingFup && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden text-left border border-slate-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200">
             <div className="p-4 flex justify-between items-start border-b border-slate-100">
               <div>
-                <h3 className="text-lg font-bold text-slate-800">Update Follow-up</h3>
+                <h3 className="text-lg font-bold text-slate-800">Edit Follow-up</h3>
                 <p className="text-sm font-medium text-slate-500 mt-0.5">{editingFup.patient.name}</p>
               </div>
-              <button onClick={() => setEditingFup(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50 transition-colors"> <X className="w-5 h-5"/> </button>
+              <button onClick={() => setEditingFup(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-md hover:bg-slate-50 transition-colors"> 
+                <X className="w-5 h-5"/> 
+              </button>
             </div>
             
             <div className="p-4 space-y-4">
+              {/* Doctor's Original Notes - Read Only */}
+              <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+                <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold uppercase tracking-wider mb-2">
+                  <Stethoscope className="w-4 h-4" /> Doctor's Original Notes
+                  
+                </div>
+                {editingFup.doctorDate && (
+                  <div className="text-sm font-semibold text-emerald-800 mt-1 flex items-center gap-1.5">
+                    <CalendarIcon className="w-4 h-4 text-emerald-500" />
+                    {new Date(editingFup.doctorDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </div>
+                )}
+                <p className="text-sm text-emerald-900 mt-2 leading-relaxed">
+                  {editingFup.doctorNotes || <span className="italic text-emerald-400 font-medium">No doctor notes</span>}
+                </p>
+              </div>
+
+              {/* Receptionist's Edit Fields */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>
                 <select 
@@ -407,53 +656,101 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             </div>
             
             <div className="p-4 bg-slate-50 flex justify-between items-center border-t border-slate-100">
-               {editingFup.consultationId ? (
-                 <button className="text-sm font-semibold text-rose-600 hover:text-rose-700 hover:underline transition-colors" onClick={async ()=>{
-                   try {
-                     setIsUpdating(true);
-                     await updateReceptionistFollowup(editingFup.consultationId, { followupDate: null, notes: null, status: 'Pending' });
-                     toast.success('Follow-up cleared');
-                     if (onRefresh) await onRefresh();
-                     setEditingFup(null);
-                   } catch (err) { toast.error('Failed to clear'); } finally { setIsUpdating(false); }
-                 }}>Remove</button>
-               ) : <div></div>}
-               
-               <div className="flex gap-2">
-                 <button className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm" onClick={()=>setEditingFup(null)}>Cancel</button>
-                 <button className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2" onClick={async ()=>{
-                    if (!editingFup.consultationId) { toast.error('No consultation available to attach follow-up'); return; }
+              {editingFup.consultationId ? (
+                <button 
+                  className="text-sm font-semibold text-rose-600 hover:text-rose-700 hover:underline transition-colors" 
+                  onClick={async ()=>{
                     try {
                       setIsUpdating(true);
                       await updateReceptionistFollowup(editingFup.consultationId, { 
-                        followupDate: editDate || null, 
-                        notes: editNotes || null, 
-                        status: editStatus || 'Pending' 
+                        followupDate: null, 
+                        notes: null, 
+                        status: 'Pending'
                       });
-
-                      // Only send WhatsApp template when there is an actual change
-                      // and the updated status is not 'Cancelled'
+                      toast.success('Follow-up cleared');
+                      if (onRefresh) await onRefresh();
+                      setEditingFup(null);
+                    } catch (err) { toast.error('Failed to clear'); } finally { setIsUpdating(false); }
+                  }}
+                >
+                  Remove
+                </button>
+              ) : <div></div>}
+              
+              <div className="flex gap-2">
+                <button 
+                  className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors shadow-sm" 
+                  onClick={()=>setEditingFup(null)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="px-4 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition-colors flex items-center gap-2" 
+                  onClick={async ()=>{
+                    if (!editingFup.consultationId) { 
+                      toast.error('No consultation available to attach follow-up'); 
+                      return; 
+                    }
+                    try {
+                      setIsUpdating(true);
+                      
                       const prevDate = editingFup.date ? new Date(editingFup.date).toISOString().split('T')[0] : null;
                       const newDate = editDate ? new Date(editDate).toISOString().split('T')[0] : null;
-                      const changed = prevDate !== newDate || (editingFup.status || '') !== (editStatus || '') || (editingFup.notes || '') !== (editNotes || '');
+                      const prevNotes = editingFup.notes || '';
+                      const prevStatus = editingFup.status || 'Pending';
+                      
+                      const notesUpdated = prevNotes !== (editNotes || '');
+                      const dateUpdated = prevDate !== newDate;
+                      
+                      await updateReceptionistFollowup(editingFup.consultationId, { 
+                        followupDate: editDate || null, 
+                        notes: editNotes || null, 
+                        status: editStatus || 'Pending'
+                      });
 
-                      if (changed && (editStatus || 'Pending') !== 'Cancelled') {
+                      const shouldSendReminder = 
+                        editStatus !== 'Cancelled' && 
+                        dateUpdated;
+
+                      if (shouldSendReminder) {
                         try {
                           await sendFollowupReminder(editingFup.consultationId);
-                          toast.success('Follow-up updated and WhatsApp reminder sent');
+                          toast.success('Follow-up date updated and WhatsApp reminder sent');
                         } catch (remErr) {
                           console.error('Failed to send followup reminder', remErr);
-                          toast.warning('Follow-up updated but failed to send WhatsApp reminder');
+                          toast.warning('Date updated but failed to send WhatsApp reminder');
                         }
                       } else {
-                        toast.success('Follow-up updated');
+                        if (editStatus === 'Cancelled') {
+                          toast.success('Follow-up cancelled successfully');
+                        } else if (notesUpdated && editStatus !== 'Cancelled') {
+                          toast.success('Notes updated successfully');
+                        } else if (dateUpdated && editStatus !== 'Cancelled') {
+                          toast.success('Follow-up date updated successfully');
+                        } else if (prevStatus !== editStatus) {
+                          toast.success('Follow-up status updated successfully');
+                        } else {
+                          toast.success('Follow-up updated successfully');
+                        }
                       }
 
                       if (onRefresh) await onRefresh();
                       setEditingFup(null);
-                    } catch (err) { toast.error('Failed to save'); } finally { setIsUpdating(false); }
-                  }}>{isUpdating ? <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : 'Save'}</button>
-               </div>
+                    } catch (err) { 
+                      toast.error('Failed to save: ' + err.message); 
+                    } finally { 
+                      setIsUpdating(false); 
+                    }
+                  }}
+                >
+                  {isUpdating ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div>
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         </div>
