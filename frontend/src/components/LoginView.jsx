@@ -25,31 +25,86 @@ export default function LoginView({ onLogin }) {
     setIsLoading(true);
     try {
       const response = await authApi.login({ username: trimmedUsername, pin });
+      
+      console.log('🔍 Full login response:', response);
+
+      // Extract user ID from response - try multiple possible locations
+      const userId = response?.id || 
+                     response?.user?.id || 
+                     response?.data?.id || 
+                     response?.data?.user?.id || 
+                     response?.userId || 
+                     null;
+
+      // Extract role from response
+      const userRole = response?.role || 
+                       response?.user?.role || 
+                       response?.data?.role || 
+                       response?.data?.user?.role || 
+                       'USER';
+
+      // Extract email from response
+      const userEmail = response?.email || 
+                        response?.user?.email || 
+                        response?.data?.email || 
+                        response?.data?.user?.email || 
+                        trimmedUsername;
+
+      // Extract name from response
+      const userName = response?.name || 
+                       response?.fullName || 
+                       response?.user?.name || 
+                       response?.user?.fullName || 
+                       response?.data?.name || 
+                       response?.data?.fullName || 
+                       response?.data?.user?.name || 
+                       response?.data?.user?.fullName || 
+                       userEmail;
+
+      console.log('✅ Extracted user info:', { userId, userRole, userEmail, userName });
 
       // Ensure the selected role in the UI matches the user's actual role in the database
-      if (selectedRole.toUpperCase() !== response.role) {
-        if (!(selectedRole === 'doctor' && response.role === 'THERAPIST')) {
+      if (selectedRole.toUpperCase() !== userRole) {
+        if (!(selectedRole === 'doctor' && userRole === 'THERAPIST')) {
           throw new Error(`Unauthorized: Your account does not have access to the ${selectedRole} workspace.`);
         }
       }
 
       // Save the token to local storage so the session persists on refresh
-      localStorage.setItem('access_token', response.access_token);
-      // Also store user info for consistent matching
-      localStorage.setItem('user_email', response.email);
-      localStorage.setItem('user_name', response.name || response.fullName || response.email);
-      localStorage.setItem('user_role', response.role.toLowerCase());
+      if (response.access_token) {
+        localStorage.setItem('access_token', response.access_token);
+      } else if (response.token) {
+        localStorage.setItem('access_token', response.token);
+      } else if (response.data?.access_token) {
+        localStorage.setItem('access_token', response.data.access_token);
+      } else {
+        throw new Error('No access token received from server');
+      }
+
+      // Store user info for consistent matching
+      localStorage.setItem('user_email', userEmail);
+      localStorage.setItem('user_display_name', userName);
+      localStorage.setItem('user_role', userRole.toLowerCase());
+      
+      // IMPORTANT: Store user ID in localStorage
+      if (userId) {
+        localStorage.setItem('user_id', userId);
+        console.log('✅ User ID stored in localStorage:', userId);
+      } else {
+        console.warn('⚠️ No user ID found in login response');
+      }
 
       // Pass the authenticated user data to the parent component
-      // Use email as the primary identifier for better matching
       onLogin({ 
-        role: response.role.toLowerCase(), 
-        username: response.email, // Use email as primary identifier
-        displayName: response.name || response.fullName || response.email,
-        email: response.email,
-        userId: response.id
+        role: userRole.toLowerCase(), 
+        username: userEmail, // Use email as primary identifier
+        displayName: userName,
+        email: userEmail,
+        userId: userId // Pass the extracted userId
       });
+      
     } catch (err) {
+      console.error('❌ Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setIsLoading(false);

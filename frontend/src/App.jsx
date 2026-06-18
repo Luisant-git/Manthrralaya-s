@@ -286,6 +286,8 @@ export default function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
+    const storedUserId = localStorage.getItem('user_id');
+    
     if (token) {
       try {
         const base64Url = token.split('.')[1];
@@ -296,20 +298,35 @@ export default function App() {
           throw new Error('Token expired');
         }
 
+        // Use stored user ID from localStorage first, fallback to JWT
+        let userId = storedUserId || null;
+        
+        // If no stored ID, try to get from JWT
+        if (!userId) {
+          userId = payload.sub || payload.userId || payload.id || null;
+          if (userId) {
+            localStorage.setItem('user_id', userId);
+          }
+        }
+
+        console.log('🔐 Session restored with user ID:', userId);
+
         setActiveRole(payload.role.toLowerCase());
         setCurrentUser(payload.email || payload.name);
-        setCurrentUserId(payload.sub || payload.userId);
+        setCurrentUserId(userId);
         setIsAuthenticated(true);
-
         setActiveTab('dashboard');
+        
       } catch (e) {
         console.error('Session restoration failed:', e.message);
         localStorage.removeItem('access_token');
+        localStorage.removeItem('user_id');
       } finally {
         setIsLoading(false);
       }
+    } else {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -319,14 +336,23 @@ export default function App() {
   }, [isAuthenticated]);
 
   const handleLogin = ({ role, username, displayName, email, userId }) => {
+    console.log('🔄 handleLogin called with userId:', userId);
+    
     setActiveRole(role);
     setCurrentUser(email || username);
-    setCurrentUserId(userId);
+    setCurrentUserId(userId || null);
     setIsAuthenticated(true);
     
     localStorage.setItem('user_email', email || username);
     localStorage.setItem('user_display_name', displayName || username);
     localStorage.setItem('user_role', role);
+    
+    if (userId) {
+      localStorage.setItem('user_id', userId);
+      console.log('✅ User ID stored in localStorage:', userId);
+    } else {
+      console.warn('⚠️ No userId provided to handleLogin');
+    }
     
     console.log('✅ User logged in:', { role, email: email || username, userId });
     
@@ -338,6 +364,7 @@ export default function App() {
     localStorage.removeItem('user_email');
     localStorage.removeItem('user_display_name');
     localStorage.removeItem('user_role');
+    localStorage.removeItem('user_id');
     setIsAuthenticated(false);
     setActiveRole('');
     setCurrentUser('');
@@ -645,13 +672,16 @@ export default function App() {
     return <LoginView onLogin={handleLogin} />;
   }
 
+  // Create currentUserObj with multiple fallbacks
   const currentUserObj = {
-    id: currentUserId,
-    email: currentUser,
-    username: currentUser,
-    fullName: currentUser,
-    role: activeRole.toUpperCase()
+    id: currentUserId || localStorage.getItem('user_id') || null,
+    email: currentUser || localStorage.getItem('user_email') || 'unknown',
+    username: currentUser || localStorage.getItem('user_email') || 'unknown',
+    fullName: localStorage.getItem('user_display_name') || currentUser || 'Staff Member',
+    role: (activeRole || localStorage.getItem('user_role') || 'USER').toUpperCase()
   };
+
+  console.log('📋 currentUserObj created:', currentUserObj);
 
   const renderTabContent = () => {
     switch (activeTab) {

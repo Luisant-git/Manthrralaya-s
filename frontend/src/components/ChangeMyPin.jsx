@@ -16,6 +16,27 @@ export default function ChangeMyPin({ currentUser, onLogout, onCancel }) {
         e.preventDefault();
         setResetFeedback({ error: '', success: false });
 
+        // Debug log
+        console.log('Current user in ChangeMyPin:', currentUser);
+        console.log('User ID:', currentUser?.id);
+
+        // Validate currentUser
+        if (!currentUser || !currentUser.id) {
+            return setResetFeedback({ 
+                error: 'User information missing. Please logout and login again.', 
+                success: false 
+            });
+        }
+
+        // Ensure userId is a number
+        const userId = Number(currentUser.id);
+        if (isNaN(userId) || userId <= 0) {
+            return setResetFeedback({ 
+                error: 'Invalid user ID. Please logout and login again.', 
+                success: false 
+            });
+        }
+
         if (newPin.length !== 4 || isNaN(newPin)) {
             return setResetFeedback({ error: 'PIN must be exactly 4 digits.', success: false });
         }
@@ -26,7 +47,7 @@ export default function ChangeMyPin({ currentUser, onLogout, onCancel }) {
 
         setIsReseting(true);
         try {
-            await userApi.resetPin(currentUser.id, newPin);
+            await userApi.resetPin(userId, newPin);
             setResetFeedback({ error: '', success: true });
             setNewPin('');
             setConfirmPin('');

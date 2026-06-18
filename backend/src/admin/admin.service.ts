@@ -339,34 +339,40 @@ async getUserById(id: number) {
     };
   }
 
-  // ========== RESET USER PIN ==========
-  async resetUserPin(userId: number, newPin: string, requestingUserRole: UserRole, requestingUserId: number) {
-    // Security: Only ADMINs can reset other users' PINs. Non-admins can only reset their own.
-    if (requestingUserRole !== UserRole.ADMIN && Number(requestingUserId) !== Number(userId)) {
-      throw new ForbiddenException('You are only authorized to reset your own security PIN.');
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId }
-    });
-
-    if (!user) throw new NotFoundException('User not found');
-    
-    // Block resetting OTHER admins, but allow self-reset
-    if (user.role === UserRole.ADMIN && Number(requestingUserId) !== Number(userId)) {
-        throw new ConflictException('Security Policy: You cannot reset another Administrator\'s PIN.');
-    }
-
-    const hashedPin = await bcrypt.hash(newPin, 10);
-
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { pin: hashedPin, isActive: true } // Auto-activate on PIN reset
-    });
-
-    return {
-      success: true,
-      message: `Access PIN for ${user.fullName} has been updated and account activated.`
-    };
+// ========== RESET USER PIN ==========
+async resetUserPin(userId: number, newPin: string, requestingUserRole: UserRole, requestingUserId: number) {
+  // Security: Only ADMINs can reset other users' PINs. Non-admins can only reset their own.
+  if (requestingUserRole !== UserRole.ADMIN && Number(requestingUserId) !== Number(userId)) {
+    throw new ForbiddenException('You are only authorized to reset your own security PIN.');
   }
+
+  // Make sure userId is a valid number
+  if (!userId || isNaN(Number(userId))) {
+    throw new BadRequestException('Invalid user ID provided');
+  }
+
+  const userIdNum = Number(userId);
+  const user = await this.prisma.user.findUnique({
+    where: { id: userIdNum }
+  });
+
+  if (!user) throw new NotFoundException('User not found');
+  
+  // Block resetting OTHER admins, but allow self-reset
+  if (user.role === UserRole.ADMIN && Number(requestingUserId) !== Number(userIdNum)) {
+      throw new ConflictException('Security Policy: You cannot reset another Administrator\'s PIN.');
+  }
+
+  const hashedPin = await bcrypt.hash(newPin, 10);
+
+  await this.prisma.user.update({
+    where: { id: userIdNum },
+    data: { pin: hashedPin, isActive: true }
+  });
+
+  return {
+    success: true,
+    message: `Access PIN for ${user.fullName} has been updated and account activated.`
+  };
+}
 }

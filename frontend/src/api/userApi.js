@@ -69,12 +69,35 @@ export const userApi = {
 
     // Reset staff PIN
     resetPin: async (userId, pin) => {
-        const response = await fetch(`${API_URL}/user/${userId}/pin`, {
+        // Validate userId
+        if (!userId) {
+            throw new Error('User ID is required to reset PIN');
+        }
+        
+        const id = Number(userId);
+        if (isNaN(id) || id <= 0) {
+            throw new Error('Invalid user ID provided');
+        }
+        
+        console.log(`🔄 Resetting PIN for user ID: ${id}`);
+        
+        const response = await fetch(`${API_URL}/user/${id}/pin`, {
             method: 'PATCH',
             headers: getAuthHeader(),
             body: JSON.stringify({ pin })
         });
-        if (!response.ok) throw new Error('Failed to reset PIN');
+        
+        if (!response.ok) {
+            let errorMessage = 'Failed to reset PIN';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.message || errorMessage;
+            } catch (e) {
+                const text = await response.text();
+                console.error('Error response:', text);
+            }
+            throw new Error(errorMessage);
+        }
         return response.json();
     },
 
