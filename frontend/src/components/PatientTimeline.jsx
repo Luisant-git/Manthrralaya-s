@@ -56,13 +56,9 @@ export default function PatientTimeline({
     const fRemarks = c.followup_remarks || c.followupRemarks;
     const docName = c.detox_doctor_name || c.detoxDoctorName || 'Assigned Provider';
 
-    const detoxDetail = isDetoxRec
-      ? `Detox assignment: ${c.detox_type || 'Recommended'} with ${docName}. Follow-up Remarks: ${fRemarks || 'No additional remarks.'}`
-      : 'No detox recommended';
-
-    const cNotes = cleanHtml(c.consultation_notes || c.consultationNotes);
-    const dNotes = cleanHtml(c.detox_procedure || c.detoxProcedureNotes);
-    const combinedNotes = [cNotes, dNotes].filter(Boolean).join(' | ').substring(0, 200);
+    const detoxDetail = isDetoxRec ?
+      `Detox assignment: ${c.detox_type || 'Recommended'} with ${docName}. Follow-up Remarks: ${fRemarks || 'No additional remarks.'}` :
+      'No detox recommended';
 
     timelineEvents.push({
       date: c.date || c.consultationDate?.split('T')[0] || 'Unknown Date', 
@@ -71,7 +67,7 @@ export default function PatientTimeline({
       title: 'Doctor Consultation',
       icon: Stethoscope, 
       color: 'bg-indigo-500',
-      description: `Clinical Notes: ${combinedNotes}${combinedNotes.length >= 200 ? '...' : ''}. ${detoxDetail}`
+      description: `Consultation details: ${detoxDetail}`
     });
   });
 
