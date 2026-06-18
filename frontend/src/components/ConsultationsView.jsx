@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download } from 'lucide-react';
+import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download, Phone, Mail } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAllDetoxSessions } from '../api/detoxSessionApi';
 import { generateConsultationPDF, generateDetoxPDF, generateSingleTopicPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
@@ -11,8 +11,12 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [historySubTab, setHistorySubTab] = useState('consultations');
   const [historyPage, setHistoryPage] = useState(1);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [historyAppended, setHistoryAppended] = useState(false);
   const [detoxSessions, setDetoxSessions] = useState([]);
+  const [lastSavedConsultation, setLastSavedConsultation] = useState(null);
+  const [savedActivePt, setSavedActivePt] = useState(null);
+  const [isSendingWA, setIsSendingWA] = useState(false);
   
   // Forms states
   const [consultationNotes, setConsultationNotes] = useState('');
@@ -243,7 +247,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const patientDetoxSessions = activePt ? detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(activePt.id)).sort((a, b) => new Date(b.sessionDate) - new Date(a.sessionDate)) : [];
   
   const latestHistory = patientConsultations[0] || null;
-  const historyPageSize = 3;
+  const historyPageSize = 1;
   
   // Pagination for consultations
   const totalConsultationPages = Math.max(1, Math.ceil(patientConsultations.length / historyPageSize));
@@ -316,23 +320,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
       
-      try {
-        // Build PDF blob (omit sensitive sections for WhatsApp) and upload to backend to trigger WhatsApp send
-        const { blob, fileName } = await buildConsultationPdfBlob(newCons, null, ['Medical History', 'Detox Procedure']);
-        const formData = new FormData();
-        formData.append('file', blob, fileName);
-        if (savedConsultation?.id) {
-          await uploadConsultationPdf(savedConsultation.id, formData);
-          toast.success('Consultation PDF sent via WhatsApp');
-        } else {
-          // Fallback: save locally
-          generateConsultationPDF(newCons);
-          toast.success('Consultation saved; PDF generated locally');
-        }
-      } catch (pdfError) {
-        console.error('PDF Generation/Upload error', pdfError);
-        toast.error('Failed to generate or send PDF, but consultation was saved.');
-      }
+      // Store the saved consultation data and patient info for optional WhatsApp sending
+      setLastSavedConsultation({ ...newCons, id: savedConsultation?.id });
+      setSavedActivePt({ ...activePt });
 
       if (diet.breakfast !== '') {
         onAddDietChart({
@@ -346,22 +336,69 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         });
       }
       
-      setSelectedApptId('');
-      setConsultationNotes('');
-      setMedicalHistory('');
-      setDetoxProcedure('');
-      setDietPlanNote('');
-      setHomeCare('');
-      setDiet({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
-      setDetoxRecommended(false);
-      setReviewRecommended(false);
-      setDetoxDoctorId('');
-      setDetoxFollowupDate(new Date().toISOString().split('T')[0]);
-      setDetoxFollowupRemarks('');
+      setIsSaved(true);
+      toast.success('Consultation saved successfully! You can now send it via WhatsApp or proceed to next patient.');
     } catch (error) {
       console.error('Error saving consultation:', error);
+      toast.error('Failed to save consultation.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSendToWhatsApp = async () => {
+    if (!lastSavedConsultation) {
+      toast.warn('Please save the consultation first before sending to WhatsApp.');
+      return;
+    }
+    const patientPhone = activePt?.phone || savedActivePt?.phone;
+    if (!patientPhone) {
+      toast.error('Patient has no phone number on record.');
+      return;
+    }
+
+    setIsSendingWA(true);
+    try {
+      const { blob, fileName } = await buildConsultationPdfBlob(lastSavedConsultation, null, ['Medical History', 'Detox Procedure']);
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+      if (lastSavedConsultation.id) {
+        await uploadConsultationPdf(lastSavedConsultation.id, formData);
+        toast.success('Consultation PDF sent via WhatsApp successfully!');
+      } else {
+        toast.error('Consultation record ID not found.');
+      }
+    } catch (waError) {
+      console.error('WhatsApp send error:', waError);
+      toast.error('Failed to send PDF via WhatsApp. Please try again.');
+    } finally {
+      setIsSendingWA(false);
+    }
+  };
+
+  const handleHistorySendToWhatsApp = async (record) => {
+    if (!activePt?.phone) {
+      toast.error('Patient has no phone number on record.');
+      return;
+    }
+
+    setIsSendingWA(true);
+    try {
+      const consData = { ...record, patient_name: activePt.name };
+      const { blob, fileName } = await buildConsultationPdfBlob(consData, null, ['Medical History', 'Detox Procedure']);
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+      if (record.id) {
+        await uploadConsultationPdf(record.id, formData);
+        toast.success('Consultation PDF sent via WhatsApp successfully!');
+      } else {
+        toast.error('Consultation record ID not found.');
+      }
+    } catch (waError) {
+      console.error('WhatsApp send error:', waError);
+      toast.error('Failed to send PDF via WhatsApp. Please try again.');
+    } finally {
+      setIsSendingWA(false);
     }
   };
 
@@ -518,7 +555,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     </div>
 
                     {/* 3. Detox Recommendation */}
-                    <div className="p-5 bg-emerald-50 border-y border-emerald-100">
+                    <div className={`p-5 border-y ${detoxRecommended ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-100'}`}>
                       <div className="flex items-center gap-3">
                         <input 
                           type="checkbox" 
@@ -558,7 +595,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
                     {/* 4. Review Recommendation (Conditional) */}
                     {!detoxRecommended && (
-                      <div className="p-5 bg-amber-50 border-b border-amber-100">
+                      <div className={`p-5 border-b ${reviewRecommended ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
                         <div className="flex items-center gap-3">
                           <input 
                             type="checkbox" 
@@ -589,8 +626,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       </div>
                     )}
 
-                    {/* Save Button */}
-                    <div className="p-5 bg-slate-50 flex justify-end gap-3">
+                    {/* Save & WhatsApp Actions */}
+                    <div className="p-5 bg-slate-50 flex flex-wrap justify-end gap-3">
                       <button 
                         type="button"
                         onClick={() => {
@@ -611,6 +648,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       >
                         <Download className="w-4 h-4 text-emerald-600" /> Export Draft PDF
                       </button>
+                     
                       <button onClick={handleCompleteConsultation} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSaving ? (<><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Saving...</>) : (<><Save className="w-4 h-4" /> Save & Finalize Consultation</>)}
                       </button>
@@ -618,7 +656,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                   </>
                 ) : (
                   <div className="p-5 space-y-4">
-                    <h3 className="text-lg font-bold text-slate-800">{activePt.name} - Patient History</h3>
+                    {/* Patient History Header - Styled like MyPatientRecords modal */}
                     
                     {/* History Sub Tabs */}
                     <div className="flex flex-wrap gap-3 border-b border-slate-200 pb-3">
@@ -648,31 +686,48 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       </button>
                     </div>
 
-                 {/* Consultation History - Show ALL Notes in Grid Layout */}
+                    {/* Consultation History - Show ALL Notes in Grid Layout */}
 {historySubTab === 'consultations' && (
   <div className="space-y-4">
     {pagedConsultations.length > 0 ? (
-      pagedConsultations.map(record => (
-        <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-          {/* Header */}
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-            <div>
-              <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
-              <h4 className="text-xl font-bold text-slate-900 mt-1">{activePt.name}</h4>
-              <div className="text-sm text-slate-600">Patient ID: P-{activePt.id}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                Provider: {record.doctor_name || 'Assigned Provider'}
+      pagedConsultations.map(record => ( 
+        <div key={record.id} className="rounded-3xl border border-slate-200 bg-[#F8FAFC] p-5 shadow-sm">
+          {/* Patient and Provider Details Header - Styled like MyPatientRecords */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-emerald-50 p-5 rounded-2xl border border-emerald-100 mb-6">
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <User className="w-3 h-3" /> Patient Details
+              </h4>
+              <div className="text-lg font-bold text-slate-900 leading-none">{activePt.name}</div>
+              <div className="text-sm font-semibold text-emerald-700">ID: P-{activePt.id}</div>
+              <div className="text-xs text-slate-600 font-medium">Age: {activePt.age || '--'} • Gender: {activePt.gender || '--'}</div>
+              <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-1">
+                <Phone className="w-3 h-3 text-emerald-600" /> {activePt.phone || 'No phone'}
               </div>
-              <button 
-                type="button"
-                onClick={() => generateConsultationPDF({ ...record, patient_name: activePt.name })}
-                className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
-                title="Download Full PDF Report"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+            </div>
+            <div className="flex flex-col md:items-end justify-between md:border-l md:border-emerald-100 md:pl-6">
+              <div className="w-full">
+                <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2 md:justify-end">
+                  <Stethoscope className="w-3 h-3" /> Provider Details
+                </h4>
+                <div className="text-base font-bold text-slate-800 md:text-right">Dr. {record.doctor_name || 'Assigned Provider'}</div>
+                <div className="flex md:justify-end">
+                  <div className="text-sm font-bold text-slate-600 bg-white inline-block px-3 py-1 rounded-lg border border-emerald-100 mt-1">
+                    Consultation: {record.date}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-4 md:mt-0">
+               
+                <button 
+                  type="button"
+                  onClick={() => generateConsultationPDF({ ...record, patient_name: activePt.name })}
+                  className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
+                  title="Download Full PDF Report"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -778,7 +833,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
                                 <Calendar className="w-3 h-3" /> Recommendation
               </div>
-                              <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended ? 'bg-white border-slate-200' : 'bg-amber-50/50 border-amber-100'}`}>
+                              <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50/50 border-amber-100'}`}>
                                 {record.detox_recommended ? (
                                   <div className="space-y-2">
                                     <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
@@ -826,7 +881,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     {patientConsultations.length > 0 && totalConsultationPages > 1 && (
       <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="text-sm text-slate-500">
-          Showing {Math.min(patientConsultations.length, historyPageSize)} of {patientConsultations.length} records
+          Record <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalConsultationPages}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -840,9 +895,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           >
             ← Previous
           </button>
-          <span className="text-sm font-medium text-slate-600">
-            Page {historyPage} of {totalConsultationPages}
-          </span>
           <button
             onClick={() => setHistoryPage(prev => Math.min(totalConsultationPages, prev + 1))}
             disabled={historyPage >= totalConsultationPages}
@@ -864,31 +916,37 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     {historySubTab === 'detox' && (
                       <div className="space-y-4">
                         {pagedDetoxSessions.length > 0 ? (
-                          pagedDetoxSessions.map(session => (
-                            <div key={session.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-                                <div>
-                                  <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold flex items-center gap-2">
-                                    <Calendar className="w-3 h-3" />
-                                    {new Date(session.sessionDate).toLocaleDateString('en-CA')}
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                    <h4 className="text-xl font-bold text-slate-900">Detox Session</h4>
-                                    <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-semibold flex items-center gap-1">
-                                      {getSessionTypeIcon(session.sessionType)}
-                                      {getSessionTypeDisplay(session.sessionType)}
-                                    </span>
-                                  </div>
-                                  <div className="text-sm text-slate-600 mt-1">Patient: {activePt.name} • ID: {activePt.id}</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                                    Provider: {session.doctor?.user?.fullName || session.doctorName || 'Assigned Provider'}
+                          pagedDetoxSessions.map(session => ( 
+        <div key={session.id} className="rounded-3xl border border-slate-200 bg-[#F8FAFC] p-5 shadow-sm">
+          {/* Patient and Provider Details Header - Styled like MyPatientRecords */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-emerald-50 p-5 rounded-2xl border border-emerald-100 mb-6">
+            <div className="space-y-1">
+              <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2">
+                <User className="w-3 h-3" /> Patient Details
+              </h4>
+              <div className="text-lg font-bold text-slate-900 leading-none">{activePt.name}</div>
+              <div className="text-sm font-semibold text-emerald-700">ID: P-{activePt.id}</div>
+              <div className="text-xs text-slate-600 font-medium">Age: {activePt.age || '--'} • Gender: {activePt.gender || '--'}</div>
+              <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-1">
+                <Phone className="w-3 h-3 text-emerald-600" /> {activePt.phone || 'No phone'}
+              </div>
+            </div>
+            <div className="flex flex-col md:items-end justify-between md:border-l md:border-emerald-100 md:pl-6">
+              <div className="w-full">
+                <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2 md:justify-end">
+                  <Stethoscope className="w-3 h-3" /> Provider Details
+                </h4>
+                <div className="text-base font-bold text-slate-800 md:text-right">Dr. {session.doctor?.user?.fullName || session.doctorName || 'Assigned Provider'}</div>
+                <div className="flex md:justify-end">
+                  <div className="text-sm font-bold text-slate-600 bg-white inline-block px-3 py-1 rounded-lg border border-emerald-100 mt-1">
+                    Session Date: {new Date(session.sessionDate).toLocaleDateString('en-CA')}
+                  </div>
+                </div>
                                   </div>
                                   <button 
                                     type="button"
                                     onClick={() => generateDetoxPDF({ ...session, patient_name: activePt.name })}
-                                    className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
+                className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105 mt-4 md:mt-0"
                                     title="Download Full PDF Report"
                                   >
                                     <Download className="w-4 h-4" />
@@ -929,7 +987,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                           ))
                         ) : (
                           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-                            <Droplets className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                            <Droplets className="w-10 h-10 mx-auto text-slate-300 mb-2" /> 
                             No detox session history found for this patient.
                             <div className="text-sm mt-1">Complete a detox session to see it here.</div>
                           </div>
@@ -937,10 +995,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         
                         {patientDetoxSessions.length > 0 && totalDetoxPages > 1 && (
                           <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="text-sm text-slate-500">Showing {Math.min(patientDetoxSessions.length, historyPageSize)} of {patientDetoxSessions.length} records</div>
+                            <div className="text-sm text-slate-500">Record <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalDetoxPages}</span></div>
                             <div className="flex items-center gap-2">
                               <button onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))} disabled={historyPage <= 1} className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage <= 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}>← Previous</button>
-                              <span className="text-sm font-medium text-slate-600">Page {historyPage} of {totalDetoxPages}</span>
                               <button onClick={() => setHistoryPage(prev => Math.min(totalDetoxPages, prev + 1))} disabled={historyPage >= totalDetoxPages} className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage >= totalDetoxPages ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}>Next →</button>
                             </div>
                           </div>
@@ -949,6 +1006,50 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                     )}
                   </div>
                 )}
+              </div>
+            ) : isSaved && lastSavedConsultation && savedActivePt ? (
+              <div className="divide-y divide-slate-100">
+                {/* Saved Consultation Summary Header */}
+                <div className="p-5 bg-emerald-50 flex justify-between items-center border-b border-emerald-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">{savedActivePt.name}</h2>
+                    <span className="text-sm text-slate-500">ID: P-{savedActivePt.id} • Phone: {savedActivePt.phone?.replace(/\D/g, '').slice(-10)}</span>
+                  </div>
+                  <div className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-sm font-bold shadow-sm">✓ Consultation Saved</div>
+                </div>
+
+                {/* WhatsApp Action Card */}
+                <div className="p-8 flex flex-col items-center justify-center gap-4 min-h-[300px]">
+                  <div className="bg-green-50 p-6 rounded-full">
+                    <MessageSquare className="w-12 h-12 text-green-600" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-lg font-bold text-slate-800">Consultation Saved Successfully</h3>
+                    <p className="text-sm text-slate-500 mt-1">Send the PDF to the patient's WhatsApp or select a new patient.</p>
+                  </div>
+                  <div className="flex gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleSendToWhatsApp}
+                      disabled={isSendingWA}
+                      className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-base flex items-center gap-2 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSendingWA ? (
+                        <><div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>Sending...</>
+                      ) : (
+                        <><MessageSquare className="w-5 h-5" /> Send to WhatsApp</>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => generateConsultationPDF(lastSavedConsultation)}
+                      className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold py-3 px-8 rounded-lg text-base flex items-center gap-2 transition-colors shadow-sm"
+                    >
+                      <Download className="w-5 h-5" /> Download PDF
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-2">Patient: {savedActivePt.name} | Phone: {savedActivePt.phone || 'No phone'}</p>
+                </div>
               </div>
             ) : (
               <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-slate-400 space-y-3">

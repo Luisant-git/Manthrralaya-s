@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock, Droplets, Download } from 'lucide-react';
+import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList, Eye, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, UserPlus, Plus, Clock, Droplets, Download, MessageSquare } from 'lucide-react';
 import { Sun, Moon, SunMoon } from 'lucide-react';
-import { generateConsultationPDF, generateDetoxPDF } from '../utils/pdfGenerator';
+import { toast } from 'react-toastify';
+import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
+import { uploadConsultationPdf } from '../api/consultationApi';
 
 export default function UnifiedPatientRecords({
   patients = [],
@@ -28,6 +30,7 @@ export default function UnifiedPatientRecords({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [historyPage, setHistoryPage] = useState(1);
   const [historySubTab, setHistorySubTab] = useState('consultations');
+  const [isSendingWA, setIsSendingWA] = useState(false);
   const historyItemsPerPage = 1;
 
   // New Patient Form State
@@ -295,6 +298,31 @@ export default function UnifiedPatientRecords({
       phoneAsWhatsapp: checked,
       whatsapp: checked ? prev.phone : ''
     }));
+  };
+
+  const handleSendToWhatsApp = async (record) => {
+    if (!selectedPatient?.phone) {
+      toast.error('Patient has no phone number on record.');
+      return;
+    }
+    setIsSendingWA(true);
+    try {
+      const consData = { ...record, patient_name: selectedPatient.name };
+      const { blob, fileName } = await buildConsultationPdfBlob(consData, null, ['Medical History', 'Detox Procedure']);
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+      if (record.id) {
+        await uploadConsultationPdf(record.id, formData);
+        toast.success('Consultation PDF sent via WhatsApp successfully!');
+      } else {
+        toast.error('Consultation record ID not found.');
+      }
+    } catch (waError) {
+      console.error('WhatsApp send error:', waError);
+      toast.error('Failed to send PDF via WhatsApp. Please try again.');
+    } finally {
+      setIsSendingWA(false);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -802,12 +830,21 @@ export default function UnifiedPatientRecords({
                     </div>
                     <div className="flex items-center gap-3">
                       {historySubTab === 'consultations' && currentConsultation && (
-                        <button 
-                          onClick={() => generateConsultationPDF(currentConsultation, selectedPatient)}
-                          className="bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Download className="w-3.5 h-3.5" /> Full PDF
-                        </button>
+                        <>
+                          <button 
+                            onClick={() => handleSendToWhatsApp(currentConsultation)}
+                            disabled={isSendingWA}
+                            className="bg-green-600 hover:bg-green-700 text-white hover:bg-green-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
+                          </button>
+                          <button 
+                            onClick={() => generateConsultationPDF(currentConsultation, selectedPatient)}
+                            className="bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Full PDF
+                          </button>
+                        </>
                       )}
                       {historySubTab === 'detox' && currentDetoxSession && (
                         <button 
