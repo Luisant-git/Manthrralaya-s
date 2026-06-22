@@ -133,6 +133,31 @@ export default function UnifiedPatientRecords({
     return record.followupDate || record.followup_date || null;
   };
 
+  const getCompletedDetoxSessionCount = (patientId) => {
+    return (detoxSessions || [])
+      .filter(d => String(d.patientId || d.patient_id) === String(patientId))
+      .filter(ds => {
+        const status = String(ds.status || '').toLowerCase();
+        return ['completed', 'done', 'finished'].includes(status);
+      }).length;
+  };
+
+  const getLatestConsultation = (patientId) => {
+    const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
+    return [...ptCons].sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0] || null;
+  };
+
+  const getLatestClinicalType = (patientId) => {
+    if (getCompletedDetoxSessionCount(patientId) >= 3) return 'Review';
+    const followup = getNextFollowup(patientId);
+    if (followup?.appointmentType) return followup.appointmentType;
+    const latestAppt = getLatestAppointment(patientId);
+    if (latestAppt?.appointmentType && latestAppt.appointmentType !== 'No Record') return latestAppt.appointmentType;
+    const latestCons = getLatestConsultation(patientId);
+    if (!latestCons) return null;
+    return latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review';
+  };
+
   const getLatestAppointment = (patientId) => {
     const today = new Date();
     today.setHours(23, 59, 59, 999); // Include everything through the end of today
@@ -244,9 +269,12 @@ export default function UnifiedPatientRecords({
     if (tab.id === 'followup') {
       return getNextFollowup(patient.id) !== null;
     }
-    // FIX: Only check against the absolute latest appointment to avoid duplicates across tabs
-    const latestAppt = getLatestAppointment(patient.id);
-    return latestAppt && latestAppt.appointmentType === tab.type;
+    if (tab.id === 'consultation') {
+      const latestAppt = getLatestAppointment(patient.id);
+      return latestAppt?.appointmentType === tab.type;
+    }
+    const clinicalType = getLatestClinicalType(patient.id);
+    return clinicalType === tab.type;
   };
 
   // Create a robust list of patients

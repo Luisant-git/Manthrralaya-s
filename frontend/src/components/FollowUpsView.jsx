@@ -37,6 +37,43 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
   const today = new Date().toISOString().split('T')[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
+  const getDateValue = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const chooseLaterFollowup = (first, second) => {
+    if (!first) return second;
+    if (!second) return first;
+    const firstDate = getDateValue(first.doctorDate || first.date);
+    const secondDate = getDateValue(second.doctorDate || second.date);
+    if (!firstDate) return second;
+    if (!secondDate) return first;
+    return secondDate.getTime() >= firstDate.getTime() ? second : first;
+  };
+
+  const getLatestConsultationWithFollowupForPatient = (patientId) => {
+    const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
+    const followupCons = ptCons.filter(c => {
+      const rec = c.receptionistFollowup || c.receptionist_followup;
+      const followupDate = rec?.followupDate || rec?.followup_date || c.followup_date || c.followupDate;
+      return Boolean(followupDate);
+    });
+
+    const getConsultationFollowupDate = (consultation) => {
+      if (!consultation) return null;
+      const rec = consultation.receptionistFollowup || consultation.receptionist_followup;
+      return rec?.followupDate || rec?.followup_date || consultation.followup_date || consultation.followupDate || null;
+    };
+
+    return [...followupCons].sort((a, b) => {
+      const dateA = new Date(getConsultationFollowupDate(a) || 0).getTime();
+      const dateB = new Date(getConsultationFollowupDate(b) || 0).getTime();
+      return dateB - dateA;
+    })[0] || null;
+  };
+
   // Derive a master list of all follow-ups
   const masterFollowUps = useMemo(() => {
     const list = [];
@@ -45,7 +82,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
       let ptFollowup = null;
       
       const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(pt.id));
-      const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+      const latestCons = getLatestConsultationWithFollowupForPatient(pt.id) || [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
 
       // Check detox sessions for explicit follow-up
       const ptDetoxSessions = detoxSessions ? detoxSessions.filter(ds => String(ds.patient_id || ds.patientId) === String(pt.id)) : [];
@@ -55,8 +92,16 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
       }).length;
       const hasAtLeastThreeDetoxSessions = ptDetoxSessions.length >= 3;
       const hasCompletedThreeDetox = completedDetoxSessions >= 3 || hasAtLeastThreeDetoxSessions;
-      const latestDetox = [...ptDetoxSessions].sort((a, b) => new Date(b.sessionDate || b.date || 0) - new Date(a.sessionDate || a.date || 0))[0];
+      const latestDetox = [...ptDetoxSessions].sort((a, b) => {
+        const aFollowup = getDateValue(a.followupDate || a.followup_date);
+        const bFollowup = getDateValue(b.followupDate || b.followup_date);
+        if (aFollowup && bFollowup) return bFollowup - aFollowup;
+        if (aFollowup) return -1;
+        if (bFollowup) return 1;
+        return getDateValue(b.sessionDate || b.date) - getDateValue(a.sessionDate || a.date);
+      })[0];
       
+      let detoxFollowup = null;
       if (latestDetox && (latestDetox.followupDate || latestDetox.followup_date)) {
         const detoxApptId = latestDetox.appointmentId || latestDetox.appointment_id;
         const detoxConsId = latestDetox.consultationId || latestDetox.consultation_id;
@@ -90,7 +135,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           }
         }
         
-        ptFollowup = {
+        detoxFollowup = {
           id: latestDetox.id || `detox-${latestDetox.id}`,
           consultationId: linkedConsultationId,
           patient: pt,
@@ -109,7 +154,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
         };
       }
 
-      if (latestCons && !ptFollowup) {
+      let consultationFollowup = null;
+      if (latestCons) {
         const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
         let doctorDate = latestCons.followup_date || latestCons.followupDate;
         let doctorNotes = latestCons.followup_remarks || latestCons.followupRemarks || '';
@@ -125,7 +171,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
         }
         
         if (doctorDate || receptionistData) {
-          ptFollowup = {
+          consultationFollowup = {
             id: rec?.id || `doc-${latestCons.id}`,
             consultationId: latestCons.id,
             patient: pt,
@@ -144,6 +190,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           };
         }
       }
+
+      ptFollowup = chooseLaterFollowup(detoxFollowup, consultationFollowup);
       
       // Fallback to derived followups
       if (!ptFollowup) {

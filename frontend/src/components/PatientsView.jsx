@@ -89,6 +89,31 @@ export default function PatientsView({ appointments = [], followups = [], consul
     return record.followupDate || record.followup_date || null;
   };
 
+  const getCompletedDetoxSessionCount = (patientId) => {
+    return (detoxSessions || [])
+      .filter(d => String(d.patientId || d.patient_id) === String(patientId))
+      .filter(ds => {
+        const status = String(ds.status || '').toLowerCase();
+        return ['completed', 'done', 'finished'].includes(status);
+      }).length;
+  };
+
+  const getLatestConsultation = (patientId) => {
+    const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
+    return [...ptCons].sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0] || null;
+  };
+
+  const getLatestClinicalType = (patientId) => {
+    if (getCompletedDetoxSessionCount(patientId) >= 3) return 'Review';
+    const followup = getFollowupInfo(patientId);
+    if (followup?.type) return followup.type;
+    const latestApptType = getLatestAppointmentType(patientId);
+    if (latestApptType && latestApptType !== 'No Record') return latestApptType;
+    const latestCons = getLatestConsultation(patientId);
+    if (!latestCons) return null;
+    return latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review';
+  };
+
   const getFollowupInfo = (patientId) => {
     const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
     const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
@@ -216,8 +241,13 @@ export default function PatientsView({ appointments = [], followups = [], consul
       const info = getFollowupInfo(patient.id);
       return info && (info.status === 'Scheduled' || info.status === 'Pending'); // Include scheduled future appointments
     }
-    // For other clinical tabs (initial, detox, review), check the LATEST appointment type
-    return getLatestAppointmentType(patient.id) === tab.type;
+    if (tab.id === 'consultation') {
+      return getLatestAppointmentType(patient.id) === tab.type;
+    }
+
+    // For Detox and Review tabs, include the clinical classification derived from follow-up, consultation, and detox history
+    const clinicalType = getLatestClinicalType(patient.id);
+    return clinicalType === tab.type;
   };
 
   // New Patient Form State
@@ -586,7 +616,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
                 {/* MOBILE/TABLET CARD VIEW (Visible below xl screens) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 xl:hidden bg-slate-50">
                   {filteredPatients.map(pt => {
-                    const type = getLatestAppointmentType(pt.id);
+                    const type = getLatestClinicalType(pt.id) || getLatestAppointmentType(pt.id);
                     return (
                       <div key={pt.id} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:border-emerald-200 hover:shadow-md transition-all">
                         <div className="flex justify-between items-start gap-2">
@@ -652,7 +682,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredPatients.map(pt => {
-                        const type = getLatestAppointmentType(pt.id);
+                        const type = getLatestClinicalType(pt.id) || getLatestAppointmentType(pt.id);
                         return (
                           <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
                             <td className="py-3 px-4 font-mono font-medium text-emerald-600">P-{pt.id}</td>
