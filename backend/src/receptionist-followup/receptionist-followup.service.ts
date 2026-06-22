@@ -6,6 +6,12 @@ import { sendWhatsappTemplateMessage } from 'src/common/whatsapp.util';
 export class ReceptionistFollowupService {
   constructor(private prisma: PrismaService) {}
 
+  private getOrdinal(n: number): string {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+  }
+
   async findOneByConsultation(consultationId: number) {
     if (!consultationId) return null;
     const rec = await this.prisma.receptionistFollowup.findUnique({
@@ -57,7 +63,12 @@ export class ReceptionistFollowupService {
 
     const consultation = await this.prisma.consultation.findUnique({
       where: { id: consultationId },
-      include: { patient: true, doctor: { include: { user: true } }, appointment: true }
+      include: { 
+        patient: true, 
+        doctor: { include: { user: true } }, 
+        appointment: true,
+        detoxSessions: true
+      }
     });
 
     if (!consultation) throw new NotFoundException('Consultation not found');
@@ -68,17 +79,20 @@ export class ReceptionistFollowupService {
     const doctorName = consultation.doctor?.user?.fullName || 'Assigned Doctor';
 
     const date = followup.followupDate || consultation.followupDate;
-    const dateStr = date ? new Date(date).toLocaleDateString('en-GB') : '';
+    const dateObj = date ? new Date(date) : null;
+    const dateStr = dateObj
+      ? `${dateObj.getDate()}${this.getOrdinal(dateObj.getDate())} ${dateObj.toLocaleString('en-GB', { month: 'long' })} ${dateObj.getFullYear()}`
+      : '';
 
-    // Prefer appointment.session if available, else default to 'AN'
-    const session = consultation.appointment?.session || 'AN';
+    // Follow-up type based on doctor's recommendation in consultation
+    const appointmentType = consultation.detoxRecommended ? 'Detox' : 'Review';
 
-    const params = [patient.name || 'Patient', dateStr, session, doctorName];
+    const params = [patient.name || 'Patient', appointmentType, dateStr];
 
     // Send template
     return await sendWhatsappTemplateMessage(
       patient.whatsapp || patient.phone,
-      'manthrayala_followup_reminder',
+      'followup_review_reminder_template',
       params,
       'en'
     );
