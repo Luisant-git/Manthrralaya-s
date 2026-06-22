@@ -119,6 +119,17 @@ export default function ReceptionistView({
     return isNaN(dateObj.getTime()) ? 0 : dateObj.getTime();
   };
 
+  const hasCompletedThreeDetoxSessions = (patientId) => {
+    if (!patientId) return false;
+    const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+    return ptDetox.length >= 3;
+  };
+
+  const getFinalAppointmentType = (patientId, rawType) => {
+    if (hasCompletedThreeDetoxSessions(patientId)) return 'Review';
+    return rawType || 'Review';
+  };
+
  const buildPrefilledPatientForm = (patient, prev) => {
   // Get patient's appointments (nested in patient object)
   const patientAppointments = Array.isArray(patient.appointments) ? [...patient.appointments] : [];
@@ -180,7 +191,7 @@ export default function ReceptionistView({
     if (formattedDate) {
       newState.date = formattedDate;
       const isDetox = latestCons?.detox_recommended || latestCons?.detoxRecommended;
-      newState.appointmentType = isDetox ? 'Detox' : 'Review';
+      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (isDetox ? 'Detox' : 'Review');
       
       const dDocId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
       const rDocId = latestCons?.doctor_id;
@@ -210,7 +221,7 @@ export default function ReceptionistView({
     
     // Determine appointment type based on consultation's detox recommendation
     const hasDetoxRecommendation = latestCons?.detox_recommended || latestCons?.detoxRecommended;
-    newState.appointmentType = hasDetoxRecommendation ? 'Detox' : 'Review';
+    newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (hasDetoxRecommendation ? 'Detox' : 'Review');
     
     // Use the doctor from the detox session if available
     if (latestDetoxSession.doctorId || latestDetoxSession.doctor_id) {
@@ -239,7 +250,7 @@ export default function ReceptionistView({
       }
       
       const isDetoxRecommended = latestCons?.detox_recommended || latestCons?.detoxRecommended;
-      newState.appointmentType = isDetoxRecommended ? 'Detox' : 'Review';
+      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (isDetoxRecommended ? 'Detox' : 'Review');
       
       const detoxDoctorId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
       const regularDoctorId = latestCons?.doctor_id;
@@ -258,7 +269,7 @@ export default function ReceptionistView({
     }
     // PRIORITY 3: Detox recommendation without follow-up date
     else if (latestCons?.detox_recommended || latestCons?.detoxRecommended) {
-      newState.appointmentType = 'Detox';
+      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : 'Detox';
       
       const detoxDoctorId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
       const regularDoctorId = latestCons?.doctor_id;
@@ -1106,7 +1117,7 @@ export default function ReceptionistView({
                               onClick={() => {
                                 if (isAvailable) {
                                   const update = { doctor_id: d.id };
-                                  if (d.role === 'THERAPIST') update.appointmentType = 'Detox';
+                                  if (d.role === 'THERAPIST') update.appointmentType = getFinalAppointmentType(foundPatient?.id, 'Detox');
                                   setFormData({ ...formData, ...update });
                                   setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
                                   setShowDoctorDropdown(false);
@@ -1464,7 +1475,7 @@ export default function ReceptionistView({
                               type="button"
                               onClick={() => {
                                 const update = { doctor_id: d.id };
-                                if (d.role === 'THERAPIST') update.appointmentType = 'Detox';
+                                if (d.role === 'THERAPIST') update.appointmentType = getFinalAppointmentType(bookingModalPatient?.id, 'Detox');
                                 setModalBookingData({ ...modalBookingData, ...update });
                                 setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
                                 setShowDoctorDropdown(false);
@@ -1500,7 +1511,11 @@ export default function ReceptionistView({
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
                   <select required value={modalBookingData.appointmentType} onChange={e => setModalBookingData({ ...modalBookingData, appointmentType: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500">
                     {doctors.find(d => String(d.id) === String(modalBookingData.doctor_id))?.role === 'THERAPIST' ? (
-                      <option value="Detox">Detox</option>
+                      hasCompletedThreeDetoxSessions(bookingModalPatient?.id) ? (
+                        <option value="Review">Review</option>
+                      ) : (
+                        <option value="Detox">Detox</option>
+                      )
                     ) : (
                       <>
                         <option value="Initial consultation">Initial Consultation</option>

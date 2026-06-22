@@ -55,6 +55,17 @@ export default function AppointmentsView({
     return type || 'Review';
   };
 
+  const getFinalAppointmentType = (patientId, rawType) => {
+    if (hasCompletedThreeDetoxSessions(patientId)) return 'Review';
+    const type = normalizeString(rawType);
+    return type || 'Review';
+  };
+
+  const handlePatientSelect = (patientId) => {
+    const appointmentType = hasCompletedThreeDetoxSessions(patientId) ? 'Review' : formData.appointmentType;
+    setFormData({ ...formData, patient_id: patientId, appointmentType });
+  };
+
   const getPendingDerivedFollowup = (patientId) => {
     const pending = followups
       .filter(f => String(f.patient_id || f.patientId) === String(patientId))
@@ -156,9 +167,7 @@ export default function AppointmentsView({
     const bookedAppointments = appointments.map(appt => {
       const patientId = appt.patient_id || appt.patientId;
       const rawType = appt.appointmentType || appt.type || appt.appointment_type;
-      const appointmentType = hasCompletedThreeDetoxSessions(patientId) && isDetoxType(rawType) && isScheduled(appt.status)
-        ? 'Review'
-        : normalizeString(rawType) || appt.appointmentType;
+      const appointmentType = getFinalAppointmentType(patientId, rawType);
       return {
         ...appt,
         appointmentType,
@@ -344,7 +353,7 @@ export default function AppointmentsView({
                 <select 
                   required 
                   value={formData.patient_id}
-                  onChange={e => setFormData({...formData, patient_id: e.target.value})}
+                  onChange={e => handlePatientSelect(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 >
                   <option value="">-- Choose registered patient --</option>
@@ -361,10 +370,15 @@ export default function AppointmentsView({
                   onChange={e => {
                     const selectedDocId = e.target.value;
                     const docInfo = doctors.find(d => String(d.id) === String(selectedDocId));
+                    const isReviewPatient = hasCompletedThreeDetoxSessions(formData.patient_id);
                     if (docInfo?.role === 'THERAPIST') {
-                      setFormData({...formData, doctor_id: selectedDocId, appointmentType: 'Detox'});
+                      setFormData({
+                        ...formData,
+                        doctor_id: selectedDocId,
+                        appointmentType: isReviewPatient ? 'Review' : 'Detox'
+                      });
                     } else {
-                      setFormData({...formData, doctor_id: selectedDocId});
+                      setFormData({ ...formData, doctor_id: selectedDocId });
                     }
                   }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -391,15 +405,24 @@ export default function AppointmentsView({
                   onChange={e => setFormData({ ...formData, appointmentType: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 >
-                  {doctors.find(d => String(d.id) === String(formData.doctor_id))?.role === 'THERAPIST' ? (
-                    <option value="Detox">Detox</option>
-                  ) : (
-                    <>
-                      <option value="Initial consultation">Initial Consultation</option>
-                      <option value="Detox">Detox</option>
-                      <option value="Review">Follow-up</option>
-                    </>
-                  )}
+                  {(() => {
+                    const selectedDoctor = doctors.find(d => String(d.id) === String(formData.doctor_id));
+                    const selectedPatientIsReview = hasCompletedThreeDetoxSessions(formData.patient_id);
+                    if (selectedDoctor?.role === 'THERAPIST') {
+                      return selectedPatientIsReview ? (
+                        <option value="Review">Review</option>
+                      ) : (
+                        <option value="Detox">Detox</option>
+                      );
+                    }
+                    return (
+                      <>
+                        <option value="Initial consultation">Initial Consultation</option>
+                        <option value="Detox">Detox</option>
+                        <option value="Review">Follow-up</option>
+                      </>
+                    );
+                  })()}
                 </select>
               </div>
               <div>
