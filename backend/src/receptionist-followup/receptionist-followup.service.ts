@@ -84,8 +84,12 @@ export class ReceptionistFollowupService {
       ? `${dateObj.getDate()}${this.getOrdinal(dateObj.getDate())} ${dateObj.toLocaleString('en-GB', { month: 'long' })} ${dateObj.getFullYear()}`
       : '';
 
-    // Follow-up type based on doctor's recommendation in consultation
-    const appointmentType = consultation.detoxRecommended ? 'Detox' : 'Review';
+    // Check if patient completed all 3 detox sessions
+    const detoxSessionCount = consultation.detoxSessions?.length || 0;
+    const allDetoxCompleted = detoxSessionCount >= 3;
+    
+    // Follow-up type: Review if detox completed, else use doctor's recommendation
+    const appointmentType = allDetoxCompleted ? 'Review' : (consultation.detoxRecommended ? 'Detox' : 'Review');
 
     const params = [patient.name || 'Patient', appointmentType, dateStr];
 

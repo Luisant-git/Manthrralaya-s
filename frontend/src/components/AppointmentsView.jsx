@@ -10,7 +10,8 @@ export default function AppointmentsView({
   onCheckIn, 
   onCancelAppointment,
   consultations = [],
-  detoxSessions = []
+  detoxSessions = [],
+  followups = []
 }) {
   const [isBooking, setIsBooking] = useState(false);
   const [showFollowups, setShowFollowups] = useState(true);
@@ -25,76 +26,142 @@ export default function AppointmentsView({
   });
 
   // Helper function to get next follow-up from consultations or detox sessions
-  const getNextFollowup = (patientId) => {
-    // First check consultations
-    const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
-    const latestCons = [...ptCons].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-    
-    const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+  const getFollowupDateValue = (record) => {
+    if (!record) return null;
+    return record.followupDate || record.followup_date || null;
+  };
 
-    if (latestCons && (rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate)) {
-      const followupDate = rec?.followupDate || rec?.followup_date || latestCons.followup_date || latestCons.followupDate;
-      const isDetoxRecommended = latestCons.detox_recommended || latestCons.detoxRecommended;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const followupDateObj = new Date(followupDate);
-      
-      if (!isNaN(followupDateObj.getTime()) && followupDateObj >= today) {
-        return {
-          scheduled_date: followupDate,
-          doctor_name: latestCons.detox_doctor_name || latestCons.detoxDoctorName || latestCons.doctor_name,
-          doctor_id: latestCons.detox_doctor_id || latestCons.detoxDoctorId || latestCons.doctor_id,
-          appointment_type: isDetoxRecommended ? 'Detox' : 'Review',
-          source: 'consultation',
-          notes: latestCons.followup_remarks || latestCons.followupRemarks || 'Follow-up from consultation',
-          isPending: true
-        };
-      }
-    }
-    
-    // Check detox sessions for follow-up dates
+  const isValidFutureDate = (dateStr) => {
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return date >= today;
+  };
+
+  const hasCompletedThreeDetoxSessions = (patientId) => {
     const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
-    const latestDetox = [...ptDetox].sort((a, b) => {
-      const dateA = a.sessionDate ? new Date(a.sessionDate).getTime() : 0;
-      const dateB = b.sessionDate ? new Date(b.sessionDate).getTime() : 0;
-      return dateB - dateA;
-    })[0];
-    
-    // CRITICAL: Use followupDate (camelCase) - this matches your data structure
-    const detoxFollowupDate = latestDetox?.followupDate || latestDetox?.followup_date;
-    
-    if (latestDetox && detoxFollowupDate) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    const completedDetoxSessions = ptDetox.filter(ds => {
+      const status = String(ds.status || '').toLowerCase();
+      return status === 'completed' || status === 'done' || status === 'finished';
+    }).length;
+    return ptDetox.length >= 3 || completedDetoxSessions >= 3;
+  };
+
+  const getFinalFollowupType = (patientId, defaultType) => {
+    return hasCompletedThreeDetoxSessions(patientId) ? 'Review' : defaultType;
+  };
+
+  const getPendingDerivedFollowup = (patientId) => {
+    const pending = followups
+      .filter(f => String(f.patient_id || f.patientId) === String(patientId))
+      .map(f => ({
+        ...f,
+        scheduled_date: f.scheduled_date || f.date || getFollowupDateValue(f) || null,
+        appointment_type: completedThreeDetox ? 'Review' : (f.appointmentType || f.type || 'Review'),
+        source: 'derived',
+        notes: f.notes || f.followup_remarks || f.followupRemarks || 'Pending follow-up',
+        isPending: true
+      }))
+      .filter(f => isValidFutureDate(f.scheduled_date))
+      .sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date));
+
+    return pending[0] || null;
+  };
+
+  const getNextFollowup = (patientId) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const getPendingDetoxFollowup = () => {
+      const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+      const latestDetox = [...ptDetox].sort((a, b) => {
+        const dateA = getFollowupDateValue(a) ? new Date(getFollowupDateValue(a)).getTime() : 0;
+        const dateB = getFollowupDateValue(b) ? new Date(getFollowupDateValue(b)).getTime() : 0;
+        return dateB - dateA;
+      })[0];
+      const detoxFollowupDate = getFollowupDateValue(latestDetox);
+      if (!latestDetox || !detoxFollowupDate) return null;
       const followupDateObj = new Date(detoxFollowupDate);
-      
-      if (!isNaN(followupDateObj.getTime()) && followupDateObj >= today) {
-        // Format the date to YYYY-MM-DD for display
-        const formattedDate = followupDateObj.toISOString().split('T')[0];
-        
-        return {
-          scheduled_date: formattedDate,
-          doctor_name: latestDetox.doctor?.user?.fullName || latestDetox.doctorName,
-          doctor_id: latestDetox.doctorId || latestDetox.doctor_id,
-          appointment_type: 'Review',
-          source: 'detox',
-          notes: latestDetox.followupRemarks || latestDetox.followup_remarks || 'Follow-up after detox session',
-          isPending: true
-        };
-      }
-    }
-    
-    return null;
+      if (isNaN(followupDateObj.getTime()) || followupDateObj < today) return null;
+      return {
+        scheduled_date: detoxFollowupDate,
+        doctor_name: latestDetox.doctor?.user?.fullName || latestDetox.doctorName,
+        doctor_id: latestDetox.doctorId || latestDetox.doctor_id,
+        appointment_type: getFinalFollowupType(patientId, latestDetox.sessionType === 'fullDay' ? 'Detox' : 'Review'),
+        source: 'detox',
+        notes: latestDetox.followupRemarks || latestDetox.followup_remarks || 'Follow-up after detox session',
+        isPending: true
+      };
+    };
+
+    const getPendingConsultationFollowup = () => {
+      const ptCons = consultations.filter(c => String(c.patient_id || c.patientId) === String(patientId));
+      const latestCons = [...ptCons].sort((a, b) => new Date(b.date || b.consultationDate || 0) - new Date(a.date || a.consultationDate || 0))[0];
+      if (!latestCons) return null;
+
+      const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+      const recIsActive = rec && rec.status !== 'Cancelled' && rec.status !== 'Completed';
+      const followupDate = recIsActive ? getFollowupDateValue(rec) : getFollowupDateValue(latestCons);
+      if (!followupDate) return null;
+      const followupDateObj = new Date(followupDate);
+      if (isNaN(followupDateObj.getTime()) || followupDateObj < today) return null;
+
+      return {
+        scheduled_date: followupDate,
+        doctor_name: latestCons.detox_doctor_name || latestCons.detoxDoctorName || latestCons.doctor_name,
+        doctor_id: latestCons.detox_doctor_id || latestCons.detoxDoctorId || latestCons.doctor_id,
+        appointment_type: getFinalFollowupType(patientId, (latestCons.detox_recommended || latestCons.detoxRecommended) ? 'Detox' : 'Review'),
+        source: 'consultation',
+        notes: latestCons.followup_remarks || latestCons.followupRemarks || 'Follow-up from consultation',
+        isPending: true
+      };
+    };
+
+    const futureAppt = appointments
+      .filter(a => {
+        const isPt = String(a.patient_id || a.patientId) === String(patientId);
+        if (!isPt) return false;
+        const apptDate = new Date(a.date || a.appointmentDate || 0);
+        return apptDate > today && a.status === 'Scheduled';
+      })
+      .sort((a, b) => new Date(a.date || a.appointmentDate || 0) - new Date(b.date || b.appointmentDate || 0))[0];
+
+    const detoxFollowup = getPendingDetoxFollowup();
+    const consultationFollowup = getPendingConsultationFollowup();
+    const derivedFollowup = getPendingDerivedFollowup(patientId);
+
+    const candidates = [
+      futureAppt ? {
+        scheduled_date: futureAppt.date || futureAppt.appointmentDate,
+        appointment_type: getFinalFollowupType(patientId, futureAppt.appointmentType),
+        source: 'appointment',
+        isPending: false
+      } : null,
+      detoxFollowup,
+      consultationFollowup,
+      derivedFollowup
+    ].filter(Boolean);
+
+    if (candidates.length === 0) return null;
+    return candidates.sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))[0];
   };
 
   // Combine booked appointments with pending follow-ups
   const getAllAppointmentsWithFollowups = () => {
-    const bookedAppointments = appointments.map(appt => ({
-      ...appt,
-      isFollowup: false,
-      displayType: 'booked'
-    }));
+    const bookedAppointments = appointments.map(appt => {
+      const patientId = appt.patient_id || appt.patientId;
+      const appointmentType = hasCompletedThreeDetoxSessions(patientId) && appt.appointmentType === 'Detox' && appt.status === 'Scheduled'
+        ? 'Review'
+        : appt.appointmentType;
+      return {
+        ...appt,
+        appointmentType,
+        isFollowup: false,
+        displayType: 'booked'
+      };
+    });
     
     const pendingFollowups = [];
     

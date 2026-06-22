@@ -128,6 +128,11 @@ export default function UnifiedPatientRecords({
     return 'border-purple-200 bg-purple-50 text-purple-700';
   };
 
+  const getFollowupDateValue = (record) => {
+    if (!record) return null;
+    return record.followupDate || record.followup_date || null;
+  };
+
   const getLatestAppointment = (patientId) => {
     const today = new Date();
     today.setHours(23, 59, 59, 999); // Include everything through the end of today
@@ -151,61 +156,85 @@ export default function UnifiedPatientRecords({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // FIRST: Check if receptionist has cancelled/completed the follow-up for this patient
-    // This takes priority over everything else
-    const latestCons = consultations
-      .filter(c => String(c.patient_id || c.patientId) === String(patientId))
-      .sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
-    
-    const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
-    if (rec && (rec.status === 'Cancelled' || rec.status === 'Completed')) {
-      return null; // Receptionist cancelled/completed it - no follow-up
-    }
+    const getPendingConsultationFollowup = () => {
+      const latestCons = consultations
+        .filter(c => String(c.patient_id || c.patientId) === String(patientId))
+        .sort((a, b) => new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
 
-    // 1. Check for future booked appointments first (the next scheduled visit)
+      if (!latestCons) return null;
+      const rec = latestCons?.receptionistFollowup || latestCons?.receptionist_followup;
+      const recIsActive = rec && rec.status !== 'Cancelled' && rec.status !== 'Completed';
+      const effectiveDate = recIsActive ? getFollowupDateValue(rec) : getFollowupDateValue(latestCons);
+      if (!effectiveDate) return null;
+      const followupDateObj = new Date(effectiveDate);
+      if (isNaN(followupDateObj.getTime()) || followupDateObj < today) return null;
+
+      return {
+        scheduled_date: effectiveDate,
+        appointmentType: (latestCons.detox_recommended || latestCons.detoxRecommended) ? 'Detox' : 'Review',
+        source: 'consultation'
+      };
+    };
+
+    const getPendingDetoxFollowup = () => {
+      const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+      const latestDetox = [...ptDetox].sort((a, b) => {
+        const dateA = getFollowupDateValue(a) ? new Date(getFollowupDateValue(a)).getTime() : 0;
+        const dateB = getFollowupDateValue(b) ? new Date(getFollowupDateValue(b)).getTime() : 0;
+        return dateB - dateA;
+      })[0];
+
+      const detoxFollowupDate = getFollowupDateValue(latestDetox);
+      if (!latestDetox || !detoxFollowupDate) return null;
+      const followupDateObj = new Date(detoxFollowupDate);
+      if (isNaN(followupDateObj.getTime()) || followupDateObj < today) return null;
+
+      return {
+        scheduled_date: detoxFollowupDate,
+        appointmentType: latestDetox.sessionType === 'fullDay' ? 'Detox' : 'Review',
+        source: 'detox'
+      };
+    };
+
     const futureAppt = appointments
       .filter(a => {
         const isPt = String(a.patient_id || a.patientId) === String(patientId);
         if (!isPt) return false;
         const apptDate = new Date(a.date || a.appointmentDate || 0);
-        return apptDate > today && a.status === 'Scheduled';
+        return apptDate >= today && a.status === 'Scheduled';
       })
       .sort((a, b) => new Date(a.date || a.appointmentDate || 0) - new Date(b.date || b.appointmentDate || 0))[0];
 
+    const candidates = [];
     if (futureAppt) {
-      return {
+      candidates.push({
         scheduled_date: futureAppt.date || futureAppt.appointmentDate,
-        appointmentType: futureAppt.appointmentType
-      };
+        appointmentType: futureAppt.appointmentType,
+        source: 'appointment'
+      });
     }
 
-    // 2. Otherwise check for pending follow-up recommendations
+    const detoxFollowup = getPendingDetoxFollowup();
+    if (detoxFollowup) candidates.push(detoxFollowup);
+
+    const consultationFollowup = getPendingConsultationFollowup();
+    if (consultationFollowup) candidates.push(consultationFollowup);
+
     const fromFollowups = followups
       .filter(f => String(f.patient_id) === String(patientId) && f.status === 'Pending')
-      .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date))[0];
+      .sort((a, b) => new Date(b.scheduled_date || b.date || 0) - new Date(a.scheduled_date || a.date || 0))[0];
 
-    if (fromFollowups) return fromFollowups;
-    
-    // Determine the effective follow-up date:
-    // If receptionist has acted (rec exists), use ONLY their date (may be null)
-    // Otherwise fall back to the doctor's original date
-    let effectiveDate = null;
-    if (rec) {
-      // Receptionist has handled this follow-up - use ONLY their data (status is not cancelled at this point)
-      effectiveDate = rec.followupDate || rec.followup_date;
-    } else {
-      // No receptionist action - use doctor's original follow-up
-      effectiveDate = latestCons?.followup_date || latestCons?.followupDate;
-    }
-    
-    if (latestCons && effectiveDate && new Date(effectiveDate) >= today) {
-      return { 
-        scheduled_date: effectiveDate,
-        appointmentType: (latestCons.detox_recommended || latestCons.detoxRecommended) ? 'Detox' : 'Review'
-      };
+    if (fromFollowups) {
+      candidates.push({
+        scheduled_date: fromFollowups.scheduled_date || fromFollowups.date,
+        appointmentType: fromFollowups.appointmentType || fromFollowups.type || 'Review',
+        source: 'derived'
+      });
     }
 
-    return null;
+    if (candidates.length === 0) return null;
+
+    return candidates.sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))[0];
   };
 
   const matchesTypeFilter = (patient) => {

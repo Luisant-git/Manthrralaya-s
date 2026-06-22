@@ -469,19 +469,6 @@ export default function DetoxView({
       const savedSession = await createDetoxSession(detoxData);
       console.log('✅ Detox session saved:', savedSession);
       
-      try {
-        const pdfData = {
-          ...detoxData,
-          patient_name: activePt.name,
-          doctorName: doctorName
-        };
-        generateDetoxPDF(pdfData);
-        toast.success("Detox session PDF generated successfully");
-      } catch (pdfError) {
-        console.error("PDF Generation error", pdfError);
-        toast.error("Failed to generate PDF, but session was saved.");
-      }
-      
       if (onAddConsultation) {
         await onAddConsultation(null, currentApptId);
       }

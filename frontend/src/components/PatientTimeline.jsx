@@ -136,8 +136,20 @@ export default function PatientTimeline({
       title: `Detox Therapy Session`,
       icon: Activity, 
       color: 'bg-cyan-500',
-      description: `Session: ${d.type || d.sessionType || 'Detox'}. Status: ${d.status || 'Active'}. Clinical Notes: ${cleanNotes}${fRemarks ? `. Follow-up Instructions: ${cleanHtml(fRemarks)}` : ''}${fDate ? `. Remainder Follow-up Date: ${fDate}` : ''}`
+      description: `Session: ${d.type || d.sessionType || 'Detox'}. Status: ${d.status || 'Active'}. Clinical Notes: ${cleanNotes}${fRemarks ? `. Follow-up Instructions: ${cleanHtml(fRemarks)}` : ''}`
     });
+
+    if (fDate) {
+      timelineEvents.push({
+        date: fDate,
+        time: 'Follow-up Date',
+        type: 'detox_followup',
+        title: 'Detox Follow-up Scheduled',
+        icon: RefreshCw,
+        color: 'bg-amber-500',
+        description: `Next detox review scheduled on ${fDate}.${fRemarks ? ` Notes: ${cleanHtml(fRemarks)}` : ''}`
+      });
+    }
   });
 
   stayManagement.filter(s => String(s.patient_id || s.patientId) === String(patient.id)).forEach(s => {

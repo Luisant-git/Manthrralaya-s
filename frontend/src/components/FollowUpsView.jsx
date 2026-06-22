@@ -49,6 +49,12 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
 
       // Check detox sessions for explicit follow-up
       const ptDetoxSessions = detoxSessions ? detoxSessions.filter(ds => String(ds.patient_id || ds.patientId) === String(pt.id)) : [];
+      const completedDetoxSessions = ptDetoxSessions.filter(ds => {
+        const status = String(ds.status || '').toLowerCase();
+        return status === 'completed' || status === 'done' || status === 'finished';
+      }).length;
+      const hasAtLeastThreeDetoxSessions = ptDetoxSessions.length >= 3;
+      const hasCompletedThreeDetox = completedDetoxSessions >= 3 || hasAtLeastThreeDetoxSessions;
       const latestDetox = [...ptDetoxSessions].sort((a, b) => new Date(b.sessionDate || b.date || 0) - new Date(a.sessionDate || a.date || 0))[0];
       
       if (latestDetox && (latestDetox.followupDate || latestDetox.followup_date)) {
@@ -97,7 +103,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           date: receptionistData?.date || detoxDate,
           notes: receptionistData?.notes || detoxNotes,
           status: receptionistData?.status || detoxStatus,
-          type: 'Detox',
+          type: hasCompletedThreeDetox ? 'Review' : 'Detox',
           source: 'DetoxSession',
           hasReceptionistData: !!receptionistData
         };
@@ -132,7 +138,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             date: receptionistData?.date || doctorDate,
             notes: receptionistData?.notes || doctorNotes,
             status: receptionistData?.status || doctorStatus,
-            type: latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review',
+            type: hasCompletedThreeDetox ? 'Review' : (latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review'),
             source: 'Doctor',
             hasReceptionistData: !!receptionistData
           };
@@ -146,6 +152,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
           
         if (fup) {
+          const derivedType = fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review';
           ptFollowup = {
             id: fup.id,
             consultationId: fup.id?.startsWith('FUP-C-') ? parseInt(fup.id.split('-')[2]) : (latestCons?.id || null),
@@ -159,7 +166,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             date: fup.scheduled_date || fup.date,
             notes: fup.notes || '',
             status: fup.status || 'Pending',
-            type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review',
+            type: hasCompletedThreeDetox ? 'Review' : derivedType,
             source: 'System',
             hasReceptionistData: false
           };
