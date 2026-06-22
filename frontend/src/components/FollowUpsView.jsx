@@ -22,6 +22,11 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
   const [editStatus, setEditStatus] = useState('Pending');
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // WhatsApp Modal State
+  const [showWhatsappConfirmModal, setShowWhatsappConfirmModal] = useState(false);
+  const [whatsappFupToSend, setWhatsappFupToSend] = useState(null);
+  const [isSendingWA, setIsSendingWA] = useState(false);
+
   // View Modal State
   const [viewingFup, setViewingFup] = useState(null);
   
@@ -408,6 +413,17 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
+                            <button
+                              onClick={() => {
+                                setWhatsappFupToSend(fup);
+                                setShowWhatsappConfirmModal(true);
+                              }}
+                              className="p-2 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
+                              title="Send WhatsApp Reminder"
+                              disabled={isSendingWA}
+                            >
+                              <MessageSquare className="w-4 h-4" />
+                            </button>
                           </>
                         ) : (
                           <span className="text-xs text-slate-400 italic">No Edit</span>
@@ -710,30 +726,16 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                         status: editStatus || 'Pending'
                       });
 
-                      const shouldSendReminder = 
-                        !isCancelled && 
-                        dateUpdated;
-
-                      if (shouldSendReminder) {
-                        try {
-                          await sendFollowupReminder(editingFup.consultationId);
-                          toast.success('Follow-up date updated and WhatsApp reminder sent');
-                        } catch (remErr) {
-                          console.error('Failed to send followup reminder', remErr);
-                          toast.warning('Date updated but failed to send WhatsApp reminder');
-                        }
+                      if (isCancelled) {
+                        toast.success('Follow-up cancelled successfully. Follow-up date cleared from patient record.');
+                      } else if (notesUpdated && !isCancelled) {
+                        toast.success('Notes updated successfully');
+                      } else if (dateUpdated && !isCancelled) {
+                        toast.success('Follow-up date updated successfully');
+                      } else if (prevStatus !== editStatus) {
+                        toast.success('Follow-up status updated successfully');
                       } else {
-                        if (isCancelled) {
-                          toast.success('Follow-up cancelled successfully. Follow-up date cleared from patient record.');
-                        } else if (notesUpdated && !isCancelled) {
-                          toast.success('Notes updated successfully');
-                        } else if (dateUpdated && !isCancelled) {
-                          toast.success('Follow-up date updated successfully');
-                        } else if (prevStatus !== editStatus) {
-                          toast.success('Follow-up status updated successfully');
-                        } else {
-                          toast.success('Follow-up updated successfully');
-                        }
+                        toast.success('Follow-up updated successfully');
                       }
 
                       if (onRefresh) await onRefresh();
@@ -751,6 +753,73 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                     <Save className="w-4 h-4" />
                   )}
                   Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WhatsApp Confirmation Modal */}
+      {showWhatsappConfirmModal && whatsappFupToSend && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" onClick={() => setShowWhatsappConfirmModal(false)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowWhatsappConfirmModal(false)}></div>
+          
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div 
+              className="relative bg-white rounded-2xl shadow-xl max-w-md w-full modal-animate overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5 text-white" />
+                  <h2 className="text-lg font-bold text-white">Send WhatsApp Reminder?</h2>
+                </div>
+                <button onClick={() => setShowWhatsappConfirmModal(false)} className="p-2 rounded-full hover:bg-white/10 transition text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <p className="text-slate-700 text-sm">
+                  Do you want to send the follow-up reminder to <strong className="text-slate-900">{whatsappFupToSend.patient.name}</strong> via WhatsApp?
+                </p>
+                {whatsappFupToSend.patient.phone && (
+                  <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <Phone className="w-4 h-4 text-slate-500" />
+                    <span>{whatsappFupToSend.patient.phone?.replace(/\D/g, '').slice(-10)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button onClick={() => setShowWhatsappConfirmModal(false)} className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (!whatsappFupToSend?.consultationId) {
+                      toast.error('No consultation linked to this follow-up.');
+                      return;
+                    }
+                    setShowWhatsappConfirmModal(false);
+                    setIsSendingWA(true);
+                    try {
+                      await sendFollowupReminder(whatsappFupToSend.consultationId);
+                      toast.success('Follow-up reminder sent via WhatsApp successfully!');
+                      if (onRefresh) await onRefresh();
+                    } catch (waError) {
+                      console.error('WhatsApp send error:', waError);
+                      toast.error('Failed to send WhatsApp reminder. Please try again. ' + (waError.message || ''));
+                    } finally {
+                      setIsSendingWA(false);
+                      setWhatsappFupToSend(null);
+                    }
+                  }}
+                  disabled={isSendingWA}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSendingWA ? 'Sending...' : 'Yes, Send'}
                 </button>
               </div>
             </div>

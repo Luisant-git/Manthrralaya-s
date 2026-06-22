@@ -86,42 +86,140 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
 
-  // Calculate today's followups based on actionDate (3 days before)
-  const todayFollowUps = React.useMemo(() => {
-    const list = [];
-    (patients || []).forEach(pt => {
-      let ptFollowup = null;
-      const ptCons = (consultations || []).filter(c => String(c.patient_id || c.patientId) === String(pt.id));
-      const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+ // In DashboardView.js - Replace the allPendingFollowUps useMemo with this:
+
+const allPendingFollowUps = React.useMemo(() => {
+  const list = [];
+  (patients || []).forEach(pt => {
+    let ptFollowup = null;
+    
+    // Get patient's consultations
+    const ptCons = (consultations || []).filter(c => String(c.patient_id || c.patientId) === String(pt.id));
+    const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+    
+    // Check detox sessions for explicit follow-up
+    const ptDetoxSessions = (detoxSessions || []).filter(ds => String(ds.patient_id || ds.patientId) === String(pt.id));
+    const latestDetox = [...ptDetoxSessions].sort((a, b) => new Date(b.sessionDate || b.date || 0) - new Date(a.sessionDate || a.date || 0))[0];
+    
+    // First check detox session follow-up
+    if (latestDetox && (latestDetox.followupDate || latestDetox.followup_date)) {
+      const detoxFollowupDate = latestDetox.followupDate || latestDetox.followup_date;
+      const detoxStatus = latestDetox.status || 'Pending';
       
-      if (latestCons) {
-        const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
-        if (rec && (rec.followupDate || rec.followup_date)) {
-          const isDetox = latestCons.detox_recommended || latestCons.detoxRecommended;
-          ptFollowup = { patient: pt, date: rec.followupDate || rec.followup_date, status: rec.status || 'Pending', type: isDetox ? 'Detox' : 'Review' };
-        } else if (latestCons.followup_date || latestCons.followupDate) {
-          ptFollowup = { patient: pt, date: latestCons.followup_date || latestCons.followupDate, status: 'Pending', type: latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review' };
+      // Check for receptionist follow-up data
+      let receptionistDate = null;
+      let receptionistStatus = null;
+      
+      // Find linked consultation
+      const detoxApptId = latestDetox.appointmentId || latestDetox.appointment_id;
+      let linkedConsultationId = latestDetox.consultationId || latestDetox.consultation_id;
+      
+      if (!linkedConsultationId && detoxApptId) {
+        const consFromAppt = consultations.find(c => String(c.appointment_id || c.appointmentId) === String(detoxApptId));
+        if (consFromAppt) {
+          linkedConsultationId = consFromAppt.id;
         }
       }
       
-      
-      if (!ptFollowup) {
-        const fup = (followups || []).filter(f => String(f.patient_id) === String(pt.id))
-          .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
-        if (fup) ptFollowup = { patient: pt, date: fup.scheduled_date || fup.date, status: fup.status || 'Pending', type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review' };
+      if (!linkedConsultationId && latestCons) {
+        linkedConsultationId = latestCons.id;
       }
       
-      if (ptFollowup && ptFollowup.status === 'Pending') {
-        const scheduledDateObj = new Date(ptFollowup.date);
+      if (linkedConsultationId) {
+        const linkedConsObj = consultations.find(c => String(c.id) === String(linkedConsultationId));
+        const rec = linkedConsObj?.receptionistFollowup || linkedConsObj?.receptionist_followup;
+        if (rec && (rec.followupDate || rec.followup_date)) {
+          receptionistDate = rec.followupDate || rec.followup_date;
+          receptionistStatus = rec.status || detoxStatus;
+        }
+      }
+      
+      // Use receptionist data if available, otherwise use detox data
+      const finalDate = receptionistDate || detoxFollowupDate;
+      const finalStatus = receptionistStatus || detoxStatus;
+      
+      // Only include if Pending (not Completed or Cancelled)
+      if (finalStatus === 'Pending') {
+        const scheduledDateObj = new Date(finalDate);
         const actionDateObj = new Date(scheduledDateObj);
         actionDateObj.setDate(scheduledDateObj.getDate() - 3);
-        ptFollowup.actionDate = actionDateObj.toISOString().split('T')[0];
+        
+        ptFollowup = {
+          patient: pt,
+          date: finalDate,
+          status: finalStatus,
+          type: 'Detox',
+          actionDate: actionDateObj.toISOString().split('T')[0]
+        };
         list.push(ptFollowup);
       }
-    });
-    // Sort by action date (oldest first, so overdue are at the top)
-    return list.sort((a, b) => new Date(a.actionDate) - new Date(b.actionDate));
-  }, [patients, consultations, followups, detoxSessions]);
+    }
+    
+    // If no detox follow-up, check consultation follow-up
+    if (!ptFollowup && latestCons) {
+      const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
+      const doctorDate = latestCons.followup_date || latestCons.followupDate;
+      const doctorStatus = 'Pending';
+      
+      let receptionistDate = null;
+      let receptionistStatus = null;
+      
+      if (rec && (rec.followupDate || rec.followup_date)) {
+        receptionistDate = rec.followupDate || rec.followup_date;
+        receptionistStatus = rec.status || 'Pending';
+      }
+      
+      const finalDate = receptionistDate || doctorDate;
+      const finalStatus = receptionistStatus || doctorStatus;
+      
+      // Only include if Pending and has a date
+      if (finalStatus === 'Pending' && finalDate) {
+        const scheduledDateObj = new Date(finalDate);
+        const actionDateObj = new Date(scheduledDateObj);
+        actionDateObj.setDate(scheduledDateObj.getDate() - 3);
+        
+        const isDetox = latestCons.detox_recommended || latestCons.detoxRecommended;
+        ptFollowup = {
+          patient: pt,
+          date: finalDate,
+          status: finalStatus,
+          type: isDetox ? 'Detox' : 'Review',
+          actionDate: actionDateObj.toISOString().split('T')[0]
+        };
+        list.push(ptFollowup);
+      }
+    }
+    
+    // Fallback to followups array
+    if (!ptFollowup) {
+      const fup = (followups || [])
+        .filter(f => String(f.patient_id) === String(pt.id))
+        .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
+        
+      if (fup && (fup.status || 'Pending') === 'Pending') {
+        const scheduledDateObj = new Date(fup.scheduled_date || fup.date);
+        const actionDateObj = new Date(scheduledDateObj);
+        actionDateObj.setDate(scheduledDateObj.getDate() - 3);
+        
+        ptFollowup = {
+          patient: pt,
+          date: fup.scheduled_date || fup.date,
+          status: fup.status || 'Pending',
+          type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review',
+          actionDate: actionDateObj.toISOString().split('T')[0]
+        };
+        list.push(ptFollowup);
+      }
+    }
+  });
+  
+  return list.sort((a, b) => new Date(a.actionDate) - new Date(b.actionDate));
+}, [patients, consultations, followups, detoxSessions]);
+
+  // Today's follow-ups for the list (3 days before - actionDate is today)
+  const todayFollowUps = React.useMemo(() => {
+    return allPendingFollowUps.filter(f => f.actionDate === todayDate);
+  }, [allPendingFollowUps, todayDate]);
   
   // Get today's appointments - FIXED: Strict doctor filtering
   const todayAppointments = appointments.filter(a => {
@@ -502,7 +600,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Pending Follow-ups</span>
                 <div className="flex items-baseline space-x-2 mt-1">
-                <span className="text-3xl font-extrabold text-slate-800">{todayFollowUps.length}</span>
+                <span className="text-3xl font-extrabold text-slate-800">{allPendingFollowUps.length}</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
@@ -870,12 +968,12 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">Follow-ups List</h2>
               <span className="text-xs font-semibold uppercase tracking-wide text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
-                {todayFollowUps.length} Pending
+                {todayFollowUps.length} Due Today
               </span>
             </div>
             
             <p className="text-xs text-slate-500 mb-4 pb-3 border-b border-slate-100">
-              Pending follow-up calls (calculated 3 days before scheduled appointment).
+              Follow-up calls due today (3 days before scheduled appointment).
             </p>
 
             <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
