@@ -429,6 +429,43 @@ export default function DetoxView({
     }
   };
 
+  const hasCompletedThreeDetoxSessions = (patientId) => {
+    return getPatientSessionCount(patientId).completed >= 3;
+  };
+
+  const getConsultationFollowupRecommendation = (record, patientId) => {
+    const followupDateValue = record.followup_date || record.followupDate;
+    const followupRemarksValue = record.followup_remarks || record.followupRemarks;
+    const forceReview = hasCompletedThreeDetoxSessions(patientId) && Boolean(followupDateValue);
+
+    if (forceReview) {
+      return {
+        type: 'review',
+        date: followupDateValue,
+        remarks: followupRemarksValue
+      };
+    }
+
+    if (record.detox_recommended) {
+      return {
+        type: 'detox',
+        doctorName: record.detox_doctor_name,
+        date: followupDateValue,
+        remarks: followupRemarksValue
+      };
+    }
+
+    if (followupDateValue) {
+      return {
+        type: 'review',
+        date: followupDateValue,
+        remarks: followupRemarksValue
+      };
+    }
+
+    return { type: null };
+  };
+
   const handleSaveDetoxSession = async () => {
     if (!activeAppt || !activePt) {
       toast.error('No active appointment selected');
@@ -1196,38 +1233,48 @@ export default function DetoxView({
                                   <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
                                     <Calendar className="w-3 h-3" /> Recommendation
                                   </div>
-                                  <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended ? 'bg-white border-slate-200' : 'bg-amber-50/50 border-amber-100'}`}>
-                                    {record.detox_recommended ? (
-                                      <div className="space-y-2">
-                                        <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
-                                        <div className="flex items-start gap-2">
-                                          <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
-                                          <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
-                                        </div>
-                                        <div className="flex items-start gap-2">
-                                          <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                          <span className="text-slate-600">{record.followup_date || 'Not scheduled'}</span>
-                                        </div>
-                                        <div className="flex items-start gap-2">
-                                          <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                          <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
-                                        </div>
-                                      </div>
-                                    ) : (record.followup_date || record.followupDate) ? (
-                                      <div className="space-y-2">
-                                        <div className="text-amber-700 font-bold text-xs uppercase mb-1">Follow-up Review</div>
-                                        <div className="flex items-start gap-2">
-                                          <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                          <span className="text-slate-600">{record.followup_date || record.followupDate}</span>
-                                        </div>
-                                        <div className="flex items-start gap-2">
-                                          <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                          <span className="text-slate-600">{record.followup_remarks || record.followupRemarks || 'No remarks'}</span>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <span className="text-slate-500 italic">No recommendation recorded.</span>
-                                    )}
+                                  <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended && !hasCompletedThreeDetoxSessions(activePt.id) ? 'bg-white border-slate-200' : 'bg-amber-50/50 border-amber-100'}`}>
+                                    {(() => {
+                                      const recommendation = getConsultationFollowupRecommendation(record, activePt.id);
+
+                                      if (recommendation.type === 'detox') {
+                                        return (
+                                          <div className="space-y-2">
+                                            <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
+                                            <div className="flex items-start gap-2">
+                                              <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
+                                              <span className="text-slate-600">{recommendation.doctorName || record.detox_doctor_name || 'Not assigned'}</span>
+                                            </div>
+                                            <div className="flex items-start gap-2">
+                                              <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
+                                              <span className="text-slate-600">{recommendation.date || 'Not scheduled'}</span>
+                                            </div>
+                                            <div className="flex items-start gap-2">
+                                              <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                                              <span className="text-slate-600">{recommendation.remarks || 'No remarks'}</span>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+
+                                      if (recommendation.type === 'review') {
+                                        return (
+                                          <div className="space-y-2">
+                                            <div className="text-amber-700 font-bold text-xs uppercase mb-1">Follow-up Review</div>
+                                            <div className="flex items-start gap-2">
+                                              <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
+                                              <span className="text-slate-600">{recommendation.date}</span>
+                                            </div>
+                                            <div className="flex items-start gap-2">
+                                              <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                                              <span className="text-slate-600">{recommendation.remarks || 'No remarks'}</span>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+
+                                      return <span className="text-slate-500 italic">No recommendation recorded.</span>;
+                                    })()}
                                   </div>
                                 </div>
                               </div>

@@ -84,9 +84,11 @@ export class ReceptionistFollowupService {
       ? `${dateObj.getDate()}${this.getOrdinal(dateObj.getDate())} ${dateObj.toLocaleString('en-GB', { month: 'long' })} ${dateObj.getFullYear()}`
       : '';
 
-    // Check if patient completed all 3 detox sessions
-    const detoxSessionCount = consultation.detoxSessions?.length || 0;
-    const allDetoxCompleted = detoxSessionCount >= 3;
+    // Check if patient completed all 3 detox sessions using patient-level detox history
+    const patientDetoxSessions = await this.prisma.detoxSession.findMany({
+      where: { patientId: patient.id }
+    });
+    const allDetoxCompleted = patientDetoxSessions.length >= 3;
     
     // Follow-up type: Review if detox completed, else use doctor's recommendation
     const appointmentType = allDetoxCompleted ? 'Review' : (consultation.detoxRecommended ? 'Detox' : 'Review');

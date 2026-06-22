@@ -40,17 +40,19 @@ export default function AppointmentsView({
     return date >= today;
   };
 
+  const normalizeString = (value) => String(value || '').trim();
+  const isDetoxType = (value) => normalizeString(value).toLowerCase() === 'detox';
+  const isScheduled = (value) => normalizeString(value).toLowerCase() === 'scheduled';
+
   const hasCompletedThreeDetoxSessions = (patientId) => {
     const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
-    const completedDetoxSessions = ptDetox.filter(ds => {
-      const status = String(ds.status || '').toLowerCase();
-      return status === 'completed' || status === 'done' || status === 'finished';
-    }).length;
-    return ptDetox.length >= 3 || completedDetoxSessions >= 3;
+    return ptDetox.length >= 3;
   };
 
   const getFinalFollowupType = (patientId, defaultType) => {
-    return hasCompletedThreeDetoxSessions(patientId) ? 'Review' : defaultType;
+    if (hasCompletedThreeDetoxSessions(patientId)) return 'Review';
+    const type = normalizeString(defaultType);
+    return type || 'Review';
   };
 
   const getPendingDerivedFollowup = (patientId) => {
@@ -59,7 +61,7 @@ export default function AppointmentsView({
       .map(f => ({
         ...f,
         scheduled_date: f.scheduled_date || f.date || getFollowupDateValue(f) || null,
-        appointment_type: completedThreeDetox ? 'Review' : (f.appointmentType || f.type || 'Review'),
+        appointment_type: getFinalFollowupType(patientId, f.appointmentType || f.type || 'Review'),
         source: 'derived',
         notes: f.notes || f.followup_remarks || f.followupRemarks || 'Pending follow-up',
         isPending: true
@@ -89,7 +91,7 @@ export default function AppointmentsView({
         scheduled_date: detoxFollowupDate,
         doctor_name: latestDetox.doctor?.user?.fullName || latestDetox.doctorName,
         doctor_id: latestDetox.doctorId || latestDetox.doctor_id,
-        appointment_type: getFinalFollowupType(patientId, latestDetox.sessionType === 'fullDay' ? 'Detox' : 'Review'),
+        appointment_type: getFinalFollowupType(patientId, 'Detox'),
         source: 'detox',
         notes: latestDetox.followupRemarks || latestDetox.followup_remarks || 'Follow-up after detox session',
         isPending: true
@@ -124,7 +126,8 @@ export default function AppointmentsView({
         const isPt = String(a.patient_id || a.patientId) === String(patientId);
         if (!isPt) return false;
         const apptDate = new Date(a.date || a.appointmentDate || 0);
-        return apptDate > today && a.status === 'Scheduled';
+        const status = String(a.status || '').toLowerCase();
+        return apptDate > today && status === 'scheduled';
       })
       .sort((a, b) => new Date(a.date || a.appointmentDate || 0) - new Date(b.date || b.appointmentDate || 0))[0];
 
@@ -152,9 +155,10 @@ export default function AppointmentsView({
   const getAllAppointmentsWithFollowups = () => {
     const bookedAppointments = appointments.map(appt => {
       const patientId = appt.patient_id || appt.patientId;
-      const appointmentType = hasCompletedThreeDetoxSessions(patientId) && appt.appointmentType === 'Detox' && appt.status === 'Scheduled'
+      const rawType = appt.appointmentType || appt.type || appt.appointment_type;
+      const appointmentType = hasCompletedThreeDetoxSessions(patientId) && isDetoxType(rawType) && isScheduled(appt.status)
         ? 'Review'
-        : appt.appointmentType;
+        : normalizeString(rawType) || appt.appointmentType;
       return {
         ...appt,
         appointmentType,
