@@ -149,13 +149,51 @@ export default function UnifiedPatientRecords({
 
   const getLatestClinicalType = (patientId) => {
     if (getCompletedDetoxSessionCount(patientId) >= 3) return 'Review';
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Check all follow-ups for any pending detox follow-up - this takes priority
+    const hasPendingDetoxFollowup = (followups || [])
+      .some(f => {
+        const fupDate = new Date(f.scheduled_date || f.date || 0);
+        const matchesPatient = String(f.patient_id || f.patientId) === String(patientId);
+        const isPending = f.status === 'Pending';
+        const isFuture = !isNaN(fupDate.getTime()) && fupDate >= today;
+        const type = f.appointmentType || f.type || (f.notes && f.notes.toLowerCase().includes('detox') ? 'Detox' : 'Review');
+        return matchesPatient && isPending && isFuture && type === 'Detox';
+      });
+    
+    if (hasPendingDetoxFollowup) return 'Detox';
+    
     const followup = getNextFollowup(patientId);
+    if (followup?.appointmentType === 'Detox') return 'Detox';
     if (followup?.appointmentType) return followup.appointmentType;
+    
+    // Check for future detox appointments
+    const futureDetoxAppointment = (appointments || [])
+      .some(a => {
+        const apptDate = new Date(a.date || a.appointmentDate || 0);
+        const matchesPatient = String(a.patient_id || a.patientId) === String(patientId);
+        const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
+        const isScheduled = a.status === 'Scheduled';
+        return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
+      });
+    
+    if (futureDetoxAppointment) return 'Detox';
+    
+    // Check consultation's detox recommendation
+    const latestCons = getLatestConsultation(patientId);
+    if (latestCons && (latestCons.detox_recommended || latestCons.detoxRecommended)) return 'Detox';
+    
+    // Check for any completed detox sessions (less than 3)
+    const completedDetoxCount = getCompletedDetoxSessionCount(patientId);
+    if (completedDetoxCount > 0) return 'Detox';
+    
     const latestAppt = getLatestAppointment(patientId);
     if (latestAppt?.appointmentType && latestAppt.appointmentType !== 'No Record') return latestAppt.appointmentType;
-    const latestCons = getLatestConsultation(patientId);
-    if (!latestCons) return null;
-    return latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review';
+    
+    return 'Review';
   };
 
   const getLatestAppointment = (patientId) => {
@@ -713,6 +751,7 @@ export default function UnifiedPatientRecords({
                 {paginatedPatients.map(pt => {
                   const latestAppointment = getLatestAppointment(pt.id);
                   const nextFollowup = getNextFollowup(pt.id); // This is correct for the follow-up column
+                  const clinicalType = getLatestClinicalType(pt.id) || latestAppointment?.appointmentType;
                   return (
                     <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
                       <td className="py-4 px-4 align-top">
@@ -720,9 +759,9 @@ export default function UnifiedPatientRecords({
                         <div className="text-xs text-slate-500 mt-1">P-{pt.id}</div>
                       </td>
                       <td className="py-4 px-4 align-top">
-                        {latestAppointment ? (
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${getAppointmentTypeBadge(latestAppointment.appointmentType)}`}>
-                            {latestAppointment.appointmentType || 'General'}
+                        {clinicalType ? (
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold border ${getAppointmentTypeBadge(clinicalType)}`}>
+                            {clinicalType}
                           </span>
                         ) : (
                           <span className="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-500 text-[11px] font-semibold">No appointment</span>
