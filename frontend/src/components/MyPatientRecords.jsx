@@ -22,7 +22,6 @@ export default function UnifiedPatientRecords({
   doctors = []
 }) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTab, setSelectedTab] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -113,14 +112,6 @@ export default function UnifiedPatientRecords({
       .map(c => String(c.patient_id || c.patientId))
   ]) : null;
 
-  const appointmentTabs = [
-    { id: 'all', label: 'All' },
-    { id: 'initial', label: 'Initial', type: 'Initial consultation' },
-    { id: 'detox', label: 'Detox', type: 'Detox' },
-    { id: 'review', label: 'Review', type: 'Review' },
-    { id: 'followup', label: 'Follow-up' }
-  ];
-
   const getAppointmentTypeBadge = (type) => {
     if (!type) return 'border-slate-200 bg-slate-100 text-slate-600';
     if (type === 'Detox') return 'border-teal-200 bg-teal-50 text-teal-700';
@@ -148,11 +139,14 @@ export default function UnifiedPatientRecords({
   };
 
   const getLatestClinicalType = (patientId) => {
-    if (getCompletedDetoxSessionCount(patientId) >= 3) return 'Review';
-    
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
+    const latestAppt = getLatestAppointment(patientId);
+    if (latestAppt?.appointmentType && latestAppt.appointmentType !== 'General') {
+      return latestAppt.appointmentType;
+    }
+
     // Check all follow-ups for any pending detox follow-up - this takes priority
     const hasPendingDetoxFollowup = (followups || [])
       .some(f => {
@@ -184,16 +178,45 @@ export default function UnifiedPatientRecords({
     
     // Check consultation's detox recommendation
     const latestCons = getLatestConsultation(patientId);
-    if (latestCons && (latestCons.detox_recommended || latestCons.detoxRecommended)) return 'Detox';
+    if (latestCons && (latestCons.detox_recommended || latestCons.detoxRecommended)) {
+      // Only return Detox if there's a future detox scheduled
+      const hasFutureDetox = (appointments || [])
+        .some(a => {
+          const apptDate = new Date(a.date || a.appointmentDate || 0);
+          const matchesPatient = String(a.patient_id || a.patientId) === String(patientId);
+          const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
+          const isScheduled = a.status === 'Scheduled';
+          return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
+        });
+      if (hasFutureDetox) return 'Detox';
+    }
     
-    // Check for any completed detox sessions (less than 3)
+    // Check for any completed detox sessions (less than 3) only if there's a future detox planned
     const completedDetoxCount = getCompletedDetoxSessionCount(patientId);
-    if (completedDetoxCount > 0) return 'Detox';
+    if (completedDetoxCount >= 3) {
+      // After 3+ detox sessions, patient should be in Review - but only if there's a follow-up pending
+      const hasPendingReview = (followups || []).some(f => {
+        const fupDate = new Date(f.scheduled_date || f.date || 0);
+        const matchesPatient = String(f.patient_id || f.patientId) === String(patientId);
+        const isPending = f.status === 'Pending';
+        const isFuture = !isNaN(fupDate.getTime()) && fupDate >= today;
+        return matchesPatient && isPending && isFuture;
+      });
+      if (hasPendingReview) return 'Review';
+    } else if (completedDetoxCount > 0) {
+      // Only return Detox if there's a future detox scheduled
+      const hasFutureDetox = (appointments || [])
+        .some(a => {
+          const apptDate = new Date(a.date || a.appointmentDate || 0);
+          const matchesPatient = String(a.patient_id || a.patientId) === String(patientId);
+          const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
+          const isScheduled = a.status === 'Scheduled';
+          return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
+        });
+      if (hasFutureDetox) return 'Detox';
+    }
     
-    const latestAppt = getLatestAppointment(patientId);
-    if (latestAppt?.appointmentType && latestAppt.appointmentType !== 'No Record') return latestAppt.appointmentType;
-    
-    return 'Review';
+    return null;
   };
 
   const getLatestAppointment = (patientId) => {
@@ -300,21 +323,6 @@ export default function UnifiedPatientRecords({
     return candidates.sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))[0];
   };
 
-  const matchesTypeFilter = (patient) => {
-    if (selectedTab === 'all') return true;
-    const tab = appointmentTabs.find(t => t.id === selectedTab);
-    if (!tab) return true;
-    if (tab.id === 'followup') {
-      return getNextFollowup(patient.id) !== null;
-    }
-    if (tab.id === 'consultation') {
-      const latestAppt = getLatestAppointment(patient.id);
-      return latestAppt?.appointmentType === tab.type;
-    }
-    const clinicalType = getLatestClinicalType(patient.id);
-    return clinicalType === tab.type;
-  };
-
   // Create a robust list of patients
   let allAvailablePatients = [...patients];
   
@@ -336,12 +344,16 @@ export default function UnifiedPatientRecords({
 
   const filteredPatients = basePatients.filter(pt => {
     const normalized = searchTerm.trim().toLowerCase();
-    const matchesSearch = !normalized ||
+    if (!normalized) return true;
+    const normalizedId = String(pt.id).toLowerCase();
+    const isIdSearch = /^p-\d+$/.test(normalized);
+    const idMatches = isIdSearch ? normalizedId === normalized.slice(2) : normalizedId.includes(normalized);
+    return (
       pt.name.toLowerCase().includes(normalized) ||
-      String(pt.id).toLowerCase().includes(normalized) ||
+      idMatches ||
       (pt.phone || '').includes(normalized) ||
-      (pt.email || '').toLowerCase().includes(normalized);
-    return matchesSearch && matchesTypeFilter(pt);
+      (pt.email || '').toLowerCase().includes(normalized)
+    );
   });
 
   const totalPages = Math.ceil(filteredPatients.length / itemsPerPage);
@@ -683,7 +695,7 @@ export default function UnifiedPatientRecords({
                 placeholder="Patient symptoms, specific requests, or details..."
                 value={formData.medical_conditions}
                 onChange={e => setFormData({ ...formData, medical_conditions: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none transition-all font-medium"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium resize-none transition-all font-medium"
               ></textarea>
             </div>
 
@@ -699,24 +711,6 @@ export default function UnifiedPatientRecords({
         </div>
       ) : (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full">
-          <div className="px-4 pt-4 pb-2 bg-slate-50 border-b border-slate-200">
-            <div className="flex flex-wrap gap-2">
-              {appointmentTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedTab(tab.id);
-                    setCurrentPage(1);
-                  }}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold transition ${selectedTab === tab.id ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'}`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Search Bar - Directory Style */}
           <div className="p-4 border-b border-slate-200 bg-slate-50">
             <div className="relative max-w-md">
@@ -751,7 +745,7 @@ export default function UnifiedPatientRecords({
                 {paginatedPatients.map(pt => {
                   const latestAppointment = getLatestAppointment(pt.id);
                   const nextFollowup = getNextFollowup(pt.id); // This is correct for the follow-up column
-                  const clinicalType = getLatestClinicalType(pt.id) || latestAppointment?.appointmentType;
+                  const clinicalType = getLatestClinicalType(pt.id);
                   return (
                     <tr key={pt.id} className="hover:bg-slate-50 transition-colors align-top">
                       <td className="py-4 px-4 align-top">
@@ -1125,14 +1119,12 @@ export default function UnifiedPatientRecords({
                               <div className="space-y-2 text-sm text-slate-700">
                                 {(currentConsultation.detox_recommended || currentConsultation.detoxRecommended) && (
                                   <div>
-                                    <span className="font-semibold text-slate-800">Doctor:</span> {
-                                      currentConsultation.detox_doctor_name || 
+                                    <span className="font-semibold text-slate-800">Doctor:</span> {currentConsultation.detox_doctor_name || 
                                       currentConsultation.detoxDoctorName || 
                                       currentConsultation.doctor_name ||
                                       currentConsultation.doctor?.user?.fullName ||
                                       availableDoctors.find(d => Number(d.id) === Number(currentConsultation.detox_doctor_id ?? currentConsultation.detoxDoctorId))?.name ||
-                                      'Assigned Provider'
-                                    }
+                                      'Assigned Provider'}
                                   </div>
                                 )}
                                 {(currentConsultation.followup_date || currentConsultation.followupDate) && (

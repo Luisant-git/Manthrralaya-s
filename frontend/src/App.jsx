@@ -688,7 +688,7 @@ export default function App() {
       case 'dashboard':
         return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} doctors={doctors} />;
       case 'patients':
-        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} detoxSessions={detoxSessions} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} initialTab="all" />;
+        return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} detoxSessions={detoxSessions} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} activeRole={activeRole} />;
       case 'follow-ups':
         return <FollowUpsView patients={patients} consultations={consultations} followups={followups} detoxSessions={detoxSessions} onRefresh={fetchAllData} />;
       case 'phone-calls':
