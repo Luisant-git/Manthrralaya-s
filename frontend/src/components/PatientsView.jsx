@@ -57,7 +57,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
       .sort((a, b) => {
         const dateA = new Date(a.appointmentDate || a.date || 0);
         const dateB = new Date(b.appointmentDate || b.date || 0);
-        return dateB - dateADate;
+        return dateB - dateA;
       });
     return sorted[0]?.appointmentType || 'General';
   };

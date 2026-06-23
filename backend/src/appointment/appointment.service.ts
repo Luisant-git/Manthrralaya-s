@@ -10,6 +10,61 @@ import { sendWhatsappTemplateMessage } from '../common/whatsapp.util';
 export class AppointmentService {
   constructor(private prisma: PrismaService) {}
 
+  private normalizeToDateOnly(value: Date | string): number {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date.getTime();
+  }
+
+  private async findLatestActiveReceptionistFollowup(patientId: number, maxAppointmentDate: Date) {
+    return this.prisma.receptionistFollowup.findFirst({
+      where: {
+        patientId,
+        status: {
+          notIn: ['Completed', 'Closed', 'Cancelled', 'Canceled'],
+        },
+        followupDate: {
+          not: null,
+        },
+        consultation: {
+          consultationDate: {
+            lt: maxAppointmentDate,
+          },
+        },
+      },
+      orderBy: [
+        { followupDate: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      include: {
+        consultation: true,
+      },
+    });
+  }
+
+  private async completeLatestActiveFollowupForBooking(patientId: number, newAppointmentDate: Date | string) {
+    const appointmentDay = this.normalizeToDateOnly(newAppointmentDate);
+    const appointmentDateObj = new Date(newAppointmentDate);
+    const followup = await this.findLatestActiveReceptionistFollowup(patientId, appointmentDateObj);
+    if (!followup?.followupDate) {
+      return;
+    }
+
+    const nextVisitDate = followup.followupDate;
+    const followupDay = this.normalizeToDateOnly(nextVisitDate);
+
+    if (appointmentDay < followupDay) {
+      await this.prisma.receptionistFollowup.update({
+        where: { id: followup.id },
+        data: {
+          status: 'Completed',
+          completedAt: new Date(),
+          closedAt: new Date(),
+        },
+      });
+    }
+  }
+
   async create(createAppointmentDto: CreateAppointmentDto) {
     // Check if patient exists
     const patient = await this.prisma.patient.findUnique({
@@ -56,6 +111,12 @@ export class AppointmentService {
         }
       }
     });
+
+    // Automatically close the latest pending receptionist follow-up
+    await this.completeLatestActiveFollowupForBooking(
+      createAppointmentDto.patientId,
+      createAppointmentDto.appointmentDate,
+    );
 
     // Send WhatsApp Confirmation
     if (appointment.patient?.phone) {

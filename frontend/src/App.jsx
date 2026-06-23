@@ -93,6 +93,9 @@ export default function App() {
         doctor_id: cons.doctorId,
         doctor_name: cons.doctor?.user?.fullName || cons.doctor?.name,
         date: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        consultationDate: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : null,
+        appointmentId: cons.appointmentId || cons.appointment_id || null,
+        followupDate: cons.followupDate ? cons.followupDate.split('T')[0] : null,
         consultation_notes: cons.consultationNotes,
         medical_history: cons.medicalHistoryNotes,
         detox_procedure: cons.detoxProcedureNotes,
@@ -686,11 +689,11 @@ export default function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} currentUser={currentUser} doctors={doctors} />;
+        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} onSelectPatient={(pt) => setTimelinePatient(pt)} currentUser={currentUser} doctors={doctors} />;
       case 'patients':
         return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} detoxSessions={detoxSessions} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} activeRole={activeRole} />;
       case 'follow-ups':
-        return <FollowUpsView patients={patients} consultations={consultations} followups={followups} detoxSessions={detoxSessions} onRefresh={fetchAllData} />;
+        return <FollowUpsView patients={patients} consultations={consultations} appointments={appointments} followups={followups} detoxSessions={detoxSessions} onRefresh={fetchAllData} />;
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':

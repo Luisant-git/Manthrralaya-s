@@ -59,7 +59,6 @@ export class ReceptionistFollowupService {
 
   async sendFollowupReminder(consultationId: number) {
     const followup = await this.findOneByConsultation(consultationId);
-    if (!followup) throw new NotFoundException('Follow-up not found for consultation');
 
     const consultation = await this.prisma.consultation.findUnique({
       where: { id: consultationId },
@@ -73,16 +72,18 @@ export class ReceptionistFollowupService {
 
     if (!consultation) throw new NotFoundException('Consultation not found');
 
-    const patient = consultation.patient || (await this.prisma.patient.findUnique({ where: { id: followup.patientId } }));
+    const patient = consultation.patient || (followup ? await this.prisma.patient.findUnique({ where: { id: followup.patientId } }) : null);
     if (!patient || !patient.phone) throw new NotFoundException('Patient or phone not found');
 
     const doctorName = consultation.doctor?.user?.fullName || 'Assigned Doctor';
 
-    const date = followup.followupDate || consultation.followupDate;
-    const dateObj = date ? new Date(date) : null;
-    const dateStr = dateObj
-      ? `${dateObj.getDate()}${this.getOrdinal(dateObj.getDate())} ${dateObj.toLocaleString('en-GB', { month: 'long' })} ${dateObj.getFullYear()}`
-      : '';
+    const date = followup?.followupDate || consultation.followupDate || consultation.appointment?.appointmentDate;
+    if (!date) {
+      throw new NotFoundException('Follow-up date not found for consultation');
+    }
+
+    const dateObj = new Date(date);
+    const dateStr = `${dateObj.getDate()}${this.getOrdinal(dateObj.getDate())} ${dateObj.toLocaleString('en-GB', { month: 'long' })} ${dateObj.getFullYear()}`;
 
     // Check if patient completed all 3 detox sessions using patient-level detox history
     const patientDetoxSessions = await this.prisma.detoxSession.findMany({

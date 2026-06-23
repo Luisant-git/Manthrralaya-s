@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall } from 'lucide-react';
 
 export default function DashboardView({ 
@@ -11,6 +11,7 @@ export default function DashboardView({
   activeRole,
   onCheckIn,
   onNavigateToTab,
+  onSelectPatient,
   currentUser,
   doctors = []
 }) {
@@ -85,8 +86,60 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const queueRef = useRef(null);
+
+  const scrollToDoctorQueue = () => {
+    if (queueRef.current) {
+      queueRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
  // In DashboardView.js - Replace the allPendingFollowUps useMemo with this:
+
+const normalizeDate = (dateValue) => {
+  if (!dateValue) return null;
+  const dateObj = new Date(dateValue);
+  if (Number.isNaN(dateObj.getTime())) return null;
+  return dateObj.toISOString().split('T')[0];
+};
+
+const hasBookedAppointmentForDate = (patientId, followupDate, referenceDate, excludeAppointmentIds = []) => {
+  const normalizedFollowupDate = normalizeDate(followupDate);
+  if (!normalizedFollowupDate) return false;
+
+  const normalizedReferenceDate = normalizeDate(referenceDate);
+  if (!normalizedReferenceDate) return false;
+
+  const followupDay = new Date(normalizedFollowupDate).getTime();
+  const referenceDay = new Date(normalizedReferenceDate).getTime();
+
+  return (appointments || []).some(appt => {
+    const apptPatientId = String(appt.patient_id || appt.patientId);
+    const apptDate = normalizeDate(appt.appointmentDate || appt.appointment_date || appt.date);
+    const status = String(appt.status || '').toLowerCase();
+    const apptId = String(appt.id || appt.appointmentId || appt.appointment_id || '');
+    if (apptPatientId !== String(patientId)) return false;
+    if (!apptDate) return false;
+    if (excludeAppointmentIds.some(id => id && String(id) === apptId)) return false;
+    const appointmentDay = new Date(apptDate).getTime();
+    if (appointmentDay <= referenceDay) return false;
+    if (appointmentDay >= followupDay) return false;
+    return status !== 'cancelled' && status !== 'canceled';
+  });
+};
+
+const getFollowupStatus = (patientId, followupDate, receptionistStatus, defaultStatus, referenceDate, excludeAppointmentIds = []) => {
+  if (receptionistStatus === 'Completed' || receptionistStatus === 'Cancelled' || receptionistStatus === 'Canceled') {
+    return receptionistStatus;
+  }
+  if (hasBookedAppointmentForDate(patientId, followupDate, referenceDate, excludeAppointmentIds)) {
+    return 'Completed';
+  }
+  if (receptionistStatus) {
+    return receptionistStatus;
+  }
+  return defaultStatus;
+};
 
 const allPendingFollowUps = React.useMemo(() => {
   const list = [];
@@ -134,9 +187,12 @@ const allPendingFollowUps = React.useMemo(() => {
         }
       }
       
-      // Use receptionist data if available, otherwise use detox data
+      const detoxReferenceDate = latestDetox.consultationDate || latestDetox.consultation_date || null;
       const finalDate = receptionistDate || detoxFollowupDate;
-      const finalStatus = receptionistStatus || detoxStatus;
+      const detoxExcludedAppointmentIds = [];
+      if (latestDetox.appointmentId) detoxExcludedAppointmentIds.push(latestDetox.appointmentId);
+      if (latestDetox.appointment_id) detoxExcludedAppointmentIds.push(latestDetox.appointment_id);
+      const finalStatus = getFollowupStatus(pt.id, finalDate, receptionistStatus, detoxStatus, detoxReferenceDate, detoxExcludedAppointmentIds);
       
       // Only include if Pending (not Completed or Cancelled)
       if (finalStatus === 'Pending') {
@@ -169,8 +225,12 @@ const allPendingFollowUps = React.useMemo(() => {
         receptionistStatus = rec.status || 'Pending';
       }
       
+      const consultationReferenceDate = latestCons.consultationDate || latestCons.consultation_date || null;
       const finalDate = receptionistDate || doctorDate;
-      const finalStatus = receptionistStatus || doctorStatus;
+      const consultationExcludedAppointmentIds = [];
+      if (latestCons.appointmentId) consultationExcludedAppointmentIds.push(latestCons.appointmentId);
+      if (latestCons.appointment_id) consultationExcludedAppointmentIds.push(latestCons.appointment_id);
+      const finalStatus = getFollowupStatus(pt.id, finalDate, receptionistStatus, doctorStatus, consultationReferenceDate, consultationExcludedAppointmentIds);
       
       // Only include if Pending and has a date
       if (finalStatus === 'Pending' && finalDate) {
@@ -196,15 +256,18 @@ const allPendingFollowUps = React.useMemo(() => {
         .filter(f => String(f.patient_id) === String(pt.id))
         .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
         
-      if (fup && (fup.status || 'Pending') === 'Pending') {
-        const scheduledDateObj = new Date(fup.scheduled_date || fup.date);
+      const fallbackDate = fup?.scheduled_date || fup?.date;
+      const fallbackReferenceDate = latestCons?.consultationDate || latestCons?.consultation_date || null;
+      const fallbackStatus = fup ? getFollowupStatus(pt.id, fallbackDate, fup.status, 'Pending', fallbackReferenceDate) : 'Pending';
+      if (fup && fallbackDate && fallbackStatus === 'Pending') {
+        const scheduledDateObj = new Date(fallbackDate);
         const actionDateObj = new Date(scheduledDateObj);
         actionDateObj.setDate(scheduledDateObj.getDate() - 3);
         
         ptFollowup = {
           patient: pt,
-          date: fup.scheduled_date || fup.date,
-          status: fup.status || 'Pending',
+          date: fallbackDate,
+          status: fallbackStatus,
           type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review',
           actionDate: actionDateObj.toISOString().split('T')[0]
         };
@@ -261,6 +324,12 @@ const allPendingFollowUps = React.useMemo(() => {
     if (!name) return '??';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
+
+  const normalizePatientId = (rawId) => {
+    if (rawId === undefined || rawId === null) return '';
+    const idString = String(rawId);
+    return idString.startsWith('P-') ? idString.slice(2) : idString;
+  };
   
   const totalAppointmentsToday = todayAppointments.length;
   
@@ -274,10 +343,11 @@ const allPendingFollowUps = React.useMemo(() => {
   const arrivedPatients = todayAppointments.filter(a => a.status === 'Arrived');
   const checkedInPatients = todayAppointments.filter(a => a.status === 'Checked-in');
   
-  // Doctor queue: show appointments that are NOT completed
-  const doctorQueue = todayAppointments.filter(a =>
-    a.status === 'Arrived' || a.status === 'Checked-in'
-  );
+  // Doctor queue: show all scheduled today appointments that are not completed or cancelled
+  const doctorQueue = todayAppointments.filter(a => {
+    const status = String(a.status || '').toLowerCase();
+    return status !== 'completed' && status !== 'cancelled' && status !== 'canceled';
+  });
   
   console.log('👨‍⚕️ Doctor Queue length:', doctorQueue.length);
   
@@ -300,16 +370,43 @@ const allPendingFollowUps = React.useMemo(() => {
     await onCheckIn(appointmentId, true, true);
   };
 
+  const handleViewPatientDetails = (patient) => {
+    if (!patient || !onSelectPatient) return;
+    console.log('🚀 Doctor dashboard open patient details:', patient);
+    onSelectPatient(patient);
+  };
+
+  const getFirstQueuePatient = () => {
+    if (todayPatientList && todayPatientList.length > 0) {
+      return todayPatientList.find(item => item.patient) || todayPatientList[0];
+    }
+    return null;
+  };
+
+  const handleOpenFirstQueuePatient = () => {
+    const firstPatientItem = getFirstQueuePatient();
+    if (!firstPatientItem) return;
+    if (firstPatientItem.patient) {
+      handleViewPatientDetails(firstPatientItem.patient);
+    } else if (onSelectPatient) {
+      onSelectPatient({ id: firstPatientItem.patient_id || firstPatientItem.patientId, name: firstPatientItem.patient?.name || 'Unknown Patient' });
+    }
+  };
+
   // Get today's patient list for doctor with all details
   const todayPatientList = doctorQueue
     .map((appt) => {
-      const pid = appt.patientId || appt.patient_id;
+      const pid = normalizePatientId(appt.patientId || appt.patient_id || appt.patient?.id || appt.patient?.patientId || appt.patient?.patient_id);
       // Find patient from patients array or from nested patient object in appointment
-      let patient = patients.find(p => String(p.id) === String(pid));
+      let patient = patients.find(p => normalizePatientId(p.id) === pid);
       
       // If not found in patients array, check if appointment has nested patient data
       if (!patient && appt.patient) {
         patient = appt.patient;
+      }
+      if (!patient && appt.patient_id && appt.patient_id.toString().startsWith('P-')) {
+        const normalizedId = normalizePatientId(appt.patient_id);
+        patient = patients.find(p => normalizePatientId(p.id) === normalizedId);
       }
       
       // Count previous consultations for this patient
@@ -616,7 +713,7 @@ const allPendingFollowUps = React.useMemo(() => {
         {isDoctorView ? (
           <>
             {/* Left Column: Today's Patient Queue */}
-            <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
+            <div ref={queueRef} className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Today’s Patient Queue</h2>
@@ -660,7 +757,11 @@ const allPendingFollowUps = React.useMemo(() => {
                   </div>
                 ) : (
                   todayPatientList.map((item) => (
-                    <div key={item.id} className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
+                    <div
+                      key={item.id}
+                      className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'} ${item.patient ? 'cursor-pointer hover:shadow-lg' : ''}`}
+                      onClick={() => item.patient && handleViewPatientDetails(item.patient)}
+                    >
                       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
@@ -695,7 +796,7 @@ const allPendingFollowUps = React.useMemo(() => {
                           </div>
                           {item.status === 'Arrived' ? (
                             <button
-                              onClick={() => handleDoctorCheckIn(item.id)}
+                              onClick={(e) => { e.stopPropagation(); handleDoctorCheckIn(item.id); }}
                               className="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors whitespace-nowrap flex items-center gap-2"
                             >
                               <ShieldCheck className="w-4 h-4" />
@@ -703,7 +804,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             </button>
                           ) : item.status === 'Checked-in' ? (
                             <button
-                              onClick={() => handleStartAppointment(item)}
+                              onClick={(e) => { e.stopPropagation(); handleStartAppointment(item); }}
                               className="px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2"
                             >
                               <Stethoscope className="w-4 h-4" />
@@ -723,6 +824,18 @@ const allPendingFollowUps = React.useMemo(() => {
                         <span className="text-xs text-slate-500 block mb-1">Latest note:</span>
                         <span className="font-medium text-slate-900 line-clamp-2">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 100)}{item.latestNote.length > 100 ? '…' : ''}</span>
                       </div>
+                      {item.patient && onSelectPatient && (
+                        <div className="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleViewPatientDetails(item.patient)}
+                            className="text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
+                          >
+                            View Patient Details
+                          </button>
+                          <div className="text-xs text-slate-500">Patient ID: P-{item.patient.id || 'N/A'}</div>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

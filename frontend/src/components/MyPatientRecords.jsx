@@ -1280,9 +1280,8 @@ export default function UnifiedPatientRecords({
 
             <div className="p-6 space-y-4">
               <p className="text-slate-700 text-sm">
-                Do you want to send the consultation PDF for <strong className="text-slate-900">{selectedPatient.name}</strong> to their WhatsApp number ({selectedPatient.phone})?
+                Do you want to send the consultation PDF for <strong className="text-slate-900">{selectedPatient.name}</strong> to their WhatsApp number ({(selectedPatient.whatsapp || selectedPatient.phone) ?? 'No number available'})?
               </p>
-             
             </div>
 
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">

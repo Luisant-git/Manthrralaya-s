@@ -74,6 +74,51 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
     })[0] || null;
   };
 
+  const normalizeDate = (dateValue) => {
+    if (!dateValue) return null;
+    const dateObj = new Date(dateValue);
+    if (Number.isNaN(dateObj.getTime())) return null;
+    return dateObj.toISOString().split('T')[0];
+  };
+
+  const hasBookedAppointmentForDate = (patientId, followupDate, referenceDate, excludeAppointmentIds = []) => {
+    const normalizedFollowupDate = normalizeDate(followupDate);
+    if (!normalizedFollowupDate) return false;
+
+    const normalizedReferenceDate = normalizeDate(referenceDate);
+    if (!normalizedReferenceDate) return false;
+
+    const followupDay = new Date(normalizedFollowupDate).getTime();
+    const referenceDay = new Date(normalizedReferenceDate).getTime();
+
+    return appointments.some(appt => {
+      const apptPatientId = String(appt.patient_id || appt.patientId);
+      const apptDate = normalizeDate(appt.appointmentDate || appt.appointment_date || appt.date);
+      const status = String(appt.status || '').toLowerCase();
+      const apptId = String(appt.id || appt.appointmentId || appt.appointment_id || '');
+      if (apptPatientId !== String(patientId)) return false;
+      if (!apptDate) return false;
+      if (excludeAppointmentIds.some(id => id && String(id) === apptId)) return false;
+      const appointmentDay = new Date(apptDate).getTime();
+      if (appointmentDay <= referenceDay) return false;
+      if (appointmentDay >= followupDay) return false;
+      return status !== 'cancelled' && status !== 'canceled';
+    });
+  };
+
+  const getFollowupStatus = (patientId, followupDate, receptionistStatus, defaultStatus, referenceDate, excludeAppointmentIds = []) => {
+    if (receptionistStatus === 'Completed' || receptionistStatus === 'Cancelled' || receptionistStatus === 'Canceled') {
+      return receptionistStatus;
+    }
+    if (hasBookedAppointmentForDate(patientId, followupDate, referenceDate, excludeAppointmentIds)) {
+      return 'Completed';
+    }
+    if (receptionistStatus) {
+      return receptionistStatus;
+    }
+    return defaultStatus;
+  };
+
   // Derive a master list of all follow-ups
   const masterFollowUps = useMemo(() => {
     const list = [];
@@ -135,6 +180,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           }
         }
         
+        const detoxFinalDate = receptionistData?.date || detoxDate;
+        const detoxReferenceDate = latestDetox.sessionDate || latestDetox.date || latestDetox.session_date || null;
         detoxFollowup = {
           id: latestDetox.id || `detox-${latestDetox.id}`,
           consultationId: linkedConsultationId,
@@ -145,9 +192,9 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           receptionistDate: receptionistData?.date || null,
           receptionistNotes: receptionistData?.notes || null,
           receptionistStatus: receptionistData?.status || null,
-          date: receptionistData?.date || detoxDate,
+          date: detoxFinalDate,
           notes: receptionistData?.notes || detoxNotes,
-          status: receptionistData?.status || detoxStatus,
+          status: getFollowupStatus(pt.id, detoxFinalDate, receptionistData?.status, detoxStatus, detoxReferenceDate),
           type: hasCompletedThreeDetox ? 'Review' : 'Detox',
           source: 'DetoxSession',
           hasReceptionistData: !!receptionistData
@@ -171,6 +218,11 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
         }
         
         if (doctorDate || receptionistData) {
+          const consultationFinalDate = receptionistData?.date || doctorDate;
+          const consultationReferenceDate = latestCons.consultationDate || latestCons.consultation_date || null;
+          const excludedAppointmentIds = [];
+          if (latestCons.appointmentId) excludedAppointmentIds.push(latestCons.appointmentId);
+          if (latestCons.appointment_id) excludedAppointmentIds.push(latestCons.appointment_id);
           consultationFollowup = {
             id: rec?.id || `doc-${latestCons.id}`,
             consultationId: latestCons.id,
@@ -181,9 +233,16 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             receptionistDate: receptionistData?.date || null,
             receptionistNotes: receptionistData?.notes || null,
             receptionistStatus: receptionistData?.status || null,
-            date: receptionistData?.date || doctorDate,
+            date: consultationFinalDate,
             notes: receptionistData?.notes || doctorNotes,
-            status: receptionistData?.status || doctorStatus,
+            status: getFollowupStatus(
+              pt.id,
+              consultationFinalDate,
+              receptionistData?.status,
+              doctorStatus,
+              consultationReferenceDate,
+              excludedAppointmentIds
+            ),
             type: hasCompletedThreeDetox ? 'Review' : (latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review'),
             source: 'Doctor',
             hasReceptionistData: !!receptionistData
@@ -201,19 +260,21 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           
         if (fup) {
           const derivedType = fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review';
+          const fallbackDate = fup.scheduled_date || fup.date;
+          const fallbackReferenceDate = latestCons?.consultationDate || latestCons?.consultation_date || null;
           ptFollowup = {
             id: fup.id,
             consultationId: fup.id?.startsWith('FUP-C-') ? parseInt(fup.id.split('-')[2]) : (latestCons?.id || null),
             patient: pt,
-            doctorDate: fup.scheduled_date || fup.date,
+            doctorDate: fallbackDate,
             doctorNotes: fup.notes || '',
             doctorStatus: fup.status || 'Pending',
             receptionistDate: null,
             receptionistNotes: null,
             receptionistStatus: null,
-            date: fup.scheduled_date || fup.date,
+            date: fallbackDate,
             notes: fup.notes || '',
-            status: fup.status || 'Pending',
+            status: getFollowupStatus(pt.id, fallbackDate, fup.status, 'Pending', fallbackReferenceDate),
             type: hasCompletedThreeDetox ? 'Review' : derivedType,
             source: 'System',
             hasReceptionistData: false
@@ -839,10 +900,10 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                 <p className="text-slate-700 text-sm">
                   Do you want to send the follow-up reminder to <strong className="text-slate-900">{whatsappFupToSend.patient.name}</strong> via WhatsApp?
                 </p>
-                {whatsappFupToSend.patient.phone && (
+                {(whatsappFupToSend.patient.whatsapp || whatsappFupToSend.patient.phone) && (
                   <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">
                     <Phone className="w-4 h-4 text-slate-500" />
-                    <span>{whatsappFupToSend.patient.phone?.replace(/\D/g, '').slice(-10)}</span>
+                    <span>{(whatsappFupToSend.patient.whatsapp || whatsappFupToSend.patient.phone)?.replace(/\D/g, '').slice(-10)}</span>
                   </div>
                 )}
               </div>

@@ -176,6 +176,8 @@ model ReceptionistFollowup {
   followupDate   DateTime?
   notes          String?    @db.Text
   status         String    @default("Pending")
+  completedAt    DateTime?
+  closedAt       DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

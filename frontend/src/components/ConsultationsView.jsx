@@ -337,7 +337,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       }
       
       setIsSaved(true);
-      toast.success('Consultation saved successfully! You can now send it via WhatsApp or proceed to next patient.');
+     
     } catch (error) {
       console.error('Error saving consultation:', error);
       toast.error('Failed to save consultation.');
