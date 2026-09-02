@@ -171,12 +171,19 @@ export const sendWhatsappTemplateMessage = async (
 
     const messageId = data.messages?.[0]?.id;
     if (messageId) {
+      // Extract parameter strings from the components array
+      let paramStrings: string[] = [];
+      if (parameters && Array.isArray(parameters)) {
+        paramStrings = parameters.map(p => p.text || p.id || '');
+      }
+
       logTemplateToCRM(
         toPhoneNumber,
         messageId,
         templateName,
         'N/A',
-        `Template ${templateName} sent`
+        `Template ${templateName} sent`,
+        paramStrings
       ).catch(e => console.error('Failed to run CRM logging', e));
     }
 
@@ -245,19 +252,25 @@ export const sendWhatsappTemplateMessageWithoutMedia = async (
 
   const messageId = data.messages?.[0]?.id;
   if (messageId) {
+    let paramStrings: string[] = [];
+    if (parameters && Array.isArray(parameters)) {
+      paramStrings = parameters.map(p => p.text || p.id || '');
+    }
+
     logTemplateToCRM(
       toPhoneNumber,
       messageId,
       templateName,
       'N/A',
-      `Template ${templateName} sent (no media)`
+      `Template ${templateName} sent (no media)`,
+      paramStrings
     ).catch(e => console.error('Failed to run CRM logging', e));
   }
 
   return data;
 };
 
-export const logTemplateToCRM = async (customerPhone: string, messageId: string, templateName: string, orderId: any, templateContent: string) => {
+export const logTemplateToCRM = async (customerPhone: string, messageId: string, templateName: string, orderId: any, templateContent: string, templateParameters?: string[]) => {
   try {
     const crmApiUrl = 'https://whatsapp.api.luisant.cloud/whatsapp/external/log-message';
     const crmApiKey = process.env.EXTERNAL_API_KEY || 'default-secret-key';
@@ -277,7 +290,8 @@ export const logTemplateToCRM = async (customerPhone: string, messageId: string,
       websiteId: 'Manthrralayas',
       orderId: orderId,
       templateLanguage: 'en',
-      templateContent: templateContent
+      templateContent: templateContent,
+      templateParameters: templateParameters
     };
 
     const response = await fetch(crmApiUrl, {
