@@ -4,7 +4,7 @@ import { getAllPatients, createPatient, updatePatient } from '../api/patientApi'
 import { toast } from 'react-toastify';
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
-export default function PatientsView({ appointments = [], followups = [], consultations = [], detoxSessions = [], onAddPatient, onSelectPatient, onRefreshConsultations, activeRole = '' }) {
+export default function PatientsView({ appointments = [], followups = [], consultations = [], detoxSessions = [], onAddPatient, onSelectPatient, onRefreshConsultations, activeRole = '', currentUser = '', doctors = [] }) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingPatient, setViewingPatient] = useState(null);
@@ -386,7 +386,51 @@ export default function PatientsView({ appointments = [], followups = [], consul
 
   const normalizePhone = (val) => (val || '').replace(/\D/g, '').slice(-10);
 
-  const filteredPatients = patients.filter(p => {
+  const isDoctor = activeRole === 'doctor' || activeRole === 'therapist';
+  let currentDoc = isDoctor
+    ? (doctors || []).find(d => {
+        const doctorEmail = (d.user?.email || d.email || '').toLowerCase();
+        const doctorName = (d.user?.fullName || d.name || '').toLowerCase();
+        const currentUserLower = String(currentUser || '').toLowerCase();
+        return doctorEmail === currentUserLower || doctorName === currentUserLower;
+      })
+    : null;
+
+  if (isDoctor && !currentDoc) {
+    const sourceAppt = appointments.find(a => {
+      const dEmail = (a.doctor?.user?.email || '').toLowerCase();
+      const dName = (a.doctor?.user?.fullName || a.doctor?.name || '').toLowerCase();
+      const currentUserLower = String(currentUser || '').toLowerCase();
+      return dEmail === currentUserLower || dName === currentUserLower;
+    });
+    if (sourceAppt && sourceAppt.doctor) {
+      currentDoc = { ...sourceAppt.doctor, name: sourceAppt.doctor.user?.fullName || sourceAppt.doctor.name };
+    } else {
+      const sourceCons = consultations.find(c => {
+        const dName = (c.doctor_name || '').toLowerCase();
+        const currentUserLower = String(currentUser || '').toLowerCase();
+        return dName === currentUserLower;
+      });
+      if (sourceCons) {
+        currentDoc = { id: sourceCons.doctor_id, name: sourceCons.doctor_name };
+      }
+    }
+  }
+
+  const currentDocId = currentDoc?.id;
+
+  const myPatientIds = isDoctor ? new Set([
+    ...appointments
+      .filter(a => currentDocId && Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(currentDocId))
+      .map(a => String(a.patient_id || a.patientId)),
+    ...consultations
+      .filter(c => currentDocId && Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(currentDocId))
+      .map(c => String(c.patient_id || c.patientId))
+  ]) : null;
+
+  const basePatients = isDoctor ? patients.filter(p => myPatientIds.has(String(p.id))) : patients;
+
+  const filteredPatients = basePatients.filter(p => {
     const normalized = searchTerm.trim().toLowerCase();
     const matchesName = p.name?.toLowerCase().includes(normalized);
     const normalizedId = String(p.id).toLowerCase();
