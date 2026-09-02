@@ -100,8 +100,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
       if (!apptDate) return false;
       if (excludeAppointmentIds.some(id => id && String(id) === apptId)) return false;
       const appointmentDay = new Date(apptDate).getTime();
-      if (appointmentDay <= referenceDay) return false;
-      if (appointmentDay >= followupDay) return false;
+      if (appointmentDay < referenceDay) return false;
+      if (appointmentDay > followupDay) return false;
       return status !== 'cancelled' && status !== 'canceled';
     });
   };
