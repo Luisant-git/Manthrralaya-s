@@ -181,8 +181,8 @@ const allPendingFollowUps = React.useMemo(() => {
       if (linkedConsultationId) {
         const linkedConsObj = consultations.find(c => String(c.id) === String(linkedConsultationId));
         const rec = linkedConsObj?.receptionistFollowup || linkedConsObj?.receptionist_followup;
-        if (rec && (rec.followupDate || rec.followup_date)) {
-          receptionistDate = rec.followupDate || rec.followup_date;
+        if (rec) {
+          receptionistDate = rec.followupDate || rec.followup_date || null;
           receptionistStatus = rec.status || detoxStatus;
         }
       }
@@ -220,8 +220,8 @@ const allPendingFollowUps = React.useMemo(() => {
       let receptionistDate = null;
       let receptionistStatus = null;
       
-      if (rec && (rec.followupDate || rec.followup_date)) {
-        receptionistDate = rec.followupDate || rec.followup_date;
+      if (rec) {
+        receptionistDate = rec.followupDate || rec.followup_date || null;
         receptionistStatus = rec.status || 'Pending';
       }
       
