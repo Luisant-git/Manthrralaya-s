@@ -100,8 +100,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
       if (!apptDate) return false;
       if (excludeAppointmentIds.some(id => id && String(id) === apptId)) return false;
       const appointmentDay = new Date(apptDate).getTime();
-      if (appointmentDay <= referenceDay) return false;
-      if (appointmentDay >= followupDay) return false;
+      if (appointmentDay < referenceDay) return false;
+      if (appointmentDay > followupDay) return false;
       return status !== 'cancelled' && status !== 'canceled';
     });
   };
@@ -294,6 +294,20 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
     return list;
   }, [patients, consultations, followups, detoxSessions, appointments]);
 
+  const getDisplayFollowupType = (fup) => {
+    if (!fup.type || String(fup.type).toLowerCase() !== 'detox') return fup.type || 'Review';
+    let displaySession = fup.session;
+    if (!displaySession) {
+       const ptDetox = detoxSessions ? detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(fup.patient.id)) : [];
+       const completedTypes = ptDetox.map(d => d.sessionType);
+       if (!completedTypes.includes('morning')) displaySession = 'FN';
+       else if (!completedTypes.includes('evening')) displaySession = 'AN';
+       else if (!completedTypes.includes('fullDay')) displaySession = 'FD';
+       else displaySession = 'FN';
+    }
+    return `Detox (${displaySession})`;
+  };
+
   // Filter based on search and status
   const filteredList = masterFollowUps.filter(f => {
     const matchesSearch = !searchTerm || 
@@ -465,8 +479,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                       </div>
                     </td>
                     <td className="py-4 px-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-1 rounded-md text-xs font-bold border tracking-wide ${fup.type === 'Detox' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
-                        {fup.type}
+                      <span className={`px-2.5 py-1 rounded-md text-xs font-bold border tracking-wide ${String(fup.type || '').toLowerCase().includes('detox') ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                        {getDisplayFollowupType(fup)}
                       </span>
                     </td>
                     <td className="py-4 px-4 whitespace-nowrap">
@@ -651,8 +665,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             <p className="text-sm text-slate-500 mt-1">{viewingFup.patient.phone?.replace(/\D/g, '').slice(-10) || 'No phone'}</p>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 rounded text-xs font-bold border ${viewingFup.type === 'Detox' ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
-              {viewingFup.type}
+            <span className={`px-2.5 py-1 rounded text-xs font-bold border ${String(viewingFup.type || '').toLowerCase().includes('detox') ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>
+              {getDisplayFollowupType(viewingFup)}
             </span>
             <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ring-1 ${viewingFup.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : viewingFup.status === 'Pending' ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-rose-50 text-rose-700 ring-rose-200'}`}>
               {viewingFup.status}

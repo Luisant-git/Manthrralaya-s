@@ -114,8 +114,10 @@ export default function UnifiedPatientRecords({
 
   const getAppointmentTypeBadge = (type) => {
     if (!type) return 'border-slate-200 bg-slate-100 text-slate-600';
-    if (type === 'Detox') return 'border-teal-200 bg-teal-50 text-teal-700';
-    if (type === 'Review') return 'border-amber-200 bg-amber-50 text-amber-700';
+    const t = type.toLowerCase();
+    if (t.includes('detox')) return 'border-teal-200 bg-teal-50 text-teal-700';
+    if (t.includes('review')) return 'border-amber-200 bg-amber-50 text-amber-700';
+    if (t.includes('initial')) return 'border-purple-200 bg-purple-50 text-purple-700';
     return 'border-purple-200 bg-purple-50 text-purple-700';
   };
 
@@ -144,6 +146,9 @@ export default function UnifiedPatientRecords({
 
     const latestAppt = getLatestAppointment(patientId);
     if (latestAppt?.appointmentType && latestAppt.appointmentType !== 'General') {
+      if (latestAppt.appointmentType === 'Detox' && latestAppt.session) {
+        return `Detox (${latestAppt.session})`;
+      }
       return latestAppt.appointmentType;
     }
 
@@ -166,7 +171,7 @@ export default function UnifiedPatientRecords({
 
     // Check for future detox appointments
     const futureDetoxAppointment = (appointments || [])
-      .some(a => {
+      .find(a => {
         const apptDate = new Date(a.date || a.appointmentDate || 0);
         const matchesPatient = String(a.patient_id || a.patientId) === String(patientId);
         const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
@@ -174,21 +179,21 @@ export default function UnifiedPatientRecords({
         return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
       });
 
-    if (futureDetoxAppointment) return 'Detox';
+    if (futureDetoxAppointment) return `Detox (${futureDetoxAppointment.session || 'FN'})`;
 
     // Check consultation's detox recommendation
     const latestCons = getLatestConsultation(patientId);
     if (latestCons && (latestCons.detox_recommended || latestCons.detoxRecommended)) {
       // Only return Detox if there's a future detox scheduled
       const hasFutureDetox = (appointments || [])
-        .some(a => {
+        .find(a => {
           const apptDate = new Date(a.date || a.appointmentDate || 0);
           const matchesPatient = String(a.patient_id || a.patientId) === String(patientId);
           const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
           const isScheduled = a.status === 'Scheduled';
           return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
         });
-      if (hasFutureDetox) return 'Detox';
+      if (hasFutureDetox) return `Detox (${hasFutureDetox.session || 'FN'})`;
     }
 
     // Check for any completed detox sessions (less than 3) only if there's a future detox planned
@@ -206,14 +211,14 @@ export default function UnifiedPatientRecords({
     } else if (completedDetoxCount > 0) {
       // Only return Detox if there's a future detox scheduled
       const hasFutureDetox = (appointments || [])
-        .some(a => {
+        .find(a => {
           const apptDate = new Date(a.date || a.appointmentDate || 0);
           const matchesPatient = String(a.patient_id || a.patientId) === String(patientId);
           const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
           const isScheduled = a.status === 'Scheduled';
           return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
         });
-      if (hasFutureDetox) return 'Detox';
+      if (hasFutureDetox) return `Detox (${hasFutureDetox.session || 'FN'})`;
     }
 
     return null;

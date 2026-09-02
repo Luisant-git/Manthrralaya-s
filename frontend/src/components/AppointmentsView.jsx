@@ -61,9 +61,20 @@ export default function AppointmentsView({
     return type || 'Review';
   };
 
+  const getNextDetoxSessionValue = (patientId) => {
+    if (!patientId) return 'FN';
+    const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+    const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
+    if (!completedTypes.includes('morning')) return 'FN';
+    if (!completedTypes.includes('evening')) return 'AN';
+    return 'FD';
+  };
+
   const handlePatientSelect = (patientId) => {
-    const appointmentType = hasCompletedThreeDetoxSessions(patientId) ? 'Review' : formData.appointmentType;
-    setFormData({ ...formData, patient_id: patientId, appointmentType });
+    const isReview = hasCompletedThreeDetoxSessions(patientId);
+    const appointmentType = isReview ? 'Review' : formData.appointmentType;
+    const session = appointmentType === 'Detox' ? getNextDetoxSessionValue(patientId) : formData.session;
+    setFormData({ ...formData, patient_id: patientId, appointmentType, session });
   };
 
   const getPendingDerivedFollowup = (patientId) => {
@@ -223,6 +234,37 @@ export default function AppointmentsView({
 
   const allItems = getAllAppointmentsWithFollowups();
 
+  const getDisplayAppointmentType = (appt) => {
+    if (String(appt.appointmentType).toLowerCase() !== 'detox') return appt.appointmentType || 'General';
+    let displaySession = appt.session;
+    if (!displaySession) {
+       const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(appt.patient_id || appt.patientId));
+       const matchingDetox = ptDetox.find(d => String(d.appointmentId || d.appointment_id) === String(appt.id));
+       if (matchingDetox) {
+         const sType = String(matchingDetox.sessionType || '').toLowerCase();
+         displaySession = sType === 'morning' ? 'FN' : sType === 'evening' ? 'AN' : 'FD';
+       } else {
+         const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
+         if (!completedTypes.includes('morning')) displaySession = 'FN';
+         else if (!completedTypes.includes('evening')) displaySession = 'AN';
+         else if (!completedTypes.includes('fullday')) displaySession = 'FD';
+         else displaySession = 'FN';
+       }
+    }
+    return `Detox (${displaySession})`;
+  };
+
+  const getNextDetoxSessionLabel = (patientId) => {
+    if (!patientId) return 'Detox (FN)';
+    const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+    const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
+    let nextSession = 'FN';
+    if (!completedTypes.includes('morning')) nextSession = 'FN';
+    else if (!completedTypes.includes('evening')) nextSession = 'AN';
+    else if (!completedTypes.includes('fullday')) nextSession = 'FD';
+    return `Detox (${nextSession})`;
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.patient_id) { toast.warn('Please select a patient.'); return; }
@@ -375,7 +417,8 @@ export default function AppointmentsView({
                       setFormData({
                         ...formData,
                         doctor_id: selectedDocId,
-                        appointmentType: isReviewPatient ? 'Review' : 'Detox'
+                        appointmentType: isReviewPatient ? 'Review' : 'Detox',
+                        session: isReviewPatient ? formData.session : getNextDetoxSessionValue(formData.patient_id)
                       });
                     } else {
                       setFormData({ ...formData, doctor_id: selectedDocId });
@@ -402,7 +445,11 @@ export default function AppointmentsView({
                 <select
                   required
                   value={formData.appointmentType}
-                  onChange={e => setFormData({ ...formData, appointmentType: e.target.value })}
+                  onChange={e => {
+                    const newType = e.target.value;
+                    const newSession = newType === 'Detox' ? getNextDetoxSessionValue(formData.patient_id) : formData.session;
+                    setFormData({ ...formData, appointmentType: newType, session: newSession });
+                  }}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 >
                   {(() => {
@@ -412,13 +459,13 @@ export default function AppointmentsView({
                       return selectedPatientIsReview ? (
                         <option value="Review">Review</option>
                       ) : (
-                        <option value="Detox">Detox</option>
+                        <option value="Detox">{getNextDetoxSessionLabel(formData.patient_id)}</option>
                       );
                     }
                     return (
                       <>
                         <option value="Initial consultation">Initial Consultation</option>
-                        <option value="Detox">Detox</option>
+                        <option value="Detox">{getNextDetoxSessionLabel(formData.patient_id)}</option>
                         <option value="Review">Follow-up</option>
                       </>
                     );
@@ -500,11 +547,11 @@ export default function AppointmentsView({
                       </td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${
-                          appt.appointmentType === 'Detox' ? 'border-teal-200 bg-teal-50 text-teal-700' : 
-                          appt.appointmentType === 'Review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 
+                          String(appt.appointmentType || '').toLowerCase().includes('detox') ? 'border-teal-200 bg-teal-50 text-teal-700' : 
+                          String(appt.appointmentType || '').toLowerCase() === 'review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 
                           'border-purple-200 bg-purple-50 text-purple-700'
                         }`}>
-                          {appt.appointmentType || 'General'}
+                          {getDisplayAppointmentType(appt)}
                           {isFollowup && appt.followupSource === 'detox' && (
                             <span className="ml-1 text-[9px] font-normal">(from detox)</span>
                           )}
