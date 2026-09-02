@@ -171,9 +171,9 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
         if (linkedConsultationId) {
           const linkedConsObj = consultations.find(c => String(c.id) === String(linkedConsultationId));
           const rec = linkedConsObj?.receptionistFollowup || linkedConsObj?.receptionist_followup;
-          if (rec && (rec.followupDate || rec.followup_date)) {
+          if (rec) {
             receptionistData = {
-              date: rec.followupDate || rec.followup_date,
+              date: rec.followupDate || rec.followup_date || null,
               status: rec.status || detoxStatus,
               notes: rec.notes || rec.notes_text || ''
             };
@@ -209,9 +209,9 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
         let doctorStatus = 'Pending';
         
         let receptionistData = null;
-        if (rec && (rec.followupDate || rec.followup_date)) {
+        if (rec) {
           receptionistData = {
-            date: rec.followupDate || rec.followup_date,
+            date: rec.followupDate || rec.followup_date || null,
             status: rec.status || 'Pending',
             notes: rec.notes || rec.notes_text || ''
           };
@@ -306,8 +306,8 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
   });
 
   // Calculate dashboard counts (ONLY PENDING items count for review/detox)
-  const todayCount = filteredList.filter(f => f.actionDate === today).length;
-  const tomorrowCount = filteredList.filter(f => f.actionDate === tomorrow).length;
+  const todayCount = filteredList.filter(f => f.actionDate === today && f.status === 'Pending').length;
+  const tomorrowCount = filteredList.filter(f => f.actionDate === tomorrow && f.status === 'Pending').length;
   const detoxCount = filteredList.filter(f => f.type === 'Detox' && f.status === 'Pending').length;
   const reviewCount = filteredList.filter(f => f.type === 'Review' && f.status === 'Pending').length;
 
