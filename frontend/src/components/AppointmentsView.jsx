@@ -14,7 +14,7 @@ export default function AppointmentsView({
   followups = []
 }) {
   const [isBooking, setIsBooking] = useState(false);
-  const [showFollowups, setShowFollowups] = useState(true);
+  const [showFollowups, setShowFollowups] = useState(false);
   
   const [formData, setFormData] = useState({
     patient_id: '',
@@ -217,7 +217,7 @@ export default function AppointmentsView({
     return all.sort((a, b) => {
       const dateA = a.appointmentDate || a.date;
       const dateB = b.appointmentDate || b.date;
-      return new Date(dateA) - new Date(dateB);
+      return new Date(dateB) - new Date(dateA);
     });
   };
 

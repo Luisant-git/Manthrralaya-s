@@ -1,11 +1,13 @@
-import { IsString, IsEmail, IsEnum, IsOptional, MinLength, IsNotEmpty } from 'class-validator';
+import { IsString, IsEmail, IsEnum, IsOptional, MinLength, IsNotEmpty, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums/user-role.enum';
 
 export class RegisterDto {
-  @ApiProperty({ example: 'admin@clinic.com' })
+  @ApiProperty({ example: 'admin@clinic.com', required: false })
+  @ValidateIf(o => o.email !== '' && o.email !== null)
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @ApiProperty({ example: 'admin' })
   @IsString()

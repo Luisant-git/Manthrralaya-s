@@ -18,12 +18,16 @@ export class AdminService {
       throw new BadRequestException('Cannot create ADMIN users via this endpoint');
     }
 
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: dto.email }
-    });
+    const finalEmail = dto.email && dto.email.trim() !== '' ? dto.email.trim() : null;
 
-    if (existingUser) {
-      throw new ConflictException('Email already exists');
+    if (finalEmail) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: finalEmail }
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Email already exists');
+      }
     }
 
     if (dto.username) {
@@ -47,7 +51,7 @@ export class AdminService {
     const result = await this.prisma.$transaction(async (prisma) => {
       const user = await prisma.user.create({
         data: {
-          email: dto.email,
+          email: finalEmail,
           username: dto.username,
           pin: hashedPin,
           role: role,
@@ -300,8 +304,19 @@ async getUserById(id: number) {
       }
     }
 
+    const finalEmail = dto.email && dto.email.trim() !== '' ? dto.email.trim() : null;
+
+    if (finalEmail && finalEmail !== user.email) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: finalEmail }
+      });
+      if (existingUser) {
+        throw new ConflictException('Email already in use by another staff member');
+      }
+    }
+
     const updateData: any = {
-      email: dto.email,
+      email: finalEmail,
       username: dto.username,
       fullName: dto.fullName,
       phone: dto.phone,

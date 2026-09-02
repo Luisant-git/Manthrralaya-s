@@ -573,7 +573,7 @@ const allPendingFollowUps = React.useMemo(() => {
           <Calendar className="w-16 h-16 text-blue-400 mx-auto mb-4" />
           <h3 className="text-lg font-bold text-blue-800 mb-2">No Appointments Today</h3>
           <p className="text-blue-700">
-            You don't have any appointments scheduled for today ({todayDate}).
+            You don't have any appointments scheduled for today ({todayDate.split('-').reverse().join('/')}).
           </p>
           <p className="text-sm text-blue-600 mt-2">
             Check with the receptionist to schedule appointments or view other days in the appointments tab.

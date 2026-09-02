@@ -129,8 +129,8 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.fullName.trim() || !formData.username.trim() || !formData.email.trim()) {
-            return setStatus({ ...status, error: 'Name, Username and Email are required.' });
+        if (!formData.fullName.trim() || !formData.username.trim()) {
+            return setStatus({ ...status, error: 'Name and Username are required.' });
         }
 
         if (formData.phone && formData.phone.length !== 10) {
@@ -328,7 +328,9 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
                                                 <div className="text-base font-bold text-slate-600 normal-case">{user.username || 'no-username'}</div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-base text-slate-600 font-medium normal-case">{user.email}</div>
+                                                <div className="text-base text-slate-600 font-medium normal-case">
+                                                    {user.email ? user.email : <span className="text-slate-400 italic text-sm">No email provided</span>}
+                                                </div>
                                                 <div className="text-xs text-slate-400">{user.phone || 'No phone'}</div>
                                             </td>
                                             <td className="px-6 py-4 text-center">
@@ -531,12 +533,11 @@ export default function UserManagementView({ activeRole, activeTab, currentUser 
 
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
-                                    Official Email <span className="text-rose-500">*</span>
+                                    Official Email
                                 </label>
                                 <input
                                     type="email"
                                     name="email"
-                                    required
                                     placeholder="staff@manthrralayas.com"
                                     value={formData.email}
                                     onChange={handleChange}
