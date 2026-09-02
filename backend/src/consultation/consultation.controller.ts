@@ -26,7 +26,7 @@ export class ConsultationController {
   }
 
   @Get()
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get all consultations' })
   findAll() {
     return this.consultationService.findAll();
@@ -40,7 +40,7 @@ export class ConsultationController {
   }
 
   @Get('patient/:patientId')
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get consultations by patient ID' })
   findByPatient(@Param('patientId', ParseIntPipe) patientId: number) {
     return this.consultationService.findByPatient(patientId);
@@ -69,7 +69,7 @@ export class ConsultationController {
   }
 
   @Get(':id')
-  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST')
+  @Roles('DOCTOR', 'ADMIN', 'RECEPTIONIST', 'THERAPIST')
   @ApiOperation({ summary: 'Get consultation by ID' })
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.consultationService.findOne(id);
