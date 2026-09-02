@@ -171,19 +171,13 @@ export const sendWhatsappTemplateMessage = async (
 
     const messageId = data.messages?.[0]?.id;
     if (messageId) {
-      // Extract parameter strings from the components array
-      let paramStrings: string[] = [];
-      if (parameters && Array.isArray(parameters)) {
-        paramStrings = parameters.map(p => p.text || p.id || '');
-      }
-
       logTemplateToCRM(
         toPhoneNumber,
         messageId,
         templateName,
         'N/A',
         `Template ${templateName} sent`,
-        paramStrings
+        parameters || []
       ).catch(e => console.error('Failed to run CRM logging', e));
     }
 
@@ -252,18 +246,13 @@ export const sendWhatsappTemplateMessageWithoutMedia = async (
 
   const messageId = data.messages?.[0]?.id;
   if (messageId) {
-    let paramStrings: string[] = [];
-    if (parameters && Array.isArray(parameters)) {
-      paramStrings = parameters.map(p => p.text || p.id || '');
-    }
-
     logTemplateToCRM(
       toPhoneNumber,
       messageId,
       templateName,
       'N/A',
       `Template ${templateName} sent (no media)`,
-      paramStrings
+      parameters || []
     ).catch(e => console.error('Failed to run CRM logging', e));
   }
 
