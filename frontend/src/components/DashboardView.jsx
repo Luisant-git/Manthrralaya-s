@@ -775,7 +775,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             )}
                             {String(item.appointmentType || '').toLowerCase().includes('detox') && (
                               <span className="text-[10px] bg-teal-500 text-white px-2 py-0.5 rounded-full font-semibold">
-                                Detox
+                                {String(item.appointmentType || '').toLowerCase() === 'detox' && item.session ? `Detox (${item.session})` : item.appointmentType}
                               </span>
                             )}
                           </div>
@@ -867,7 +867,7 @@ const allPendingFollowUps = React.useMemo(() => {
                     <div key={item.id} className="p-3 rounded-xl bg-purple-50 border border-purple-100">
                       <div className="font-bold text-slate-800 text-sm">{item.patient?.name || 'Unknown Patient'}</div>
                       <div className="text-xs text-slate-500 mt-1">
-                        {item.appointmentType}
+                        {String(item.appointmentType || '').toLowerCase() === 'detox' && item.session ? `Detox (${item.session})` : item.appointmentType}
                         {String(item.appointmentType || '').toLowerCase().includes('detox') && (
                           <span className="ml-2 text-teal-600">(Detox Session)</span>
                         )}
@@ -965,7 +965,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             </div>
                             <div className="col-span-2">
                               <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Type</span>
-                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType || 'General'}</span>
+                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>{String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session ? `Detox (${appt.session})` : (appt.appointmentType || 'General')}</span>
                             </div>
                           </div>
 
@@ -1059,7 +1059,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">
                               <span className={getAppointmentTypeBadge(appt.appointmentType)}>
-                                {appt.appointmentType || 'General'}
+                                {String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session ? `Detox (${appt.session})` : (appt.appointmentType || 'General')}
                               </span>
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">

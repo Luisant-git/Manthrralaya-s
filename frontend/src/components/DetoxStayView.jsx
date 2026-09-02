@@ -47,6 +47,11 @@ export default function DetoxView({
     };
   };
 
+  const getCompletedSessionTypes = (patientId) => {
+    const sessions = localDetoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
+    return sessions.map(d => String(d.sessionType || '').toLowerCase());
+  };
+
   // Editor functions
   const applyEditorCommand = (command, value, editorRef, setter) => {
     if (!editorRef?.current) return;
@@ -411,6 +416,19 @@ export default function DetoxView({
     setHistoryPage(1);
   }, [activePt?.id, selectedTab, historySubTab]);
 
+  useEffect(() => {
+    if (activePt) {
+      const completedTypes = getCompletedSessionTypes(activePt.id);
+      if (!completedTypes.includes('morning')) {
+        setSessionType('morning');
+      } else if (!completedTypes.includes('evening')) {
+        setSessionType('evening');
+      } else {
+        setSessionType('fullDay');
+      }
+    }
+  }, [activePt?.id, localDetoxSessions]);
+
   const getSessionTypeDisplay = (type) => {
     switch(type) {
       case 'morning': return 'Morning Session';
@@ -752,55 +770,88 @@ export default function DetoxView({
                         Select Session Type
                       </h3>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setSessionType('morning')}
-                          className={`p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                            sessionType === 'morning'
-                              ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                              : 'border-slate-200 bg-white hover:border-emerald-300'
-                          }`}
-                        >
-                          <Sun className={`w-6 h-6 ${sessionType === 'morning' ? 'text-emerald-600' : 'text-amber-500'}`} />
-                          <span className={`font-semibold text-sm ${sessionType === 'morning' ? 'text-emerald-700' : 'text-slate-700'}`}>
-                            Morning Session
-                          </span>
-                          <span className="text-xs text-slate-500">8:00 AM - 12:00 PM</span>
-                        </button>
+                      {(() => {
+                        const completedTypes = getCompletedSessionTypes(activePt.id);
+                        const isMorningCompleted = completedTypes.includes('morning');
+                        const isEveningCompleted = completedTypes.includes('evening');
+                        const isFullDayCompleted = completedTypes.includes('fullday');
                         
-                        <button
-                          type="button"
-                          onClick={() => setSessionType('evening')}
-                          className={`p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                            sessionType === 'evening'
-                              ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                              : 'border-slate-200 bg-white hover:border-emerald-300'
-                          }`}
-                        >
-                          <Moon className={`w-6 h-6 ${sessionType === 'evening' ? 'text-emerald-600' : 'text-indigo-500'}`} />
-                          <span className={`font-semibold text-sm ${sessionType === 'evening' ? 'text-emerald-700' : 'text-slate-700'}`}>
-                            Evening Session
-                          </span>
-                          <span className="text-xs text-slate-500">4:00 PM - 8:00 PM</span>
-                        </button>
-                        
-                        <button
-                          type="button"
-                          onClick={() => setSessionType('fullDay')}
-                          className={`p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                            sessionType === 'fullDay'
-                              ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                              : 'border-slate-200 bg-white hover:border-emerald-300'
-                          }`}
-                        >
-                          <SunMoon className={`w-6 h-6 ${sessionType === 'fullDay' ? 'text-emerald-600' : 'text-purple-500'}`} />
-                          <span className={`font-semibold text-sm ${sessionType === 'fullDay' ? 'text-emerald-700' : 'text-slate-700'}`}>
-                            Full Day Session
-                          </span>
-                          <span className="text-xs text-slate-500">8:00 AM - 8:00 PM</span>
-                        </button>
-                      </div>
+                        return (
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <button
+                              type="button"
+                              disabled={isMorningCompleted}
+                              onClick={() => setSessionType('morning')}
+                              className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
+                                isMorningCompleted
+                                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                                  : sessionType === 'morning'
+                                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                              }`}
+                            >
+                              <Sun className={`w-6 h-6 ${isMorningCompleted ? 'text-slate-400' : sessionType === 'morning' ? 'text-emerald-600' : 'text-amber-500'}`} />
+                              <span className={`font-semibold text-sm ${isMorningCompleted ? 'text-slate-500' : sessionType === 'morning' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                Morning Session
+                              </span>
+                              <span className="text-xs text-slate-500">8:00 AM - 12:00 PM</span>
+                              {isMorningCompleted && (
+                                <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Done
+                                </div>
+                              )}
+                            </button>
+                            
+                            <button
+                              type="button"
+                              disabled={isEveningCompleted}
+                              onClick={() => setSessionType('evening')}
+                              className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
+                                isEveningCompleted
+                                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                                  : sessionType === 'evening'
+                                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                              }`}
+                            >
+                              <Moon className={`w-6 h-6 ${isEveningCompleted ? 'text-slate-400' : sessionType === 'evening' ? 'text-emerald-600' : 'text-indigo-500'}`} />
+                              <span className={`font-semibold text-sm ${isEveningCompleted ? 'text-slate-500' : sessionType === 'evening' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                Evening Session
+                              </span>
+                              <span className="text-xs text-slate-500">4:00 PM - 8:00 PM</span>
+                              {isEveningCompleted && (
+                                <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Done
+                                </div>
+                              )}
+                            </button>
+                            
+                            <button
+                              type="button"
+                              disabled={isFullDayCompleted}
+                              onClick={() => setSessionType('fullDay')}
+                              className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
+                                isFullDayCompleted
+                                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
+                                  : sessionType === 'fullDay'
+                                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                              }`}
+                            >
+                              <SunMoon className={`w-6 h-6 ${isFullDayCompleted ? 'text-slate-400' : sessionType === 'fullDay' ? 'text-emerald-600' : 'text-purple-500'}`} />
+                              <span className={`font-semibold text-sm ${isFullDayCompleted ? 'text-slate-500' : sessionType === 'fullDay' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                                Full Day Session
+                              </span>
+                              <span className="text-xs text-slate-500">8:00 AM - 8:00 PM</span>
+                              {isFullDayCompleted && (
+                                <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                                  <CheckCircle className="w-3 h-3" /> Done
+                                </div>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {/* Detox Notes Section */}
@@ -882,26 +933,7 @@ export default function DetoxView({
 
                     {/* Save Button */}
                     <div className="p-5 bg-slate-50 flex justify-end gap-3">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const draftSession = {
-                            patient_name: activePt.name,
-                            doctorName: activeAppt?.doctor_name || currentUser?.fullName || 'Assigned Provider',
-                            sessionNumber: getPatientSessionCount(activePt.id).completed + 1,
-                            sessionType: sessionType,
-                            sessionDate: new Date().toISOString().split('T')[0],
-                            detoxNotes: detoxNotes,
-                            followupDate: followupDate,
-                            followupRemarks: followupRemarks
-                          };
-                          generateDetoxPDF(draftSession);
-                        }}
-                        className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
-                        title="Download current input as PDF without saving"
-                      >
-                        <Download className="w-4 h-4 text-emerald-600" /> Export Draft PDF
-                      </button>
+
                       <button
                         onClick={handleSaveDetoxSession}
                         disabled={!canAddSession || !detoxNotes.trim() || isSaving || getPatientSessionCount(activePt.id).completed >= 3}

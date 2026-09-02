@@ -34,12 +34,12 @@ export default function PatientsView({ appointments = [], followups = [], consul
   }, []);
 
   const getAppointmentTypeBadge = (type) => {
-    const colors = {
-      'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
-      'Detox': 'bg-teal-50 text-teal-600 border-teal-200',
-      'Review': 'bg-amber-50 text-amber-600 border-amber-200'
-    };
-    return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || 'bg-slate-50 text-slate-600 border-slate-200'}`;
+    if (!type) return "px-2 py-0.5 rounded text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200";
+    const t = type.toLowerCase();
+    if (t.includes('initial')) return "px-2 py-0.5 rounded text-xs font-medium border bg-purple-50 text-purple-600 border-purple-200";
+    if (t.includes('detox')) return "px-2 py-0.5 rounded text-xs font-medium border bg-teal-50 text-teal-600 border-teal-200";
+    if (t.includes('review')) return "px-2 py-0.5 rounded text-xs font-medium border bg-amber-50 text-amber-600 border-amber-200";
+    return "px-2 py-0.5 rounded text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200";
   };
 
   const getLatestAppointmentType = (patientId) => {
@@ -59,7 +59,12 @@ export default function PatientsView({ appointments = [], followups = [], consul
         const dateB = new Date(b.appointmentDate || b.date || 0);
         return dateB - dateA;
       });
-    return sorted[0]?.appointmentType || 'General';
+    const appt = sorted[0];
+    if (!appt) return 'General';
+    if (appt.appointmentType === 'Detox' && appt.session) {
+      return `Detox (${appt.session})`;
+    }
+    return appt.appointmentType || 'General';
   };
 
   const getLatestAppointmentNote = (patientId) => {
@@ -119,7 +124,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     if (followup?.type) return followup.type;
 
     const futureDetoxAppointment = (appointments || [])
-      .some(a => {
+      .find(a => {
         const apptDate = new Date(a.date || a.appointmentDate || 0);
         const matchesPatient = String(a.patientId || a.patient_id) === String(patientId);
         const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
@@ -127,19 +132,19 @@ export default function PatientsView({ appointments = [], followups = [], consul
         return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
       });
 
-    if (futureDetoxAppointment) return 'Detox';
+    if (futureDetoxAppointment) return `Detox (${futureDetoxAppointment.session || 'FN'})`;
 
     const latestCons = getLatestConsultation(patientId);
     if (latestCons && (latestCons.detox_recommended || latestCons.detoxRecommended)) {
       const hasFutureDetox = (appointments || [])
-        .some(a => {
+        .find(a => {
           const apptDate = new Date(a.date || a.appointmentDate || 0);
           const matchesPatient = String(a.patientId || a.patient_id) === String(patientId);
           const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
           const isScheduled = a.status === 'Scheduled';
           return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
         });
-      if (hasFutureDetox) return 'Detox';
+      if (hasFutureDetox) return `Detox (${hasFutureDetox.session || 'FN'})`;
     }
 
     const completedDetoxCount = getCompletedDetoxSessionCount(patientId);
@@ -154,14 +159,14 @@ export default function PatientsView({ appointments = [], followups = [], consul
       if (hasPendingReview) return 'Review';
     } else if (completedDetoxCount > 0) {
       const hasFutureDetox = (appointments || [])
-        .some(a => {
+        .find(a => {
           const apptDate = new Date(a.date || a.appointmentDate || 0);
           const matchesPatient = String(a.patientId || a.patient_id) === String(patientId);
           const isFuture = !isNaN(apptDate.getTime()) && apptDate >= today;
           const isScheduled = a.status === 'Scheduled';
           return matchesPatient && isFuture && isScheduled && a.appointmentType === 'Detox';
         });
-      if (hasFutureDetox) return 'Detox';
+      if (hasFutureDetox) return `Detox (${hasFutureDetox.session || 'FN'})`;
     }
 
     return null;

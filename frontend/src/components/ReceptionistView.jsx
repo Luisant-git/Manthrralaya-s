@@ -315,6 +315,10 @@ export default function ReceptionistView({
     }
   }
 
+  if (newState.appointmentType === 'Detox') {
+    newState.session = getNextDetoxSessionValue(patient.id);
+  }
+
   return newState;
 };
 
@@ -850,6 +854,33 @@ export default function ReceptionistView({
     return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || colors['Initial consultation']}`;
   };
 
+  const getDisplayAppointmentType = (appt) => {
+    if (String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session) {
+      return `Detox (${appt.session})`;
+    }
+    return appt.appointmentType || 'General';
+  };
+
+  const getNextDetoxSessionLabel = (patientId) => {
+    if (!patientId) return 'Detox (FN)';
+    const ptDetox = detoxSessions ? detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId)) : [];
+    const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
+    let nextSession = 'FN';
+    if (!completedTypes.includes('morning')) nextSession = 'FN';
+    else if (!completedTypes.includes('evening')) nextSession = 'AN';
+    else if (!completedTypes.includes('fullday')) nextSession = 'FD';
+    return `Detox (${nextSession})`;
+  };
+
+  const getNextDetoxSessionValue = (patientId) => {
+    if (!patientId) return 'FN';
+    const ptDetox = detoxSessions ? detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId)) : [];
+    const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
+    if (!completedTypes.includes('morning')) return 'FN';
+    if (!completedTypes.includes('evening')) return 'AN';
+    return 'FD';
+  };
+
   const clearForm = () => {
     setFormData({
       name: '',
@@ -1117,7 +1148,10 @@ export default function ReceptionistView({
                               onClick={() => {
                                 if (isAvailable) {
                                   const update = { doctor_id: d.id };
-                                  if (d.role === 'THERAPIST') update.appointmentType = getFinalAppointmentType(foundPatient?.id, 'Detox');
+                                  if (d.role === 'THERAPIST') {
+                                    update.appointmentType = getFinalAppointmentType(foundPatient?.id, 'Detox');
+                                    update.session = getNextDetoxSessionValue(foundPatient?.id || formData.patient_id);
+                                  }
                                   setFormData({ ...formData, ...update });
                                   setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
                                   setShowDoctorDropdown(false);
@@ -1175,13 +1209,18 @@ export default function ReceptionistView({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
-                <select value={formData.appointmentType} onChange={e => setFormData({ ...formData, appointmentType: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
+                <select value={formData.appointmentType} onChange={e => {
+                    const newType = e.target.value;
+                    const update = { appointmentType: newType };
+                    if (newType === 'Detox') update.session = getNextDetoxSessionValue(foundPatient?.id || formData.patient_id);
+                    setFormData({ ...formData, ...update });
+                }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
                   {availableDoctors.find(d => String(d.id) === String(formData.doctor_id))?.role === 'THERAPIST' ? (
-                    <option value="Detox">Detox</option>
+                    <option value="Detox">{getNextDetoxSessionLabel(foundPatient?.id)}</option>
                   ) : (
                     <>
                       <option value="Initial consultation">Initial Consultation</option>
-                      <option value="Detox">Detox</option>
+                      <option value="Detox">{getNextDetoxSessionLabel(foundPatient?.id)}</option>
                       <option value="Review">Review</option>
                     </>
                   )}
@@ -1275,7 +1314,7 @@ export default function ReceptionistView({
                             )}
                           </td>
                           <td className="py-2.5 px-4">
-                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType}</span>
+                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>{getDisplayAppointmentType(appt)}</span>
                           </td>
                           <td className="py-2.5 px-4 text-slate-500 max-w-[150px] truncate" title={appt.notes}>{appt.notes}</td>
                           <td className="py-2.5 px-4 text-right space-x-2 whitespace-nowrap">
@@ -1415,7 +1454,7 @@ export default function ReceptionistView({
                             <span className="text-slate-500 font-medium block truncate">{formatPhoneWithoutCountryCode(pt.phone)} {renderPatientMeta(pt)}</span>
                            </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>{appt.appointmentType || 'General'}</span>
+                            <span className={getAppointmentTypeBadge(appt.appointmentType)}>{getDisplayAppointmentType(appt)}</span>
                            </td>
                           <td className="py-3 px-4 align-top min-w-0 whitespace-nowrap">
                             <span className="font-semibold text-slate-700 block truncate">
@@ -1531,12 +1570,12 @@ export default function ReceptionistView({
                       hasCompletedThreeDetoxSessions(bookingModalPatient?.id) ? (
                         <option value="Review">Review</option>
                       ) : (
-                        <option value="Detox">Detox</option>
+                        <option value="Detox">{getNextDetoxSessionLabel(bookingModalPatient?.id)}</option>
                       )
                     ) : (
                       <>
                         <option value="Initial consultation">Initial Consultation</option>
-                        <option value="Detox">Detox</option>
+                        <option value="Detox">{getNextDetoxSessionLabel(bookingModalPatient?.id)}</option>
                         <option value="Review">Review</option>
                       </>
                     )}
