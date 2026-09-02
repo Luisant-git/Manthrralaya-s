@@ -1304,9 +1304,26 @@ export default function ReceptionistView({
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input type="text" placeholder="Search by patient name, phone, or doctor..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all" />
                   </div>
-                  <button onClick={handleDownloadPdf} className="bg-emerald-600 text-white hover:bg-emerald-700 font-bold px-5 py-2 rounded-xl border border-emerald-600 transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap shadow-sm">
-                    <Download className="w-4 h-4" /> Download Report
-                  </button>
+                  <div className="flex gap-2">
+                    {(searchQuery || filterDate !== todayDate || filterDoctor !== 'all' || filterType !== 'all' || filterStatus !== 'all') && (
+                      <button 
+                        onClick={() => {
+                          setSearchQuery('');
+                          setFilterDate(todayDate);
+                          setFilterDoctor('all');
+                          setFilterType('all');
+                          setFilterStatus('all');
+                        }}
+                        className="bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold px-4 py-2 rounded-xl border border-rose-200 transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap shadow-sm"
+                        title="Clear all filters"
+                      >
+                        <X className="w-4 h-4" /> Clear Filters
+                      </button>
+                    )}
+                    <button onClick={handleDownloadPdf} className="bg-emerald-600 text-white hover:bg-emerald-700 font-bold px-5 py-2 rounded-xl border border-emerald-600 transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap shadow-sm">
+                      <Download className="w-4 h-4" /> Download Report
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">

@@ -628,26 +628,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
                     {/* Save & WhatsApp Actions */}
                     <div className="p-5 bg-slate-50 flex flex-wrap justify-end gap-3">
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          const draftCons = {
-                            patient_name: activePt.name,
-                            doctor_name: activeAppt?.doctor_name || currentUser?.fullName || 'Assigned Provider',
-                            date: new Date().toISOString().split('T')[0],
-                            consultation_notes: consultationNotes,
-                            medical_history: medicalHistory,
-                            detox_procedure: detoxProcedure,
-                            diet_plan_note: dietPlanNote,
-                            home_care: homeCare
-                          };
-                          generateConsultationPDF(draftCons);
-                        }}
-                        className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm"
-                        title="Download current input as PDF without saving"
-                      >
-                        <Download className="w-4 h-4 text-emerald-600" /> Export Draft PDF
-                      </button>
+
                      
                       <button onClick={handleCompleteConsultation} disabled={isSaving} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                         {isSaving ? (<><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Saving...</>) : (<><Save className="w-4 h-4" /> Save & Finalize Consultation</>)}

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall } from 'lucide-react';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye } from 'lucide-react';
+import PatientHistoryModal from './PatientHistoryModal';
 
 export default function DashboardView({ 
   patients, 
@@ -86,6 +87,8 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [selectedHistoryPatient, setSelectedHistoryPatient] = useState(null);
   const queueRef = useRef(null);
 
   const scrollToDoctorQueue = () => {
@@ -759,8 +762,7 @@ const allPendingFollowUps = React.useMemo(() => {
                   todayPatientList.map((item) => (
                     <div
                       key={item.id}
-                      className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'} ${item.patient ? 'cursor-pointer hover:shadow-lg' : ''}`}
-                      onClick={() => item.patient && handleViewPatientDetails(item.patient)}
+                      className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}
                     >
                       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                         <div className="flex-1">
@@ -828,10 +830,14 @@ const allPendingFollowUps = React.useMemo(() => {
                         <div className="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleViewPatientDetails(item.patient)}
-                            className="text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
+                            onClick={() => {
+                              setSelectedHistoryPatient(item.patient);
+                              setIsHistoryModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
                           >
-                            View Patient Details
+                            <Eye className="w-3.5 h-3.5" />
+                            History
                           </button>
                           <div className="text-xs text-slate-500">Patient ID: P-{item.patient.id || 'N/A'}</div>
                         </div>
@@ -1145,6 +1151,18 @@ const allPendingFollowUps = React.useMemo(() => {
           </>
         )}
       </div>
+
+      <PatientHistoryModal 
+        isOpen={isHistoryModalOpen} 
+        onClose={() => {
+          setIsHistoryModalOpen(false);
+          setSelectedHistoryPatient(null);
+        }} 
+        patient={selectedHistoryPatient} 
+        consultations={consultations} 
+        detoxSessions={detoxSessions} 
+        doctors={doctors}
+      />
     </div>
   );
 }
