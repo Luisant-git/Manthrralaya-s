@@ -168,6 +168,18 @@ export const sendWhatsappTemplateMessage = async (
     }
 
     console.log('WhatsApp message sent successfully:', data);
+
+    const messageId = data.messages?.[0]?.id;
+    if (messageId) {
+      logTemplateToCRM(
+        toPhoneNumber,
+        messageId,
+        templateName,
+        'N/A',
+        `Template ${templateName} sent`
+      ).catch(e => console.error('Failed to run CRM logging', e));
+    }
+
     return data;
   } catch (error: any) {
     console.error('WhatsApp send error:', error.message);
@@ -231,5 +243,53 @@ export const sendWhatsappTemplateMessageWithoutMedia = async (
     throw new Error(`WhatsApp API error: ${JSON.stringify(data)}`);
   }
 
+  const messageId = data.messages?.[0]?.id;
+  if (messageId) {
+    logTemplateToCRM(
+      toPhoneNumber,
+      messageId,
+      templateName,
+      'N/A',
+      `Template ${templateName} sent (no media)`
+    ).catch(e => console.error('Failed to run CRM logging', e));
+  }
+
   return data;
+};
+
+export const logTemplateToCRM = async (customerPhone: string, messageId: string, templateName: string, orderId: any, templateContent: string) => {
+  try {
+    const crmApiUrl = 'https://whatsapp.api.luisant.cloud/whatsapp/external/log-message';
+    const crmApiKey = process.env.EXTERNAL_API_KEY || 'default-secret-key';
+    
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || process.env.WHATSAPP_PHONE_ID;
+
+    if (!phoneNumberId) {
+      console.warn('Cannot log to CRM: Missing phoneNumberId');
+      return;
+    }
+    
+    const payload = {
+      phoneNumberId: phoneNumberId,
+      customerPhone: customerPhone,
+      messageId: messageId,
+      templateName: templateName,
+      websiteId: 'Manthrralayas',
+      orderId: orderId,
+      templateLanguage: 'en',
+      templateContent: templateContent
+    };
+
+    const response = await fetch(crmApiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${crmApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    console.log(`[WhatsApp] ✅ Successfully logged template ${templateName} to CRM for ref ${orderId}`);
+  } catch (error: any) {
+    console.error('[WhatsApp] ❌ Failed to log template to CRM:', error.message);
+  }
 };
