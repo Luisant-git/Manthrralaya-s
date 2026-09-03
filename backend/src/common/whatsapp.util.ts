@@ -177,7 +177,9 @@ export const sendWhatsappTemplateMessage = async (
         templateName,
         'N/A',
         `Template ${templateName} sent`,
-        parameters || []
+        parameters || [],
+        mediaId,
+        fileName
       ).catch(e => console.error('Failed to run CRM logging', e));
     }
 
@@ -259,7 +261,7 @@ export const sendWhatsappTemplateMessageWithoutMedia = async (
   return data;
 };
 
-export const logTemplateToCRM = async (customerPhone: string, messageId: string, templateName: string, orderId: any, templateContent: string, templateParameters?: string[]) => {
+export const logTemplateToCRM = async (customerPhone: string, messageId: string, templateName: string, orderId: any, templateContent: string, templateParameters?: string[], mediaId?: string, fileName?: string) => {
   try {
     const crmApiUrl = 'https://whatsapp.api.luisant.cloud/whatsapp/external/log-message';
     const crmApiKey = process.env.EXTERNAL_API_KEY || 'default-secret-key';
@@ -280,7 +282,9 @@ export const logTemplateToCRM = async (customerPhone: string, messageId: string,
       orderId: orderId,
       templateLanguage: 'en',
       templateContent: templateContent,
-      templateParameters: templateParameters
+      templateParameters: templateParameters,
+      mediaId: mediaId,
+      fileName: fileName
     };
 
     const response = await fetch(crmApiUrl, {
