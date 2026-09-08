@@ -354,7 +354,262 @@ async getUserById(id: number) {
     };
   }
 
-// ========== RESET USER PIN ==========
+  // ========== DOCTOR PATIENT STATS - ALL DOCTORS ==========
+  async getAllDoctorsPatientStats(fromDate: Date, toDate: Date) {
+    const startOfDay = new Date(fromDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(toDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const doctors = await this.prisma.doctor.findMany({
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+        appointments: {
+          where: {
+            appointmentDate: { gte: startOfDay, lte: endOfDay },
+          },
+          include: {
+            patient: { select: { id: true, name: true, phone: true } },
+            consultation: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        detoxSessions: {
+          where: {
+            sessionDate: { gte: startOfDay, lte: endOfDay },
+          },
+          include: {
+            patient: { select: { id: true, name: true, phone: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      success: true,
+      from: startOfDay.toISOString().split('T')[0],
+      to: endOfDay.toISOString().split('T')[0],
+      data: doctors.map((doc) => {
+        const appointments = doc.appointments || [];
+        const detoxSessions = doc.detoxSessions || [];
+
+        const booked = appointments.length;
+        const pending = appointments.filter(
+          (a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting',
+        ).length;
+        const consulting = appointments.filter((a) => a.status === 'Checked-in').length;
+        const completed = appointments.filter((a) => a.status === 'Completed').length;
+        const cancelled = appointments.filter((a) => a.status === 'Cancelled').length;
+        const detox = detoxSessions.length;
+
+        const appointmentList = appointments.map((a) => ({
+          id: a.id,
+          patientId: a.patientId,
+          patientName: a.patient?.name,
+          patientPhone: a.patient?.phone,
+          status: a.status,
+          appointmentType: a.appointmentType,
+          session: a.session,
+          time: a.appointmentDate,
+          hasConsultation: !!a.consultation,
+        }));
+
+        const detoxList = detoxSessions.map((ds) => ({
+          id: ds.id,
+          patientId: ds.patientId,
+          patientName: ds.patient?.name,
+          patientPhone: ds.patient?.phone,
+          sessionNumber: ds.sessionNumber,
+          sessionType: ds.sessionType,
+          sessionDate: ds.sessionDate,
+          detoxNotes: ds.detoxNotes,
+        }));
+
+        return {
+          doctorId: doc.id,
+          userId: doc.userId,
+          name: doc.user?.fullName,
+          email: doc.user?.email,
+          phone: doc.user?.phone,
+          role: doc.user?.role,
+          specialization: doc.specialization,
+          status: doc.status,
+          stats: {
+            booked,
+            pending,
+            consulting,
+            completed,
+            cancelled,
+            detox,
+          },
+          appointments: appointmentList,
+          detoxSessions: detoxList,
+        };
+      }),
+    };
+  }
+
+  // ========== DOCTOR PATIENT STATS - SPECIFIC DOCTOR ==========
+  async getDoctorPatientDetail(doctorId: number, fromDate: Date, toDate: Date) {
+    const startOfDay = new Date(fromDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(toDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { id: doctorId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!doctor) {
+      return { success: false, message: 'Doctor not found' };
+    }
+
+    const [appointments, detoxSessions] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: {
+          doctorId,
+          appointmentDate: { gte: startOfDay, lte: endOfDay },
+        },
+        include: {
+          patient: { select: { id: true, name: true, age: true, gender: true, phone: true, whatsapp: true, location: true } },
+          consultation: true,
+        },
+        orderBy: [
+          { appointmentDate: 'asc' },
+          { createdAt: 'asc' },
+        ],
+      }),
+      this.prisma.detoxSession.findMany({
+        where: {
+          doctorId,
+          sessionDate: { gte: startOfDay, lte: endOfDay },
+        },
+        include: {
+          patient: { select: { id: true, name: true, age: true, gender: true, phone: true, whatsapp: true, location: true } },
+          appointment: true,
+          consultation: true,
+        },
+        orderBy: [
+          { sessionDate: 'asc' },
+          { createdAt: 'asc' },
+        ],
+      }),
+    ]);
+
+    const pending = appointments.filter((a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting');
+    const consulting = appointments.filter((a) => a.status === 'Checked-in');
+    const completed = appointments.filter((a) => a.status === 'Completed');
+    const cancelled = appointments.filter((a) => a.status === 'Cancelled');
+
+    return {
+      success: true,
+      from: startOfDay.toISOString().split('T')[0],
+      to: endOfDay.toISOString().split('T')[0],
+      doctor: {
+        id: doctor.id,
+        userId: doctor.userId,
+        name: doctor.user?.fullName,
+        email: doctor.user?.email,
+        phone: doctor.user?.phone,
+        specialization: doctor.specialization,
+        status: doctor.status,
+      },
+      stats: {
+        booked: appointments.length,
+        pending: pending.length,
+        consulting: consulting.length,
+        completed: completed.length,
+        cancelled: cancelled.length,
+        detox: detoxSessions.length,
+      },
+      appointments: {
+        pending: pending.map((a) => ({
+          id: a.id,
+          patientId: a.patientId,
+          patient: a.patient,
+          appointmentType: a.appointmentType,
+          session: a.session,
+          status: a.status,
+          time: a.appointmentDate,
+          date: a.appointmentDate,
+          notes: a.notes,
+          hasConsultation: !!a.consultation,
+        })),
+        consulting: consulting.map((a) => ({
+          id: a.id,
+          patientId: a.patientId,
+          patient: a.patient,
+          appointmentType: a.appointmentType,
+          session: a.session,
+          status: a.status,
+          time: a.appointmentDate,
+          date: a.appointmentDate,
+          notes: a.notes,
+          hasConsultation: !!a.consultation,
+        })),
+        completed: completed.map((a) => ({
+          id: a.id,
+          patientId: a.patientId,
+          patient: a.patient,
+          appointmentType: a.appointmentType,
+          session: a.session,
+          status: a.status,
+          time: a.appointmentDate,
+          date: a.appointmentDate,
+          notes: a.notes,
+          hasConsultation: !!a.consultation,
+          consultation: a.consultation
+            ? { id: a.consultation.id, notes: a.consultation.consultationNotes }
+            : null,
+        })),
+        cancelled: cancelled.map((a) => ({
+          id: a.id,
+          patientId: a.patientId,
+          patient: a.patient,
+          appointmentType: a.appointmentType,
+          session: a.session,
+          status: a.status,
+          time: a.appointmentDate,
+          date: a.appointmentDate,
+          notes: a.notes,
+        })),
+      },
+      detoxSessions: detoxSessions.map((ds) => ({
+        id: ds.id,
+        patientId: ds.patientId,
+        patient: ds.patient,
+        sessionNumber: ds.sessionNumber,
+        sessionType: ds.sessionType,
+        sessionDate: ds.sessionDate,
+        date: ds.sessionDate,
+        detoxNotes: ds.detoxNotes,
+        followupDate: ds.followupDate,
+        followupRemarks: ds.followupRemarks,
+      })),
+    };
+  }
+
+  // ========== RESET USER PIN ==========
 async resetUserPin(userId: number, newPin: string, requestingUserRole: UserRole, requestingUserId: number) {
   // Security: Only ADMINs can reset other users' PINs. Non-admins can only reset their own.
   if (requestingUserRole !== UserRole.ADMIN && Number(requestingUserId) !== Number(userId)) {

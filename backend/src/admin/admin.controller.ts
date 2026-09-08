@@ -1,9 +1,9 @@
-import { Controller, Post, Body, UseGuards, Get, Param, Patch, Delete, Req } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Patch, Delete, Req, Query } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 
@@ -89,6 +89,38 @@ export class AdminController {
     @Body() dto: CreateUserDto
   ) {
     return this.adminService.createUser(role, dto);
+  }
+
+  // Doctor Patient Stats - all doctors summary for a date range
+  @ApiOperation({ summary: 'Get all doctors with patient counts for a date range' })
+  @ApiQuery({ name: 'from', required: false, example: '2024-01-01' })
+  @ApiQuery({ name: 'to', required: false, example: '2024-01-31' })
+  @Roles(UserRole.ADMIN)
+  @Get('doctors/patient-stats')
+  getAllDoctorsPatientStats(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const fromDate = from ? new Date(from) : new Date();
+    const toDate = to ? new Date(to) : fromDate;
+    return this.adminService.getAllDoctorsPatientStats(fromDate, toDate);
+  }
+
+  // Doctor Patient Stats - specific doctor detail for a date range
+  @ApiOperation({ summary: 'Get detailed patient breakdown for a specific doctor for a date range' })
+  @ApiParam({ name: 'doctorId', description: 'Doctor profile ID' })
+  @ApiQuery({ name: 'from', required: false, example: '2024-01-01' })
+  @ApiQuery({ name: 'to', required: false, example: '2024-01-31' })
+  @Roles(UserRole.ADMIN)
+  @Get('doctors/:doctorId/patient-detail')
+  getDoctorPatientDetail(
+    @Param('doctorId') doctorId: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const fromDate = from ? new Date(from) : new Date();
+    const toDate = to ? new Date(to) : fromDate;
+    return this.adminService.getDoctorPatientDetail(Number(doctorId), fromDate, toDate);
   }
 
   // Get all users by role

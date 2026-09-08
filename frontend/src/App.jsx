@@ -21,6 +21,8 @@ import DoctorMasterView from './components/DoctorMasterView';
 import UserManagementView from './components/UserManagementView';
 import FollowUpsView from './components/FollowUpsView';
 import ChangeMyPin from './components/ChangeMyPin';
+import DoctorPatientView from './components/DoctorPatientView';
+import DoctorPatientDetailView from './components/DoctorPatientDetailView';
 import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
@@ -52,6 +54,8 @@ export default function App() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [timelinePatient, setTimelinePatient] = useState(null);
+  const [selectedDoctorPatient, setSelectedDoctorPatient] = useState(null);
+  const [doctorPatientRange, setDoctorPatientRange] = useState(null);
 
   // Fetch patients from backend
   const fetchPatientsFromBackend = async () => {
@@ -337,6 +341,12 @@ export default function App() {
       fetchAllData();
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (activeTab !== 'doctor-patients') {
+      setSelectedDoctorPatient(null);
+    }
+  }, [activeTab]);
 
   const handleLogin = ({ role, username, displayName, email, userId }) => {
     console.log('🔄 handleLogin called with userId:', userId);
@@ -745,6 +755,21 @@ export default function App() {
         );
       case 'doctor-master':
         return <DoctorMasterView doctors={doctors} setDoctors={setDoctors} />;
+      case 'doctor-patients':
+        if (selectedDoctorPatient) {
+          return (
+            <DoctorPatientDetailView
+              doctor={selectedDoctorPatient}
+              initialFrom={doctorPatientRange?.from}
+              initialTo={doctorPatientRange?.to}
+              consultations={consultations}
+              detoxSessions={detoxSessions}
+              doctors={doctors}
+              onBack={() => setSelectedDoctorPatient(null)}
+            />
+          );
+        }
+        return <DoctorPatientView onSelectDoctor={(doc, range) => { setSelectedDoctorPatient(doc); setDoctorPatientRange(range); }} />;
       case 'change-my-pin':
         return (
           <ChangeMyPin 

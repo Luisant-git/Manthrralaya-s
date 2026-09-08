@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, User, Bell, MessageSquare, LogOut } from 'lucide-react';
+import { Search, User, MessageSquare, LogOut } from 'lucide-react';
 
 export default function Header({
   activeRole,
@@ -8,7 +8,6 @@ export default function Header({
   setSearchQuery,
   onSearchSubmit,
   onLogout,
-  notificationsCount = 3,
   whatsappApiConnected = true
 }) {
   const getInitials = (name) => {
@@ -62,14 +61,6 @@ export default function Header({
        
 
         {/* Notifications Icon */}
-        <button className="relative text-slate-500 hover:text-emerald-600 transition-colors">
-          <Bell className="w-6 h-6" />
-          {notificationsCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white">
-              {notificationsCount}
-            </span>
-          )}
-        </button>
 
         {/* Profile Avatar */}
         <div className="flex items-center space-x-3 pl-4 border-l border-slate-200">
