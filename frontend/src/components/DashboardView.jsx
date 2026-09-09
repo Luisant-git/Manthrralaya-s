@@ -1161,6 +1161,7 @@ const allPendingFollowUps = React.useMemo(() => {
         patient={selectedHistoryPatient} 
         consultations={consultations} 
         detoxSessions={detoxSessions} 
+        appointments={appointments}
         doctors={doctors}
       />
     </div>

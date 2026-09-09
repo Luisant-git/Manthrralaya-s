@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, MessageSquare } from 'lucide-react';
+import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, MessageSquare, Share2, Edit3, Save } from 'lucide-react';
 import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
-import { uploadConsultationPdf } from '../api/consultationApi';
+import { uploadConsultationPdf, updateConsultation } from '../api/consultationApi';
+import { createAppointment, updateAppointment } from '../api/appointmentApi';
 
 export default function PatientHistoryModal({
   patient,
   consultations = [],
   detoxSessions = [],
+  appointments = [],
   doctors = [],
   onClose
 }) {
@@ -17,6 +19,12 @@ export default function PatientHistoryModal({
   const [isSendingWA, setIsSendingWA] = useState(false);
   const [showWhatsappConfirmModal, setShowWhatsappConfirmModal] = useState(false);
   const [whatsappConsultationToSend, setWhatsappConsultationToSend] = useState(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [selectedShareDoctor, setSelectedShareDoctor] = useState('');
+  const [isSharing, setIsSharing] = useState(false);
+  const [editingSection, setEditingSection] = useState(null);
+  const [editContent, setEditContent] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const historyItemsPerPage = 1;
 
   if (!patient) return null;
@@ -44,7 +52,9 @@ export default function PatientHistoryModal({
   const closeModal = () => {
     setHistoryPage(1);
     setShowWhatsappConfirmModal(false);
+    setShowShareModal(false);
     setWhatsappConsultationToSend(null);
+    setEditingSection(null);
     onClose && onClose();
   };
 
@@ -68,6 +78,78 @@ export default function PatientHistoryModal({
     if (lowerType === 'evening') return 'Evening Session';
     if (lowerType === 'fullday') return 'Full Day Session';
     return 'Session';
+  };
+
+  const handleShareToDoctor = async () => {
+    if (!selectedShareDoctor) {
+      toast.error('Please select a doctor to share with.');
+      return;
+    }
+    setIsSharing(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const patientIdStr = String(patient.id || patient.patientId);
+      
+      const activeAppt = appointments.find(a => {
+         const ptMatch = String(a.patient_id || a.patientId) === patientIdStr;
+         const d = new Date(a.date || a.appointmentDate || 0);
+         d.setHours(0, 0, 0, 0);
+         const isToday = d.getTime() === today.getTime();
+         const isActive = ['Scheduled', 'Arrived', 'Checked-in'].includes(a.status);
+         return ptMatch && isToday && isActive;
+      });
+
+      if (!activeAppt) {
+         toast.error("No active appointment found for this patient today to share.");
+         setIsSharing(false);
+         return;
+      }
+
+      await updateAppointment(activeAppt.id, {
+        doctorId: parseInt(selectedShareDoctor),
+        status: "Arrived",
+        notes: (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor."
+      });
+
+      toast.success('Patient record shared successfully!');
+      setShowShareModal(false);
+      setSelectedShareDoctor('');
+    } catch (error) {
+      console.error('Error sharing record:', error);
+      toast.error(error.message || 'Failed to share patient record');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const startEditing = (section, content) => {
+    setEditingSection(section);
+    setEditContent(content || '');
+  };
+
+  const saveEdit = async (consultation, dbField) => {
+    setIsSavingEdit(true);
+    try {
+      await updateConsultation(consultation.id, { [dbField]: editContent });
+      // Update locally
+      consultation[dbField] = editContent;
+      // Some fields have dual naming in frontend, update both for safety
+      if (dbField === 'consultationNotes') consultation.consultation_notes = editContent;
+      if (dbField === 'medicalHistoryNotes') consultation.medical_history = editContent;
+      if (dbField === 'dietPlanNotes') consultation.diet_plan_note = editContent;
+      if (dbField === 'detoxProcedureNotes') consultation.detox_procedure = editContent;
+      if (dbField === 'homecareGuideliness') consultation.home_care = editContent;
+
+      toast.success('Notes updated successfully');
+      setEditingSection(null);
+    } catch (error) {
+      console.error('Error updating notes:', error);
+      toast.error(error.message || 'Failed to update notes');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   const confirmAndSendToWhatsApp = async () => {
@@ -122,9 +204,14 @@ export default function PatientHistoryModal({
                     <p className="text-xs text-emerald-100">P-{patient.id || patient.patientId}</p>
                   </div>
                 </div>
-                <button onClick={closeModal} className="p-2 rounded-full hover:bg-white/10 transition text-white">
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition">
+                    <Share2 className="w-4 h-4" /> Share
+                  </button>
+                  <button onClick={closeModal} className="p-2 rounded-full hover:bg-white/10 transition text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Patient Quick Info */}
@@ -263,14 +350,42 @@ export default function PatientHistoryModal({
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                                 <Activity className="w-3.5 h-3.5" /> Consultation Notes
                               </div>
-                              <button onClick={() => generateConsultationPDF(currentConsultation, 'Consultation Notes')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                <Download className="w-3 h-3" /> Download
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {editingSection === 'consultationNotes' ? (
+                                  <>
+                                    <button onClick={() => saveEdit(currentConsultation, 'consultationNotes')} disabled={isSavingEdit} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Save className="w-3 h-3" /> Save
+                                    </button>
+                                    <button onClick={() => setEditingSection(null)} className="text-slate-500 hover:text-slate-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <X className="w-3 h-3" /> Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button onClick={() => startEditing('consultationNotes', currentConsultation.consultation_notes || currentConsultation.consultationNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Edit3 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Consultation Notes')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Download className="w-3 h-3" /> Download
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div
-                              className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                              dangerouslySetInnerHTML={{ __html: currentConsultation.consultation_notes || currentConsultation.consultationNotes }}
-                            />
+                            {editingSection === 'consultationNotes' ? (
+                              <div
+                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                dangerouslySetInnerHTML={{ __html: editContent }}
+                              />
+                            ) : (
+                              <div
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.consultation_notes || currentConsultation.consultationNotes }}
+                              />
+                            )}
                           </div>
                         )}
 
@@ -280,14 +395,42 @@ export default function PatientHistoryModal({
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                                 <ClipboardList className="w-3.5 h-3.5" /> Medical History
                               </div>
-                              <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical History')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                <Download className="w-3 h-3" /> Download
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {editingSection === 'medicalHistoryNotes' ? (
+                                  <>
+                                    <button onClick={() => saveEdit(currentConsultation, 'medicalHistoryNotes')} disabled={isSavingEdit} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Save className="w-3 h-3" /> Save
+                                    </button>
+                                    <button onClick={() => setEditingSection(null)} className="text-slate-500 hover:text-slate-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <X className="w-3 h-3" /> Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button onClick={() => startEditing('medicalHistoryNotes', currentConsultation.medical_history || currentConsultation.medicalHistoryNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Edit3 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical History')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Download className="w-3 h-3" /> Download
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div
-                              className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                              dangerouslySetInnerHTML={{ __html: currentConsultation.medical_history || currentConsultation.medicalHistoryNotes }}
-                            />
+                            {editingSection === 'medicalHistoryNotes' ? (
+                              <div
+                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                dangerouslySetInnerHTML={{ __html: editContent }}
+                              />
+                            ) : (
+                              <div
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.medical_history || currentConsultation.medicalHistoryNotes }}
+                              />
+                            )}
                           </div>
                         )}
 
@@ -297,14 +440,42 @@ export default function PatientHistoryModal({
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                                 <ClipboardList className="w-3.5 h-3.5" /> Diet Plan
                               </div>
-                              <button onClick={() => generateConsultationPDF(currentConsultation, 'Diet Plan')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                <Download className="w-3 h-3" /> Download
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {editingSection === 'dietPlanNotes' ? (
+                                  <>
+                                    <button onClick={() => saveEdit(currentConsultation, 'dietPlanNotes')} disabled={isSavingEdit} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Save className="w-3 h-3" /> Save
+                                    </button>
+                                    <button onClick={() => setEditingSection(null)} className="text-slate-500 hover:text-slate-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <X className="w-3 h-3" /> Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button onClick={() => startEditing('dietPlanNotes', currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Edit3 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Diet Plan')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Download className="w-3 h-3" /> Download
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div
-                              className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                              dangerouslySetInnerHTML={{ __html: currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes }}
-                            />
+                            {editingSection === 'dietPlanNotes' ? (
+                              <div
+                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                dangerouslySetInnerHTML={{ __html: editContent }}
+                              />
+                            ) : (
+                              <div
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes }}
+                              />
+                            )}
                           </div>
                         )}
 
@@ -314,25 +485,79 @@ export default function PatientHistoryModal({
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
                                 <RefreshCw className="w-3.5 h-3.5" /> Detox Procedure
                               </div>
-                              <button onClick={() => generateConsultationPDF(currentConsultation, 'Detox Procedure')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                <Download className="w-3 h-3" /> Download
-                              </button>
+                              <div className="flex items-center gap-2">
+                                {editingSection === 'detoxProcedureNotes' ? (
+                                  <>
+                                    <button onClick={() => saveEdit(currentConsultation, 'detoxProcedureNotes')} disabled={isSavingEdit} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Save className="w-3 h-3" /> Save
+                                    </button>
+                                    <button onClick={() => setEditingSection(null)} className="text-slate-500 hover:text-slate-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <X className="w-3 h-3" /> Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button onClick={() => startEditing('detoxProcedureNotes', currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Edit3 className="w-3 h-3" /> Edit
+                                    </button>
+                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Detox Procedure')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Download className="w-3 h-3" /> Download
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                            <div
-                              className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                              dangerouslySetInnerHTML={{ __html: currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes }}
-                            />
+                            {editingSection === 'detoxProcedureNotes' ? (
+                              <div
+                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
+                                contentEditable
+                                suppressContentEditableWarning
+                                onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                dangerouslySetInnerHTML={{ __html: editContent }}
+                              />
+                            ) : (
+                              <div
+                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
+                                dangerouslySetInnerHTML={{ __html: currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes }}
+                              />
+                            )}
                           </div>
                         )}
 
                         {(currentConsultation.home_care || currentConsultation.homecareGuideliness) && (currentConsultation.home_care || currentConsultation.homecareGuideliness) !== '<br>' && (
                           <div>
-                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                              <Bed className="w-3.5 h-3.5" /> Home Care Guidelines
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                <Bed className="w-3.5 h-3.5" /> Home Care Guidelines
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {editingSection === 'homecareGuideliness' ? (
+                                  <>
+                                    <button onClick={() => saveEdit(currentConsultation, 'homecareGuideliness')} disabled={isSavingEdit} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <Save className="w-3 h-3" /> Save
+                                    </button>
+                                    <button onClick={() => setEditingSection(null)} className="text-slate-500 hover:text-slate-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                      <X className="w-3 h-3" /> Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button onClick={() => startEditing('homecareGuideliness', currentConsultation.home_care || currentConsultation.homecareGuideliness)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <Edit3 className="w-3 h-3" /> Edit
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
-                              {currentConsultation.home_care || currentConsultation.homecareGuideliness}
-                            </div>
+                            {editingSection === 'homecareGuideliness' ? (
+                              <textarea
+                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm"
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                              />
+                            ) : (
+                              <div className="text-slate-700 bg-slate-50 p-4 rounded-xl border border-slate-100 leading-relaxed">
+                                {currentConsultation.home_care || currentConsultation.homecareGuideliness}
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -520,6 +745,46 @@ export default function PatientHistoryModal({
                 </button>
                 <button onClick={confirmAndSendToWhatsApp} disabled={isSendingWA} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
                   {isSendingWA ? 'Sending...' : 'Yes, Send'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Share Doctor Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto" onClick={() => setShowShareModal(false)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"></div>
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full modal-animate overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Share2 className="w-5 h-5 text-white" />
+                  <h2 className="text-lg font-bold text-white">Share Record</h2>
+                </div>
+                <button onClick={() => setShowShareModal(false)} className="p-2 rounded-full hover:bg-white/10 transition text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-slate-700 text-sm">Select a doctor to share this patient's history with.</p>
+                <select
+                  value={selectedShareDoctor}
+                  onChange={(e) => setSelectedShareDoctor(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">Select Doctor</option>
+                  {availableDoctors.map(d => (
+                    <option key={d.id} value={d.id}>{d.name || d.user?.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+                <button onClick={() => setShowShareModal(false)} className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
+                  Cancel
+                </button>
+                <button onClick={handleShareToDoctor} disabled={isSharing || !selectedShareDoctor} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSharing ? 'Sharing...' : 'Share'}
                 </button>
               </div>
             </div>
