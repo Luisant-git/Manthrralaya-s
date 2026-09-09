@@ -3,6 +3,7 @@ import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList,
 import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
+import { getSharesForDoctor } from '../api/shareApi';
 import { uploadConsultationPdf } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
 import PatientHistoryModal from './PatientHistoryModal';
@@ -87,6 +88,24 @@ export default function UnifiedPatientRecords({
 
   const currentDocId = currentDoc?.id;
 
+  // Load shares directed to this doctor so shared patients show up in the doctor's view
+  const [sharesForMe, setSharesForMe] = React.useState([]);
+  React.useEffect(() => {
+    let mounted = true;
+    const loadShares = async () => {
+      if (!currentDocId) return;
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await getSharesForDoctor(currentDocId, today, today);
+        if (mounted) setSharesForMe(Array.isArray(res) ? res : (res.data || []));
+      } catch (err) {
+        console.debug('Failed to load shares for doctor', err);
+      }
+    };
+    loadShares();
+    return () => { mounted = false; };
+  }, [currentDocId]);
+
   // Create a robust list of doctors for name lookups
   let availableDoctors = [...doctors];
   if (appointments && appointments.length > 0) {
@@ -111,6 +130,11 @@ export default function UnifiedPatientRecords({
       .filter(c => currentDocId && Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(currentDocId))
       .map(c => String(c.patient_id || c.patientId))
   ]) : null;
+
+    // Add shared patients to the set so they appear in the doctor's patient list
+    if (isDoctor && sharesForMe && sharesForMe.length > 0) {
+      sharesForMe.forEach(s => myPatientIds.add(String(s.patientId)));
+    }
 
   const todayStr = new Date().toLocaleDateString('en-CA');
   const activeDetoxCount = isDoctor ? appointments.filter(a => {
@@ -422,8 +446,24 @@ export default function UnifiedPatientRecords({
       });
 
       if (!activeAppt) {
-        // No active appointment today — allow sharing without creating/updating an appointment
-        toast.success('Patient record shared successfully!');
+        // No active appointment today — create a Share record so the receiving doctor sees it
+        try {
+          const { createShare } = await import('../api/shareApi');
+          const resolvedPatientId = Number(patientToShare.id ?? patientToShare.patientId ?? patientToShare.patient_id ?? patientToShare.patient?.id ?? patientToShare.patient?.patientId);
+          if (isNaN(resolvedPatientId)) {
+            toast.error('Unable to resolve patient id for sharing');
+            setIsSharing(false);
+            return;
+          }
+          const payload = { patientId: resolvedPatientId, toDoctorId: parseInt(selectedShareDoctor), notes: 'Shared patient record' };
+          console.debug('Creating share with payload', payload);
+          await createShare(payload);
+          toast.success('Patient record shared successfully!');
+          try { onRefresh && onRefresh(); } catch (e) {}
+        } catch (err) {
+          console.error('Share API error:', err);
+          toast.error('Failed to share patient record');
+        }
         closeShareModal();
         setIsSharing(false);
         return;

@@ -64,8 +64,27 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
   const completedConsultationsCount = completedAppointments.filter(a => String(a.appointmentType || '').toLowerCase().includes('consultation')).length;
   const completedReviewsCount = completedAppointments.filter(a => String(a.appointmentType || '').toLowerCase().includes('review')).length;
 
-  const allItems = (detail?.appointments?.[activeTab] || [])
+  const baseItems = (detail?.appointments?.[activeTab] || [])
     .concat(activeTab === 'detox' ? detail?.detoxSessions || [] : []);
+
+  // If there are shared records for this doctor and we're viewing pending, show them first
+  const sharedItems = (activeTab === 'pending' && detail?.shares && Array.isArray(detail.shares))
+    ? detail.shares.map(s => ({
+        id: `share-${s.id}`,
+        patientId: s.patientId,
+        patient: s.patient,
+        appointmentType: 'Shared',
+        session: '-',
+        status: 'Shared',
+        notes: s.notes,
+        time: s.date,
+        date: s.date,
+        isShared: true,
+        fromDoctor: s.fromDoctor
+      }))
+    : [];
+
+  const allItems = sharedItems.concat(baseItems);
 
   const filteredList = allItems.filter((item) => {
     if (!searchTerm.trim()) return true;
@@ -334,6 +353,7 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
           doctors={doctors}
           onClose={() => setHistoryPatient(null)}
           onShare={() => loadDetail()}
+          fromDoctorId={doctor.doctorId || doctor.id}
         />
       )}
     </div>

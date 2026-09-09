@@ -1233,6 +1233,7 @@ const allPendingFollowUps = React.useMemo(() => {
         appointments={appointments}
         doctors={doctors}
         onShare={() => { try { onRefresh && onRefresh(); } catch(e){} }}
+        fromDoctorId={currentDoctorId}
       />
     </div>
   );

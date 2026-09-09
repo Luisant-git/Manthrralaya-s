@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
 import { uploadConsultationPdf, updateConsultation } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
+import { createShare } from '../api/shareApi';
 export default function PatientHistoryModal({
   patient,
   consultations = [],
@@ -13,6 +14,7 @@ export default function PatientHistoryModal({
   doctors = [],
   onClose,
   onShare
+  , fromDoctorId
 }) {
   const [historyPage, setHistoryPage] = useState(1);
   const [historySubTab, setHistorySubTab] = useState('consultations');
@@ -46,13 +48,28 @@ export default function PatientHistoryModal({
       });
 
       if (!activeAppt) {
-        // No active appointment today — just mark shared and return without creating an appointment
-        toast.success('Patient record shared successfully!');
-        setShowShareModal(false);
-        setSelectedShareDoctor('');
-        setShareQuery('');
-        setIsSharing(false);
-        return;
+         // No active appointment today — create a Share record so the receiving doctor sees it
+         const resolvedPatientId = Number(patient.id ?? patient.patientId ?? patient.patient_id ?? patient.patient?.id ?? patient.patient?.patientId);
+         if (isNaN(resolvedPatientId)) {
+           toast.error('Unable to resolve patient id for sharing');
+           setIsSharing(false);
+           return;
+         }
+         const payload = { patientId: resolvedPatientId, toDoctorId: parseInt(selectedShareDoctor), notes: 'Shared patient record' };
+         console.debug('Creating share with payload', payload);
+         try {
+           await createShare(payload);
+           toast.success('Patient record shared successfully!');
+           try { onShare && onShare(); } catch (e) {}
+         } catch (err) {
+           console.error('Share API error:', err);
+           toast.error('Failed to share patient record');
+         }
+         setShowShareModal(false);
+         setSelectedShareDoctor('');
+         setShareQuery('');
+         setIsSharing(false);
+         return;
       } else {
 
         await updateAppointment(activeAppt.id, {

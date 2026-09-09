@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, UserPlus, Activity, FileText, Eye, X, Loader2, RefreshCw, Pencil } from 'lucide-react';
 import { getAllPatients, createPatient, updatePatient } from '../api/patientApi';
+import { getSharesForDoctor } from '../api/shareApi';
 import { toast } from 'react-toastify';
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
@@ -11,6 +12,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
   const [patients, setPatients] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [sharesForMe, setSharesForMe] = useState([]);
 
   // Fetch patients from backend
   const fetchPatients = async () => {
@@ -424,6 +426,23 @@ export default function PatientsView({ appointments = [], followups = [], consul
 
   const currentDocId = currentDoc?.id;
 
+  // Load shares directed to this doctor so shared patients show up in the doctor's view
+  useEffect(() => {
+    let mounted = true;
+    const loadShares = async () => {
+      if (!currentDocId) return;
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await getSharesForDoctor(currentDocId, today, today);
+        if (mounted) setSharesForMe(Array.isArray(res) ? res : (res.data || []));
+      } catch (err) {
+        console.debug('Failed to load shares for doctor', err);
+      }
+    };
+    loadShares();
+    return () => { mounted = false; };
+  }, [currentDocId]);
+
   const myPatientIds = isDoctor ? new Set([
     ...appointments
       .filter(a => currentDocId && Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(currentDocId))
@@ -432,6 +451,11 @@ export default function PatientsView({ appointments = [], followups = [], consul
       .filter(c => currentDocId && Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(currentDocId))
       .map(c => String(c.patient_id || c.patientId))
   ]) : null;
+
+  // Add shared patients to the set so they appear in the doctor's patient list
+  if (isDoctor && sharesForMe && sharesForMe.length > 0) {
+    sharesForMe.forEach(s => myPatientIds.add(String(s.patientId)));
+  }
 
   const basePatients = isDoctor ? patients.filter(p => myPatientIds.has(String(p.id))) : patients;
 

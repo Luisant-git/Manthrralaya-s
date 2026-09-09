@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
+import { ShareModule } from './share/share.module';
 import { PatientModule } from './patient/patient.module';
 import { AppointmentModule } from './appointment/appointment.module';
 import { ConsultationModule } from './consultation/consultation.module';
@@ -13,7 +14,7 @@ import { DetoxsessionModule } from './detoxsession/detoxsession.module';
    imports: [
     ConfigModule.forRoot({
       isGlobal: true, 
-    }), AuthModule, AdminModule, PatientModule, AppointmentModule, ConsultationModule, DetoxsessionModule],
+    }), AuthModule, AdminModule, PatientModule, AppointmentModule, ConsultationModule, DetoxsessionModule, ShareModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -524,6 +524,16 @@ async getUserById(id: number) {
       }),
     ]);
 
+    // Fetch shares directed to this doctor in the date range
+    const shares = await this.prisma.share.findMany({
+      where: {
+        toDoctorId: doctorId,
+        createdAt: { gte: startOfDay, lte: endOfDay }
+      },
+      include: { patient: true, fromDoctor: { include: { user: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+
     const pending = appointments.filter((a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting');
     const consulting = appointments.filter((a) => a.status === 'Checked-in');
     const startedDetox = appointments.filter((a) => a.status === 'Started Detox');
@@ -627,6 +637,14 @@ async getUserById(id: number) {
         detoxNotes: ds.detoxNotes,
         followupDate: ds.followupDate,
         followupRemarks: ds.followupRemarks,
+      })),
+      shares: shares.map(s => ({
+        id: s.id,
+        patientId: s.patientId,
+        patient: s.patient,
+        fromDoctor: s.fromDoctor ? { id: s.fromDoctor.id, name: s.fromDoctor.user?.fullName || s.fromDoctor.user?.username || s.fromDoctor.user?.email || `Doctor ${s.fromDoctor.id}` } : null,
+        notes: s.notes,
+        date: s.createdAt
       })),
     };
   }

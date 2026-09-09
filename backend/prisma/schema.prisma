@@ -45,6 +45,8 @@ model Doctor {
   consultations  Consultation[]
   detoxConsultations Consultation[] @relation("DetoxDoctor")
   detoxSessions   DetoxSession[] 
+  sharesSent      Share[]   @relation("ShareFrom")
+  sharesReceived  Share[]   @relation("ShareTo")
 
 
   createdAt      DateTime @default(now())
@@ -67,6 +69,7 @@ model Patient {
   consultations Consultation[]
   receptionistFollowups ReceptionistFollowup[]
   detoxSessions  DetoxSession[]  
+  shares        Share[]
 
   @@map("patients")
   @@index([phone])
@@ -185,4 +188,20 @@ model ReceptionistFollowup {
   patient      Patient      @relation(fields: [patientId], references: [id])
 
   @@map("receptionist_followups")
+}
+
+model Share {
+  id            Int       @id @default(autoincrement())
+  patientId     Int
+  fromDoctorId  Int?      
+  toDoctorId    Int
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  patient       Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fromDoctor    Doctor?   @relation("ShareFrom", fields: [fromDoctorId], references: [id])
+  toDoctor      Doctor    @relation("ShareTo", fields: [toDoctorId], references: [id])
+
+  @@index([toDoctorId])
+  @@index([fromDoctorId])
 }
