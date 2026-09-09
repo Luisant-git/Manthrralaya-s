@@ -406,10 +406,16 @@ async getUserById(id: number) {
         const pending = appointments.filter(
           (a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting',
         ).length;
-        const consulting = appointments.filter((a) => a.status === 'Checked-in').length;
+        // Consider an appointment as 'consulting' if it's checked-in, or already has a consultation record, or its type mentions consultation
+        const consulting = appointments.filter((a) =>
+          a.status === 'Checked-in' || !!a.consultation || String(a.appointmentType || '').toLowerCase().includes('consult')
+        ).length;
+        const startedDetox = appointments.filter((a) => a.status === 'Started Detox').length;
         const completed = appointments.filter((a) => a.status === 'Completed').length;
         const cancelled = appointments.filter((a) => a.status === 'Cancelled').length;
         const detox = detoxSessions.length;
+        // Reviews determined by appointmentType containing 'review'
+        const reviews = appointments.filter((a) => String(a.appointmentType || '').toLowerCase().includes('review')).length;
 
         const appointmentList = appointments.map((a) => ({
           id: a.id,
@@ -447,9 +453,11 @@ async getUserById(id: number) {
             booked,
             pending,
             consulting,
+            startedDetox,
             completed,
             cancelled,
             detox,
+            reviews,
           },
           appointments: appointmentList,
           detoxSessions: detoxList,

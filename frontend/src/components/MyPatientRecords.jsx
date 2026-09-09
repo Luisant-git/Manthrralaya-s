@@ -4,7 +4,7 @@ import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
 import { uploadConsultationPdf } from '../api/consultationApi';
-import { createAppointment, updateAppointment } from '../api/appointmentApi';
+import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
 import PatientHistoryModal from './PatientHistoryModal';
 
 export default function UnifiedPatientRecords({
@@ -22,6 +22,7 @@ export default function UnifiedPatientRecords({
   activeRole,
   currentUser,
   doctors = []
+  , onRefresh
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -421,16 +422,19 @@ export default function UnifiedPatientRecords({
       });
 
       if (!activeAppt) {
-         toast.error("No active appointment found for this patient today to share.");
-         setIsSharing(false);
-         return;
+        // No active appointment today — allow sharing without creating/updating an appointment
+        toast.success('Patient record shared successfully!');
+        closeShareModal();
+        setIsSharing(false);
+        return;
       }
 
       await updateAppointment(activeAppt.id, {
         doctorId: parseInt(selectedShareDoctor),
-        status: "Arrived",
         notes: (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor."
       });
+      // Update status via dedicated endpoint
+      try { await updateAppointmentStatus(activeAppt.id, 'Arrived'); } catch (e) { console.error('Failed to update appointment status:', e); }
 
       // Update local state to immediately remove patient from current doctor's queue
       activeAppt.doctorId = parseInt(selectedShareDoctor);
@@ -440,6 +444,8 @@ export default function UnifiedPatientRecords({
       activeAppt.notes = (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor.";
 
       toast.success('Patient record shared successfully!');
+      // trigger parent refresh to update appointment lists globally
+      try { onRefresh && onRefresh(); } catch (e) {}
       closeShareModal();
     } catch (error) {
       console.error('Error sharing record:', error);
@@ -869,12 +875,13 @@ export default function UnifiedPatientRecords({
         {/* Modal - Consultation History */}
         {isModalOpen && selectedPatient && (
           <PatientHistoryModal
-            patient={selectedPatient}
-            consultations={consultations}
-            detoxSessions={detoxSessions}
-            doctors={availableDoctors}
-            onClose={closeModal}
-          />
+              patient={selectedPatient}
+              consultations={consultations}
+              detoxSessions={detoxSessions}
+              doctors={availableDoctors}
+              onClose={closeModal}
+              onShare={() => { try { onRefresh && onRefresh(); } catch(e){} }}
+            />
         )}
       </div>
 

@@ -16,6 +16,7 @@ export default function DashboardView({
   onSelectPatient,
   currentUser,
   doctors = []
+  , onRefresh
 }) {
   
   const todayDate = new Date().toLocaleDateString('en-CA');
@@ -1231,6 +1232,7 @@ const allPendingFollowUps = React.useMemo(() => {
         detoxSessions={detoxSessions} 
         appointments={appointments}
         doctors={doctors}
+        onShare={() => { try { onRefresh && onRefresh(); } catch(e){} }}
       />
     </div>
   );

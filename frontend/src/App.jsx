@@ -699,7 +699,7 @@ export default function App() {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} onSelectPatient={(pt) => setTimelinePatient(pt)} currentUser={currentUser} doctors={doctors} />;
+        return <DashboardView patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} followups={followups} stayManagement={stayManagement} activeRole={activeRole} onCheckIn={handleCheckIn} onNavigateToTab={setActiveTab} onSelectPatient={(pt) => setTimelinePatient(pt)} currentUser={currentUser} doctors={doctors} onRefresh={fetchAllData} />;
       case 'patients':
         return <PatientsView appointments={appointments} patients={patients} followups={followups} consultations={consultations} detoxSessions={detoxSessions} onAddPatient={handleAddPatient} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefreshConsultations={fetchConsultationsFromBackend} activeRole={activeRole} currentUser={currentUser} doctors={doctors} />;
       case 'follow-ups':
@@ -711,7 +711,7 @@ export default function App() {
       case 'consultations':
         return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} currentUser={currentUser} />;
       case 'my-patient-records':
-        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} onSelectPatient={(pt) => setTimelinePatient(pt)} />;
+        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefresh={fetchAllData} />;
       case 'detox':
       case 'stay':
         return <DetoxStayView

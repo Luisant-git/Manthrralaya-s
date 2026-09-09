@@ -49,8 +49,11 @@ export default function DoctorPatientView({ onSelectDoctor }) {
 
   const totalPatientsAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.booked || 0), 0);
   const totalConsultingAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.consulting || 0), 0);
-  const totalCompletedAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.completed || 0), 0);
+  const totalStartedDetoxAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.startedDetox || 0), 0);
   const totalDetoxAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.detox || 0), 0);
+  const totalReviewsAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.reviews || 0), 0);
+  const totalPendingAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.pending || 0), 0);
+  const totalCancelledAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.cancelled || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -111,7 +114,7 @@ export default function DoctorPatientView({ onSelectDoctor }) {
 
       {/* Summary Cards */}
       {!isLoading && stats.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
@@ -123,6 +126,7 @@ export default function DoctorPatientView({ onSelectDoctor }) {
               </div>
             </div>
           </div>
+
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
@@ -130,21 +134,23 @@ export default function DoctorPatientView({ onSelectDoctor }) {
               </div>
               <div>
                 <p className="text-2xl font-extrabold text-slate-800">{totalConsultingAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Now Consulting</p>
+                <p className="text-xs text-slate-500 font-medium">Consulting</p>
               </div>
             </div>
           </div>
+
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
+                <Droplets className="w-5 h-5 text-teal-600" />
               </div>
               <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalCompletedAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Completed</p>
+                <p className="text-2xl font-extrabold text-slate-800">{totalStartedDetoxAllDoctors}</p>
+                <p className="text-xs text-slate-500 font-medium">Detox Started</p>
               </div>
             </div>
           </div>
+
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
@@ -153,6 +159,42 @@ export default function DoctorPatientView({ onSelectDoctor }) {
               <div>
                 <p className="text-2xl font-extrabold text-slate-800">{totalDetoxAllDoctors}</p>
                 <p className="text-xs text-slate-500 font-medium">Detox Sessions</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                <Eye className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-slate-800">{totalReviewsAllDoctors}</p>
+                <p className="text-xs text-slate-500 font-medium">Reviews</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-slate-800">{totalPendingAllDoctors}</p>
+                <p className="text-xs text-slate-500 font-medium">Pending</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                <XCircle className="w-5 h-5 text-rose-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-extrabold text-slate-800">{totalCancelledAllDoctors}</p>
+                <p className="text-xs text-slate-500 font-medium">Cancelled</p>
               </div>
             </div>
           </div>
@@ -189,7 +231,6 @@ export default function DoctorPatientView({ onSelectDoctor }) {
                         <th className="px-4 py-3 font-bold">Doctor</th>
                         <th className="px-4 py-3 font-bold text-center">Booked</th>
                         <th className="px-4 py-3 font-bold text-center">Pending</th>
-                        <th className="px-4 py-3 font-bold text-center">Consulting Now</th>
                         <th className="px-4 py-3 font-bold text-center">Completed</th>
                         <th className="px-4 py-3 font-bold text-center">Detox</th>
                         <th className="px-4 py-3 font-bold text-center">Cancelled</th>
@@ -221,11 +262,6 @@ export default function DoctorPatientView({ onSelectDoctor }) {
                             <td className="px-4 py-3 text-center">
                               <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-1 rounded-lg bg-rose-50 text-rose-700 font-extrabold">
                                 {stats_data.pending || 0}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-1 rounded-lg bg-amber-50 text-amber-700 font-extrabold">
-                                {stats_data.consulting || 0}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-center">

@@ -5,7 +5,6 @@ import PatientHistoryModal from './PatientHistoryModal';
 
 const STATUS_TABS = [
   { id: 'pending', label: 'Pending', icon: Clock, color: 'amber' },
-  { id: 'consulting', label: 'Consulting Now', icon: Stethoscope, color: 'blue' },
   { id: 'startedDetox', label: 'Started Detox', icon: Droplets, color: 'teal' },
   { id: 'completed', label: 'Completed', icon: CheckCircle2, color: 'emerald' },
   { id: 'cancelled', label: 'Cancelled', icon: XCircle, color: 'rose' },
@@ -28,7 +27,7 @@ function formatDate(d) {
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, initialTo, consultations = [], detoxSessions = [], doctors = [] }) {
+export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, initialTo, consultations = [], detoxSessions = [], doctors = [], onGiveConsultation, onGiveReview }) {
   const today = new Date().toISOString().split('T')[0];
   const [detail, setDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -61,6 +60,10 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
   };
 
   const stats = detail?.stats || {};
+  const completedAppointments = detail?.appointments?.completed || [];
+  const completedConsultationsCount = completedAppointments.filter(a => String(a.appointmentType || '').toLowerCase().includes('consultation')).length;
+  const completedReviewsCount = completedAppointments.filter(a => String(a.appointmentType || '').toLowerCase().includes('review')).length;
+
   const allItems = (detail?.appointments?.[activeTab] || [])
     .concat(activeTab === 'detox' ? detail?.detoxSessions || [] : []);
 
@@ -157,31 +160,41 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
         </div>
       ) : (
         <>
-          {/* Stats Cards */}
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          {/* Stats Cards (ordered: Total Booked, Consulting, Detox Started, Detox Sessions, Reviews, Pending, Cancelled) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
               <p className="text-2xl font-extrabold text-slate-800">{stats.booked || 0}</p>
               <p className="text-xs text-slate-500 font-medium flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Total Booked</p>
             </div>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-2xl font-extrabold text-amber-700">{stats.consulting || 0}</p>
+              <p className="text-xs text-amber-600 font-medium flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" /> Consulting</p>
+            </div>
+
+            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-2xl font-extrabold text-teal-700">{stats.startedDetox || 0}</p>
+              <p className="text-xs text-teal-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox Started</p>
+            </div>
+
+            <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-2xl font-extrabold text-violet-700">{stats.detox || 0}</p>
+              <p className="text-xs text-violet-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox Sessions</p>
+            </div>
+
+            <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-2xl font-extrabold text-indigo-700">{stats.reviews || completedReviewsCount}</p>
+              <p className="text-xs text-indigo-600 font-medium flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> Reviews</p>
+            </div>
+
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
               <p className="text-2xl font-extrabold text-amber-700">{stats.pending || 0}</p>
               <p className="text-xs text-amber-600 font-medium flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Pending</p>
             </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-blue-700">{stats.consulting || 0}</p>
-              <p className="text-xs text-blue-600 font-medium flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" /> Consulting</p>
-            </div>
-            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-teal-700">{stats.startedDetox || 0}</p>
-              <p className="text-xs text-teal-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Started Detox</p>
-            </div>
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-emerald-700">{stats.completed || 0}</p>
-              <p className="text-xs text-emerald-600 font-medium flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Completed</p>
-            </div>
-            <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-violet-700">{stats.detox || 0}</p>
-              <p className="text-xs text-violet-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox Session</p>
+
+            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-2xl font-extrabold text-rose-700">{stats.cancelled || 0}</p>
+              <p className="text-xs text-rose-600 font-medium flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Cancelled</p>
             </div>
           </div>
 
@@ -228,9 +241,18 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
                         <th className="px-4 py-3 font-bold">Patient ID</th>
                         <th className="px-4 py-3 font-bold">Patient</th>
                         <th className="px-4 py-3 font-bold">Date</th>
-                        <th className="px-4 py-3 font-bold text-center">Session</th>
-                        <th className="px-4 py-3 font-bold text-center">Type</th>
-                        {activeTab === 'detox' && <th className="px-4 py-3 font-bold text-center">Detox</th>}
+                        {activeTab !== 'detox' && (
+                          <>
+                            <th className="px-4 py-3 font-bold text-center">Session</th>
+                            <th className="px-4 py-3 font-bold text-center">Type</th>
+                          </>
+                        )}
+                        {activeTab === 'detox' && (
+                          <>
+                            <th className="px-4 py-3 font-bold text-center">Session</th>
+                            <th className="px-4 py-3 font-bold text-center">Type</th>
+                          </>
+                        )}
                         <th className="px-4 py-3 font-bold">Location</th>
                         <th className="px-4 py-3 font-bold text-right">Action</th>
                       </tr>
@@ -249,26 +271,37 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
                               </div>
                             </td>
                             <td className="px-4 py-3 text-slate-600">{formatDate(item.date || item.sessionDate || item.time)}</td>
-                            <td className="px-4 py-3 text-center">
-                              {item.session ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                                  {item.session === 'FN' ? 'Morning' : 'Afternoon'}
-                                </span>
-                              ) : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {item.appointmentType ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
-                                  {item.appointmentType}
-                                </span>
-                              ) : '-'}
-                            </td>
+                            {activeTab !== 'detox' && (
+                              <>
+                                <td className="px-4 py-3 text-center">
+                                  {item.session ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                                      {item.session === 'FN' ? 'Morning' : 'Afternoon'}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {item.appointmentType ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                                      {item.appointmentType}
+                                    </span>
+                                  ) : '-'}
+                                </td>
+                              </>
+                            )}
                             {activeTab === 'detox' && (
-                              <td className="px-4 py-3 text-center">
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">
-                                  {item.sessionType} (S{item.sessionNumber})
-                                </span>
-                              </td>
+                              <>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-1 rounded-lg bg-violet-50 text-violet-700 font-extrabold">
+                                    {item.sessionNumber ? `S${item.sessionNumber}` : '-'}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">
+                                    {item.sessionType || '-'}
+                                  </span>
+                                </td>
+                              </>
                             )}
                             <td className="px-4 py-3 text-slate-600">{p.location || '-'}</td>
                             <td className="px-4 py-3 text-right">
@@ -300,6 +333,7 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
           detoxSessions={detoxSessions}
           doctors={doctors}
           onClose={() => setHistoryPatient(null)}
+          onShare={() => loadDetail()}
         />
       )}
     </div>

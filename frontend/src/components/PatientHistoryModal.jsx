@@ -4,15 +4,15 @@ import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
 import { uploadConsultationPdf, updateConsultation } from '../api/consultationApi';
-import { createAppointment, updateAppointment } from '../api/appointmentApi';
-
+import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
 export default function PatientHistoryModal({
   patient,
   consultations = [],
   detoxSessions = [],
   appointments = [],
   doctors = [],
-  onClose
+  onClose,
+  onShare
 }) {
   const [historyPage, setHistoryPage] = useState(1);
   const [historySubTab, setHistorySubTab] = useState('consultations');
@@ -22,6 +22,67 @@ export default function PatientHistoryModal({
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedShareDoctor, setSelectedShareDoctor] = useState('');
   const [isSharing, setIsSharing] = useState(false);
+  const [shareQuery, setShareQuery] = useState('');
+  const [isShareFocused, setIsShareFocused] = useState(false);
+  const handleShareToDoctor = async () => {
+    if (!selectedShareDoctor) {
+      toast.error('Please select a doctor to share with.');
+      return;
+    }
+    setIsSharing(true);
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const patientIdStr = String(patient.id || patient.patientId);
+
+      const activeAppt = appointments.find(a => {
+         const ptMatch = String(a.patient_id || a.patientId) === patientIdStr;
+         const d = new Date(a.date || a.appointmentDate || 0);
+         d.setHours(0, 0, 0, 0);
+         const isToday = d.getTime() === today.getTime();
+         const isActive = ['Scheduled', 'Arrived', 'Checked-in'].includes(a.status);
+         return ptMatch && isToday && isActive;
+      });
+
+      if (!activeAppt) {
+        // No active appointment today — just mark shared and return without creating an appointment
+        toast.success('Patient record shared successfully!');
+        setShowShareModal(false);
+        setSelectedShareDoctor('');
+        setShareQuery('');
+        setIsSharing(false);
+        return;
+      } else {
+
+        await updateAppointment(activeAppt.id, {
+          doctorId: parseInt(selectedShareDoctor),
+          notes: (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor."
+        });
+        // Ensure backend status is updated via dedicated endpoint
+        try { await updateAppointmentStatus(activeAppt.id, 'Arrived'); } catch (e) { console.error('Failed to update appointment status:', e); }
+
+        // Update local state to immediately reflect change
+        activeAppt.doctorId = parseInt(selectedShareDoctor);
+        activeAppt.doctor_id = parseInt(selectedShareDoctor);
+        if (activeAppt.doctor) activeAppt.doctor.id = parseInt(selectedShareDoctor);
+        activeAppt.status = "Arrived";
+        activeAppt.notes = (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor.";
+      }
+
+      toast.success('Patient record shared successfully!');
+      // notify parent views to refresh data (e.g., doctor's dashboard)
+      try { onShare && onShare(); } catch (e) { /* ignore */ }
+      setShowShareModal(false);
+      setSelectedShareDoctor('');
+      setShareQuery('');
+    } catch (error) {
+      console.error('Error sharing record:', error);
+      toast.error(error.message || 'Failed to share patient record');
+    } finally {
+      setIsSharing(false);
+    }
+  };
   const [editingSection, setEditingSection] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
@@ -29,7 +90,9 @@ export default function PatientHistoryModal({
 
   if (!patient) return null;
 
-  const availableDoctors = [...doctors];
+  // Prefer doctors with explicit Available status; if none, fall back to full list
+  const availableDoctors = (doctors || []).filter(d => d.status === 'Available');
+  const effectiveDoctors = availableDoctors.length > 0 ? availableDoctors : (doctors || []);
 
   const patientId = String(patient.id ?? patient.patientId);
 
@@ -52,7 +115,7 @@ export default function PatientHistoryModal({
   const closeModal = () => {
     setHistoryPage(1);
     setShowWhatsappConfirmModal(false);
-    setShowShareModal(false);
+    
     setWhatsappConsultationToSend(null);
     setEditingSection(null);
     onClose && onClose();
@@ -80,56 +143,7 @@ export default function PatientHistoryModal({
     return 'Session';
   };
 
-  const handleShareToDoctor = async () => {
-    if (!selectedShareDoctor) {
-      toast.error('Please select a doctor to share with.');
-      return;
-    }
-    setIsSharing(true);
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const patientIdStr = String(patient.id || patient.patientId);
-      
-      const activeAppt = appointments.find(a => {
-         const ptMatch = String(a.patient_id || a.patientId) === patientIdStr;
-         const d = new Date(a.date || a.appointmentDate || 0);
-         d.setHours(0, 0, 0, 0);
-         const isToday = d.getTime() === today.getTime();
-         const isActive = ['Scheduled', 'Arrived', 'Checked-in'].includes(a.status);
-         return ptMatch && isToday && isActive;
-      });
-
-      if (!activeAppt) {
-         toast.error("No active appointment found for this patient today to share.");
-         setIsSharing(false);
-         return;
-      }
-
-      await updateAppointment(activeAppt.id, {
-        doctorId: parseInt(selectedShareDoctor),
-        status: "Arrived",
-        notes: (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor."
-      });
-
-      // Update local state to immediately remove patient from current doctor's queue
-      activeAppt.doctorId = parseInt(selectedShareDoctor);
-      activeAppt.doctor_id = parseInt(selectedShareDoctor);
-      if (activeAppt.doctor) activeAppt.doctor.id = parseInt(selectedShareDoctor);
-      activeAppt.status = "Arrived";
-      activeAppt.notes = (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor.";
-
-      toast.success('Patient record shared successfully!');
-      setShowShareModal(false);
-      setSelectedShareDoctor('');
-    } catch (error) {
-      console.error('Error sharing record:', error);
-      toast.error(error.message || 'Failed to share patient record');
-    } finally {
-      setIsSharing(false);
-    }
-  };
+  
 
   const startEditing = (section, content) => {
     setEditingSection(section);
@@ -763,7 +777,7 @@ export default function PatientHistoryModal({
         <div className="fixed inset-0 z-[60] overflow-y-auto" onClick={() => setShowShareModal(false)}>
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"></div>
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full modal-animate overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="relative bg-white rounded-2xl shadow-xl max-w-sm w-full modal-animate overflow-visible" onClick={(e) => e.stopPropagation()}>
               <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Share2 className="w-5 h-5 text-white" />
@@ -774,17 +788,37 @@ export default function PatientHistoryModal({
                 </button>
               </div>
               <div className="p-6 space-y-4">
-                <p className="text-slate-700 text-sm">Select a doctor to share this patient's history with.</p>
-                <select
-                  value={selectedShareDoctor}
-                  onChange={(e) => setSelectedShareDoctor(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="">Select Doctor</option>
-                  {availableDoctors.map(d => (
-                    <option key={d.id} value={d.id}>{d.name || d.user?.fullName}</option>
-                  ))}
-                </select>
+                <p className="text-slate-700 text-sm">Search and select a doctor to share this patient's history with.</p>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search doctor by name..."
+                    value={shareQuery}
+                    onChange={(e) => { setShareQuery(e.target.value); setSelectedShareDoctor(''); }}
+                    onFocus={() => setIsShareFocused(true)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                  {(isShareFocused || shareQuery) && !selectedShareDoctor && (
+                    <div
+                      className="absolute z-50 left-0 right-0 bg-white border border-slate-200 rounded-xl mt-1 max-h-48 overflow-auto"
+                      onWheel={(e) => e.stopPropagation()}
+                      onScroll={(e) => e.stopPropagation()}
+                    >
+                      {effectiveDoctors.filter(d => (d.name || d.user?.fullName || '').toLowerCase().includes((shareQuery||'').toLowerCase())).map(d => (
+                        <div
+                          key={d.id}
+                          onMouseDown={() => { setSelectedShareDoctor(String(d.id)); setShareQuery(d.name || d.user?.fullName || ''); setIsShareFocused(false); }}
+                          className="px-4 py-2 text-sm hover:bg-slate-100 cursor-pointer"
+                        >
+                          {d.name || d.user?.fullName}
+                        </div>
+                      ))}
+                      {effectiveDoctors.filter(d => (d.name || d.user?.fullName || '').toLowerCase().includes((shareQuery||'').toLowerCase())).length === 0 && (
+                        <div className="px-4 py-2 text-sm text-slate-400">No doctors found</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
                 <button onClick={() => setShowShareModal(false)} className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
