@@ -113,6 +113,13 @@ export default function PatientHistoryModal({
         notes: (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor."
       });
 
+      // Update local state to immediately remove patient from current doctor's queue
+      activeAppt.doctorId = parseInt(selectedShareDoctor);
+      activeAppt.doctor_id = parseInt(selectedShareDoctor);
+      if (activeAppt.doctor) activeAppt.doctor.id = parseInt(selectedShareDoctor);
+      activeAppt.status = "Arrived";
+      activeAppt.notes = (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor.";
+
       toast.success('Patient record shared successfully!');
       setShowShareModal(false);
       setSelectedShareDoctor('');
