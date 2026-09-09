@@ -102,7 +102,6 @@ export default function UnifiedPatientRecords({
     });
   }
 
-  // Create a set of patient IDs assigned to this doctor
   const myPatientIds = isDoctor ? new Set([
     ...appointments
       .filter(a => currentDocId && Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(currentDocId))
@@ -111,6 +110,13 @@ export default function UnifiedPatientRecords({
       .filter(c => currentDocId && Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(currentDocId))
       .map(c => String(c.patient_id || c.patientId))
   ]) : null;
+
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const activeDetoxCount = isDoctor ? appointments.filter(a => {
+    const isDocMatch = currentDocId && Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(currentDocId);
+    const isToday = (a.date || (a.appointmentDate ? new Date(a.appointmentDate).toLocaleDateString('en-CA') : '')) === todayStr;
+    return isDocMatch && isToday && a.status === 'Started Detox';
+  }).length : 0;
 
   const getAppointmentTypeBadge = (type) => {
     if (!type) return 'border-slate-200 bg-slate-100 text-slate-600';
@@ -555,6 +561,17 @@ export default function UnifiedPatientRecords({
             <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Records</h1>
             <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation history.</p>
           </div>
+          {isDoctor && (
+            <div className="flex gap-3">
+              <div className="px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2 shadow-sm">
+                <Droplets className="w-5 h-5 text-teal-600" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600 leading-tight">Active Detox</span>
+                  <span className="text-lg font-extrabold text-teal-700 leading-none">{activeDetoxCount} patients</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {isAdding ? (
@@ -739,6 +756,9 @@ export default function UnifiedPatientRecords({
                             <>
                               <div>{latestAppointment.date}</div>
                               {latestAppointment.time && <div className="text-xs text-slate-500">{latestAppointment.time}</div>}
+                              {latestAppointment.status === 'Started Detox' && (
+                                <div className="mt-1.5 inline-flex px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200 text-[10px] font-bold uppercase tracking-wider items-center gap-1 w-fit"><Droplets className="w-2.5 h-2.5"/>In Detox</div>
+                              )}
                             </>
                           ) : (
                             <span className="text-xs text-slate-400">-</span>

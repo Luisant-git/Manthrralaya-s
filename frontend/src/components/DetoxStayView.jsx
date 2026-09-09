@@ -362,7 +362,7 @@ export default function DetoxView({
     }
     
     const isToday = apptDateStr === todayDate;
-    const isCheckedIn = a.status === 'Checked-in';
+    const isCheckedIn = a.status === 'Checked-in' || a.status === 'Started Detox';
     const isDetox = isDetoxAppointment(a);
     
     const hasConsultation = localConsultations.some(c => 

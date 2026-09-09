@@ -1428,6 +1428,7 @@ export default function ReceptionistView({
                       const isScheduled = appt.status === 'Scheduled';
                       const isArrived = appt.status === 'Arrived';
                       const isCheckedIn = appt.status === 'Checked-in';
+                      const isStartedDetox = appt.status === 'Started Detox';
                       const isCompleted = appt.status === 'Completed';
                       const isCancelled = appt.status === 'Cancelled';
                       
@@ -1442,6 +1443,7 @@ export default function ReceptionistView({
                             )}
                             {isArrived && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-3 py-1 text-xs font-semibold"><Clock className="w-3.5 h-3.5" /> Arrived</span>}
                             {isCheckedIn && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-semibold"><Check className="w-3.5 h-3.5" /> With Doctor</span>}
+                            {isStartedDetox && <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 text-teal-800 px-3 py-1 text-xs font-semibold"><Droplets className="w-3.5 h-3.5" /> Active Detox</span>}
                             {isCompleted && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 px-3 py-1 text-xs font-semibold"><Check className="w-3.5 h-3.5" /> Completed</span>}
                             {isCancelled && <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-3 py-1 text-xs font-semibold"><X className="w-3.5 h-3.5" /> Cancelled</span>}
                            </td>
@@ -1475,6 +1477,7 @@ export default function ReceptionistView({
                             {isScheduled && <button onClick={() => handleCancelAppointment(appt.id)} className="text-rose-600 bg-rose-50 hover:bg-rose-100 font-bold px-2.5 py-1.5 rounded-lg border border-rose-200 transition-colors">Cancel</button>}
                             {isArrived && <span className="text-amber-600 font-bold italic px-2">Waiting in Lobby</span>}
                             {isCheckedIn && <span className="text-emerald-600 font-bold italic px-2">In Consultation</span>}
+                            {isStartedDetox && <span className="text-teal-600 font-bold italic px-2">In Detox Session</span>}
                             {isCompleted && <span className="text-slate-400 font-medium italic px-2">Finished</span>}
                             {isCancelled && <span className="text-slate-400 line-through italic px-2">Cancelled</span>}
                            </td>

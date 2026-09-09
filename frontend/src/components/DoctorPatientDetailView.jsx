@@ -6,6 +6,7 @@ import PatientHistoryModal from './PatientHistoryModal';
 const STATUS_TABS = [
   { id: 'pending', label: 'Pending', icon: Clock, color: 'amber' },
   { id: 'consulting', label: 'Consulting Now', icon: Stethoscope, color: 'blue' },
+  { id: 'startedDetox', label: 'Started Detox', icon: Droplets, color: 'teal' },
   { id: 'completed', label: 'Completed', icon: CheckCircle2, color: 'emerald' },
   { id: 'cancelled', label: 'Cancelled', icon: XCircle, color: 'rose' },
   { id: 'detox', label: 'Detox Sessions', icon: Droplets, color: 'violet' },
@@ -14,6 +15,7 @@ const STATUS_TABS = [
 const COLOR_MAP = {
   amber: { text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800' },
   blue: { text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
+  teal: { text: 'text-teal-700', badge: 'bg-teal-100 text-teal-800' },
   emerald: { text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800' },
   rose: { text: 'text-rose-700', badge: 'bg-rose-100 text-rose-800' },
   violet: { text: 'text-violet-700', badge: 'bg-violet-100 text-violet-800' },
@@ -156,7 +158,7 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
       ) : (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
             <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
               <p className="text-2xl font-extrabold text-slate-800">{stats.booked || 0}</p>
               <p className="text-xs text-slate-500 font-medium flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Total Booked</p>
@@ -169,13 +171,17 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
               <p className="text-2xl font-extrabold text-blue-700">{stats.consulting || 0}</p>
               <p className="text-xs text-blue-600 font-medium flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" /> Consulting</p>
             </div>
+            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 shadow-sm">
+              <p className="text-2xl font-extrabold text-teal-700">{stats.startedDetox || 0}</p>
+              <p className="text-xs text-teal-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Started Detox</p>
+            </div>
             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 shadow-sm">
               <p className="text-2xl font-extrabold text-emerald-700">{stats.completed || 0}</p>
               <p className="text-xs text-emerald-600 font-medium flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> Completed</p>
             </div>
             <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 shadow-sm">
               <p className="text-2xl font-extrabold text-violet-700">{stats.detox || 0}</p>
-              <p className="text-xs text-violet-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox</p>
+              <p className="text-xs text-violet-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox Session</p>
             </div>
           </div>
 

@@ -518,6 +518,7 @@ async getUserById(id: number) {
 
     const pending = appointments.filter((a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting');
     const consulting = appointments.filter((a) => a.status === 'Checked-in');
+    const startedDetox = appointments.filter((a) => a.status === 'Started Detox');
     const completed = appointments.filter((a) => a.status === 'Completed');
     const cancelled = appointments.filter((a) => a.status === 'Cancelled');
 
@@ -538,6 +539,7 @@ async getUserById(id: number) {
         booked: appointments.length,
         pending: pending.length,
         consulting: consulting.length,
+        startedDetox: startedDetox.length,
         completed: completed.length,
         cancelled: cancelled.length,
         detox: detoxSessions.length,
@@ -556,6 +558,18 @@ async getUserById(id: number) {
           hasConsultation: !!a.consultation,
         })),
         consulting: consulting.map((a) => ({
+          id: a.id,
+          patientId: a.patientId,
+          patient: a.patient,
+          appointmentType: a.appointmentType,
+          session: a.session,
+          status: a.status,
+          time: a.appointmentDate,
+          date: a.appointmentDate,
+          notes: a.notes,
+          hasConsultation: !!a.consultation,
+        })),
+        startedDetox: startedDetox.map((a) => ({
           id: a.id,
           patientId: a.patientId,
           patient: a.patient,

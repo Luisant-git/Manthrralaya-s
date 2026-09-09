@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye } from 'lucide-react';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets } from 'lucide-react';
 import PatientHistoryModal from './PatientHistoryModal';
+import { updateAppointmentStatus } from '../api/appointmentApi';
 
 export default function DashboardView({ 
   patients, 
@@ -345,6 +346,14 @@ const allPendingFollowUps = React.useMemo(() => {
   // Get patients who are waiting for the doctor
   const arrivedPatients = todayAppointments.filter(a => a.status === 'Arrived');
   const checkedInPatients = todayAppointments.filter(a => a.status === 'Checked-in');
+  const startedDetoxPatients = todayAppointments.filter(a => a.status === 'Started Detox');
+  
+  const todayDetoxSessions = (detoxSessions || []).filter(s => {
+    const sDate = String(s.sessionDate || s.session_date || s.created_at || '').split('T')[0];
+    const isToday = sDate === todayDate;
+    const sDoctorId = Number(s.doctorId || s.doctor_id);
+    return isToday && sDoctorId === currentDoctorId;
+  });
   
   // Doctor queue: show all scheduled today appointments that are not completed or cancelled
   const doctorQueue = todayAppointments.filter(a => {
@@ -357,7 +366,7 @@ const allPendingFollowUps = React.useMemo(() => {
   const getAppointmentTypeKey = (appt) => String(appt?.appointmentType || '').toLowerCase();
 
   const handleStartAppointment = (appt) => {
-    if (appt.status !== 'Checked-in') {
+    if (appt.status !== 'Checked-in' && appt.status !== 'Started Detox') {
       alert('Patient must be checked-in before starting consultation');
       return;
     }
@@ -370,7 +379,19 @@ const allPendingFollowUps = React.useMemo(() => {
   };
 
   const handleDoctorCheckIn = async (appointmentId) => {
-    await onCheckIn(appointmentId, true, true);
+    const appt = todayAppointments.find(a => a.id === appointmentId);
+    const isDetox = String(appt?.appointmentType || '').toLowerCase().includes('detox');
+    await onCheckIn(appointmentId, !isDetox, true);
+  };
+
+  const handleBeginDetox = async (appointmentId) => {
+    try {
+      await updateAppointmentStatus(appointmentId, 'Started Detox');
+      window.location.reload(); // Simple reload to get fresh data
+    } catch (error) {
+      console.error("Error starting detox:", error);
+      alert("Failed to start detox session");
+    }
   };
 
   const handleViewPatientDetails = (patient) => {
@@ -491,6 +512,8 @@ const allPendingFollowUps = React.useMemo(() => {
         return <span className="px-2 py-1 rounded bg-amber-50 text-amber-600 border border-amber-200 text-xs font-bold uppercase tracking-wider">Arrived</span>;
       case 'Checked-in':
         return <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-600 border border-emerald-200 text-xs font-bold uppercase tracking-wider">Checked-in</span>;
+      case 'Started Detox':
+        return <span className="px-2 py-1 rounded bg-teal-50 text-teal-600 border border-teal-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1"><Droplets className="w-3 h-3"/> In Progress</span>;
       case 'Completed':
         return <span className="px-2 py-1 rounded bg-slate-50 text-slate-500 border border-slate-200 text-xs font-bold uppercase tracking-wider">Completed</span>;
       case 'Cancelled':
@@ -615,7 +638,7 @@ const allPendingFollowUps = React.useMemo(() => {
       </div>
 
       {isDoctorView && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6">
           <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <span className="text-sm font-semibold text-slate-500 block">Today’s Appointments</span>
@@ -661,6 +684,30 @@ const allPendingFollowUps = React.useMemo(() => {
               </div>
             </div>
             <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600">
+              <CheckCircle className="w-6 h-6" />
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('detox')}>
+            <div>
+              <span className="text-sm font-semibold text-slate-500 block">Started Detox</span>
+              <div className="flex items-baseline space-x-2 mt-1">
+                <span className="text-3xl font-extrabold text-teal-600">{startedDetoxPatients.length}</span>
+                <span className="text-xs text-slate-400">started detox</span>
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center text-teal-600">
+              <Droplets className="w-6 h-6" />
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('detox')}>
+            <div>
+              <span className="text-sm font-semibold text-slate-500 block">Detox Sessions</span>
+              <div className="flex items-baseline space-x-2 mt-1">
+                <span className="text-3xl font-extrabold text-violet-600">{todayDetoxSessions.length}</span>
+                <span className="text-xs text-slate-400">sessions done</span>
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center text-violet-600">
               <CheckCircle className="w-6 h-6" />
             </div>
           </div>
@@ -728,6 +775,9 @@ const allPendingFollowUps = React.useMemo(() => {
                   </span>
                   <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
                     Checked-in: {checkedInPatients.length}
+                  </span>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-teal-600">
+                    In Detox: {startedDetoxPatients.length}
                   </span>
                   <span className="text-xs font-semibold uppercase tracking-wide text-purple-600">
                     Completed: {completedTodayCount}
@@ -804,14 +854,32 @@ const allPendingFollowUps = React.useMemo(() => {
                               <ShieldCheck className="w-4 h-4" />
                               Doctor Check-in
                             </button>
-                          ) : item.status === 'Checked-in' ? (
+                          ) : item.status === 'Started Detox' ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleStartAppointment(item); }}
-                              className="px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2"
+                              className="px-4 py-2 rounded-lg text-sm font-bold bg-teal-600 hover:bg-teal-700 text-white transition-colors whitespace-nowrap flex items-center gap-2"
                             >
-                              <Stethoscope className="w-4 h-4" />
-                              {String(item.appointmentType || '').toLowerCase().includes('detox') ? 'Start Detox Session' : 'Start Consultation'}
+                              <Droplets className="w-4 h-4" />
+                              View Detox Session
                             </button>
+                          ) : item.status === 'Checked-in' ? (
+                            String(item.appointmentType || '').toLowerCase().includes('detox') ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleBeginDetox(item.id); }}
+                                className="px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
+                              >
+                                <Droplets className="w-4 h-4" />
+                                Begin Detox
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleStartAppointment(item); }}
+                                className="px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
+                              >
+                                <Stethoscope className="w-4 h-4" />
+                                Start Consultation
+                              </button>
+                            )
                           ) : (
                             <button
                               disabled
