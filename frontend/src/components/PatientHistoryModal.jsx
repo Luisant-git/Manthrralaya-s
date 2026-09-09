@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, MessageSquare, Share2, Edit3, Save } from 'lucide-react';
 import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -189,6 +189,108 @@ export default function PatientHistoryModal({
       setIsSavingEdit(false);
     }
   };
+
+  const editEditorRef = useRef(null);
+
+  const fontSizeOptions = [
+    { label: '12px', value: '12px' },
+    { label: '14px', value: '14px' },
+    { label: '16px', value: '16px' },
+    { label: '18px', value: '18px' },
+    { label: '20px', value: '20px' },
+    { label: '24px', value: '24px' },
+    { label: '32px', value: '32px' }
+  ];
+
+  const applyEditorCommand = (command, value = null) => {
+    if (!editEditorRef?.current) return;
+    editEditorRef.current.focus();
+    document.execCommand(command, false, value);
+    setEditContent(editEditorRef.current.innerHTML);
+  };
+
+  const handleFontSizeChange = (e) => {
+    if (!editEditorRef?.current) return;
+    const fontSize = e.target.value;
+    if (!fontSize) return;
+
+    editEditorRef.current.focus();
+    document.execCommand('styleWithCSS', false, true);
+
+    let fontSizeValue = '3';
+    switch(fontSize) {
+      case '12px': fontSizeValue = '1'; break;
+      case '14px': fontSizeValue = '2'; break;
+      case '16px': fontSizeValue = '3'; break;
+      case '18px': fontSizeValue = '4'; break;
+      case '20px': fontSizeValue = '5'; break;
+      case '24px': fontSizeValue = '6'; break;
+      case '32px': fontSizeValue = '7'; break;
+      default: fontSizeValue = '3';
+    }
+
+    document.execCommand('fontSize', false, fontSizeValue);
+
+    const fontElements = editEditorRef.current.querySelectorAll('font[size]');
+    fontElements.forEach(el => {
+      const span = document.createElement('span');
+      let size = el.getAttribute('size');
+      let pxValue = '16px';
+      switch(size) {
+        case '1': pxValue = '12px'; break;
+        case '2': pxValue = '14px'; break;
+        case '3': pxValue = '16px'; break;
+        case '4': pxValue = '18px'; break;
+        case '5': pxValue = '20px'; break;
+        case '6': pxValue = '24px'; break;
+        case '7': pxValue = '32px'; break;
+        default: pxValue = '16px';
+      }
+      span.style.fontSize = pxValue;
+      span.innerHTML = el.innerHTML;
+      el.parentNode.replaceChild(span, el);
+    });
+
+    setEditContent(editEditorRef.current.innerHTML);
+    e.target.value = '';
+  };
+
+  const RichTextToolbar = () => (
+    <div className="mb-2 flex flex-wrap gap-2">
+      <button type="button" onClick={() => applyEditorCommand('bold')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Bold</button>
+      <button type="button" onClick={() => applyEditorCommand('italic')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Italic</button>
+      <button type="button" onClick={() => applyEditorCommand('underline')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Underline</button>
+      <select onChange={handleFontSizeChange} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer" defaultValue="">
+        <option value="" disabled>Font Size</option>
+        {fontSizeOptions.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+      </select>
+      <button type="button" onClick={() => applyEditorCommand('insertUnorderedList')} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Bullet List"><span className="text-base">•</span> Bullets</button>
+      <button type="button" onClick={() => applyEditorCommand('insertOrderedList')} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Numbered List"><span className="text-xs font-bold">1.</span> Numbers</button>
+      <div className="flex gap-1 ml-1 border-l border-slate-200 pl-2">
+        <button type="button" onClick={() => applyEditorCommand('justifyLeft')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Align Left">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="15" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <button type="button" onClick={() => applyEditorCommand('justifyCenter')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Align Center">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="6" y1="12" x2="18" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <button type="button" onClick={() => applyEditorCommand('justifyRight')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Align Right">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="9" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
 
   const confirmAndSendToWhatsApp = async () => {
     if (!whatsappConsultationToSend) {
@@ -411,13 +513,17 @@ export default function PatientHistoryModal({
                               </div>
                             </div>
                             {editingSection === 'consultationNotes' ? (
-                              <div
-                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
-                                contentEditable
-                                suppressContentEditableWarning
-                                onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                dangerouslySetInnerHTML={{ __html: editContent }}
-                              />
+                              <>
+                                <RichTextToolbar />
+                                <div
+                                  ref={editEditorRef}
+                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                  dangerouslySetInnerHTML={{ __html: editContent }}
+                                />
+                              </>
                             ) : (
                               <div
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
@@ -456,13 +562,17 @@ export default function PatientHistoryModal({
                               </div>
                             </div>
                             {editingSection === 'medicalHistoryNotes' ? (
-                              <div
-                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
-                                contentEditable
-                                suppressContentEditableWarning
-                                onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                dangerouslySetInnerHTML={{ __html: editContent }}
-                              />
+                              <>
+                                <RichTextToolbar />
+                                <div
+                                  ref={editEditorRef}
+                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                  dangerouslySetInnerHTML={{ __html: editContent }}
+                                />
+                              </>
                             ) : (
                               <div
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
@@ -501,13 +611,17 @@ export default function PatientHistoryModal({
                               </div>
                             </div>
                             {editingSection === 'dietPlanNotes' ? (
-                              <div
-                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
-                                contentEditable
-                                suppressContentEditableWarning
-                                onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                dangerouslySetInnerHTML={{ __html: editContent }}
-                              />
+                              <>
+                                <RichTextToolbar />
+                                <div
+                                  ref={editEditorRef}
+                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                  dangerouslySetInnerHTML={{ __html: editContent }}
+                                />
+                              </>
                             ) : (
                               <div
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
@@ -546,13 +660,17 @@ export default function PatientHistoryModal({
                               </div>
                             </div>
                             {editingSection === 'detoxProcedureNotes' ? (
-                              <div
-                                className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none"
-                                contentEditable
-                                suppressContentEditableWarning
-                                onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                dangerouslySetInnerHTML={{ __html: editContent }}
-                              />
+                              <>
+                                <RichTextToolbar />
+                                <div
+                                  ref={editEditorRef}
+                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                  dangerouslySetInnerHTML={{ __html: editContent }}
+                                />
+                              </>
                             ) : (
                               <div
                                 className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
