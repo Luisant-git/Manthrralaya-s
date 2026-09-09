@@ -835,14 +835,6 @@ export default function UnifiedPatientRecords({
                             </button>
                             <button
                               type="button"
-                              onClick={() => openShareModal(pt)}
-                              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-blue-600 text-white hover:bg-blue-700"
-                            >
-                              <Share2 className="w-3.5 h-3.5" />
-                              Share
-                            </button>
-                            <button
-                              type="button"
                               onClick={() => onSelectPatient && onSelectPatient(pt)}
                               className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-emerald-600 text-white hover:bg-emerald-700"
                             >
