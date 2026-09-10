@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getPatientByPhone, createPatient } from '../api/patientApi';
+import { getPatientByPhone, createPatient, updatePatient } from '../api/patientApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
 import { toast } from 'react-toastify';
 import { 
@@ -536,6 +536,18 @@ export default function ReceptionistView({
         });
       } else {
         patientObj = foundPatient || firstMatch;
+        if (patientObj) {
+          const incomingWhatsapp = formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp;
+          if (incomingWhatsapp && patientObj.whatsapp !== incomingWhatsapp) {
+            patientObj = { ...patientObj, whatsapp: incomingWhatsapp };
+            try {
+              const updated = await updatePatient(patientObj.id, { whatsapp: incomingWhatsapp });
+              if (updated) patientObj = { ...patientObj, ...updated };
+            } catch (err) {
+              console.warn('Failed to update patient whatsapp:', err?.message || err);
+            }
+          }
+        }
         if (!patientObj) {
           patientObj = await createPatient({
             name: formData.name,
@@ -600,7 +612,7 @@ export default function ReceptionistView({
           id: `WA-${Date.now()}`,
           patient_id: patientObj.id,
           patient_name: patientObj.name,
-          phone: patientObj.phone,
+          phone: patientObj.whatsapp || patientObj.phone,
           type: 'Booking Confirmation',
           message_text: `Dear ${patientObj.name}, your ${formData.appointmentType} appointment (${formData.session} session) with ${docName} is confirmed for ${formData.date}. - Manthrralaya's Wellness`,
           sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16),

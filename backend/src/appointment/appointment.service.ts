@@ -118,8 +118,9 @@ export class AppointmentService {
       createAppointmentDto.appointmentDate,
     );
 
-    // Send WhatsApp Confirmation
-    if (appointment.patient?.phone) {
+    // Send WhatsApp Confirmation (only for booked appointments, not waiting/save-to-waiting)
+    const appointmentStatus = (appointment.status || '').toLowerCase();
+    if (appointment.patient?.phone && appointmentStatus !== 'waiting') {
       // Run asynchronously without waiting for it to finish to avoid blocking the API response
       // Format date
       const appointmentDate = new Date(appointment.appointmentDate).toLocaleDateString('en-GB'); // DD/MM/YYYY
@@ -242,9 +243,9 @@ export class AppointmentService {
   }
 
   async updateStatus(id: number, updateStatusDto: UpdateStatusDto) {
-    await this.findOne(id); // Check if exists
+    const existing = await this.findOne(id); // Check if exists
 
-    return this.prisma.appointment.update({
+    const appointment = await this.prisma.appointment.update({
       where: { id },
       data: { status: updateStatusDto.status },
       include: {
@@ -256,6 +257,31 @@ export class AppointmentService {
         }
       }
     });
+
+    // Send WhatsApp confirmation when a waiting appointment is confirmed (booked)
+    const prevStatus = (existing.status || '').toLowerCase();
+    const newStatus = (updateStatusDto.status || '').toLowerCase();
+    const wasWaitlisted = prevStatus === 'waiting';
+    const isNowBooked = newStatus === 'scheduled' || newStatus === 'confirmed' || newStatus === 'booked';
+    if (wasWaitlisted && isNowBooked && appointment.patient?.phone) {
+      const appointmentDate = new Date(appointment.appointmentDate).toLocaleDateString('en-GB');
+      const doctorName = appointment.doctor?.user?.fullName || 'Duty Doctor';
+
+      sendWhatsappTemplateMessage(
+        appointment.patient.whatsapp || appointment.patient.phone,
+        'manthrayala_appointment_confirmation',
+        [
+          appointment.patient.name,
+          appointmentDate,
+          appointment.session || 'FN',
+          appointment.appointmentType || 'Consultation',
+          doctorName
+        ],
+        'en'
+      ).catch(err => console.error('Failed to send WA confirmation:', err));
+    }
+
+    return appointment;
   }
 
   async update(id: number, updateAppointmentDto: UpdateAppointmentDto) {
