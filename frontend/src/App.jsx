@@ -36,7 +36,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState('');
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
 
   // Database States - Start with empty arrays
   const [patients, setPatients] = useState([]);
@@ -56,6 +56,10 @@ export default function App() {
   const [timelinePatient, setTimelinePatient] = useState(null);
   const [selectedDoctorPatient, setSelectedDoctorPatient] = useState(null);
   const [doctorPatientRange, setDoctorPatientRange] = useState(null);
+
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
 
   // Fetch patients from backend
   const fetchPatientsFromBackend = async () => {
