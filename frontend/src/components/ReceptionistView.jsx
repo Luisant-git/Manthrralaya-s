@@ -1531,8 +1531,13 @@ export default function ReceptionistView({
                         setDoctorSearchTerm(e.target.value);
                         setShowDoctorDropdown(true);
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-9 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500"
                     />
+                    {doctorSearchTerm && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); setDoctorSearchTerm(''); setModalBookingData(prev => ({ ...prev, doctor_id: '' })); setShowDoctorDropdown(false); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                   {showDoctorDropdown && (
                     <div className="absolute z-30 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto">
