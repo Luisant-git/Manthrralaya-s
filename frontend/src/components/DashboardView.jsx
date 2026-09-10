@@ -127,8 +127,8 @@ const hasBookedAppointmentForDate = (patientId, followupDate, referenceDate, exc
     if (!apptDate) return false;
     if (excludeAppointmentIds.some(id => id && String(id) === apptId)) return false;
     const appointmentDay = new Date(apptDate).getTime();
-    if (appointmentDay <= referenceDay) return false;
-    if (appointmentDay >= followupDay) return false;
+    if (appointmentDay < referenceDay) return false;
+    if (appointmentDay > followupDay) return false;
     return status !== 'cancelled' && status !== 'canceled';
   });
 };
@@ -146,34 +146,79 @@ const getFollowupStatus = (patientId, followupDate, receptionistStatus, defaultS
   return defaultStatus;
 };
 
+const getDateValue = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const chooseLaterFollowup = (first, second) => {
+  if (!first) return second;
+  if (!second) return first;
+  const firstDate = getDateValue(first.date);
+  const secondDate = getDateValue(second.date);
+  if (!firstDate) return second;
+  if (!secondDate) return first;
+  return secondDate.getTime() >= firstDate.getTime() ? second : first;
+};
+
+const getLatestConsultationWithFollowupForPatient = (patientId) => {
+  const ptCons = (consultations || []).filter(c => String(c.patient_id || c.patientId) === String(patientId));
+  const followupCons = ptCons.filter(c => {
+    const rec = c.receptionistFollowup || c.receptionist_followup;
+    const followupDate = rec?.followupDate || rec?.followup_date || c.followup_date || c.followupDate;
+    return Boolean(followupDate);
+  });
+
+  const getConsultationFollowupDate = (consultation) => {
+    if (!consultation) return null;
+    const rec = consultation.receptionistFollowup || consultation.receptionist_followup;
+    return rec?.followupDate || rec?.followup_date || consultation.followup_date || consultation.followupDate || null;
+  };
+
+  return [...followupCons].sort((a, b) => {
+    const dateA = new Date(getConsultationFollowupDate(a) || 0).getTime();
+    const dateB = new Date(getConsultationFollowupDate(b) || 0).getTime();
+    return dateB - dateA;
+  })[0] || null;
+};
+
 const allPendingFollowUps = React.useMemo(() => {
   const list = [];
   (patients || []).forEach(pt => {
     let ptFollowup = null;
     
-    // Get patient's consultations
     const ptCons = (consultations || []).filter(c => String(c.patient_id || c.patientId) === String(pt.id));
-    const latestCons = [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
-    
-    // Check detox sessions for explicit follow-up
+    const latestCons = getLatestConsultationWithFollowupForPatient(pt.id) || [...ptCons].sort((a,b)=> new Date(b.consultationDate || b.date || 0) - new Date(a.consultationDate || a.date || 0))[0];
+
     const ptDetoxSessions = (detoxSessions || []).filter(ds => String(ds.patient_id || ds.patientId) === String(pt.id));
-    const latestDetox = [...ptDetoxSessions].sort((a, b) => new Date(b.sessionDate || b.date || 0) - new Date(a.sessionDate || a.date || 0))[0];
+    const completedDetoxSessions = ptDetoxSessions.filter(ds => {
+      const status = String(ds.status || '').toLowerCase();
+      return status === 'completed' || status === 'done' || status === 'finished';
+    }).length;
+    const hasAtLeastThreeDetoxSessions = ptDetoxSessions.length >= 3;
+    const hasCompletedThreeDetox = completedDetoxSessions >= 3 || hasAtLeastThreeDetoxSessions;
+    const latestDetox = [...ptDetoxSessions].sort((a, b) => {
+      const aFollowup = getDateValue(a.followupDate || a.followup_date);
+      const bFollowup = getDateValue(b.followupDate || b.followup_date);
+      if (aFollowup && bFollowup) return bFollowup - aFollowup;
+      if (aFollowup) return -1;
+      if (bFollowup) return 1;
+      return getDateValue(b.sessionDate || b.date) - getDateValue(a.sessionDate || a.date);
+    })[0];
     
-    // First check detox session follow-up
+    let detoxFollowup = null;
     if (latestDetox && (latestDetox.followupDate || latestDetox.followup_date)) {
-      const detoxFollowupDate = latestDetox.followupDate || latestDetox.followup_date;
-      const detoxStatus = latestDetox.status || 'Pending';
-      
-      // Check for receptionist follow-up data
-      let receptionistDate = null;
-      let receptionistStatus = null;
-      
-      // Find linked consultation
       const detoxApptId = latestDetox.appointmentId || latestDetox.appointment_id;
-      let linkedConsultationId = latestDetox.consultationId || latestDetox.consultation_id;
+      const detoxConsId = latestDetox.consultationId || latestDetox.consultation_id;
+      
+      let linkedConsultationId = detoxConsId || null;
+      let detoxDate = latestDetox.followupDate || latestDetox.followup_date;
+      let detoxStatus = latestDetox.status || 'Pending';
+      let detoxNotes = latestDetox.notes || latestDetox.followupRemarks || '';
       
       if (!linkedConsultationId && detoxApptId) {
-        const consFromAppt = consultations.find(c => String(c.appointment_id || c.appointmentId) === String(detoxApptId));
+        const consFromAppt = (consultations || []).find(c => String(c.appointment_id || c.appointmentId) === String(detoxApptId));
         if (consFromAppt) {
           linkedConsultationId = consFromAppt.id;
         }
@@ -182,102 +227,97 @@ const allPendingFollowUps = React.useMemo(() => {
       if (!linkedConsultationId && latestCons) {
         linkedConsultationId = latestCons.id;
       }
-      
+
+      let receptionistData = null;
       if (linkedConsultationId) {
-        const linkedConsObj = consultations.find(c => String(c.id) === String(linkedConsultationId));
+        const linkedConsObj = (consultations || []).find(c => String(c.id) === String(linkedConsultationId));
         const rec = linkedConsObj?.receptionistFollowup || linkedConsObj?.receptionist_followup;
         if (rec) {
-          receptionistDate = rec.followupDate || rec.followup_date || null;
-          receptionistStatus = rec.status || detoxStatus;
+          receptionistData = {
+            date: rec.followupDate || rec.followup_date || null,
+            status: rec.status || detoxStatus,
+            notes: rec.notes || rec.notes_text || ''
+          };
         }
       }
       
-      const detoxReferenceDate = latestDetox.consultationDate || latestDetox.consultation_date || null;
-      const finalDate = receptionistDate || detoxFollowupDate;
-      const detoxExcludedAppointmentIds = [];
-      if (latestDetox.appointmentId) detoxExcludedAppointmentIds.push(latestDetox.appointmentId);
-      if (latestDetox.appointment_id) detoxExcludedAppointmentIds.push(latestDetox.appointment_id);
-      const finalStatus = getFollowupStatus(pt.id, finalDate, receptionistStatus, detoxStatus, detoxReferenceDate, detoxExcludedAppointmentIds);
-      
-      // Only include if Pending (not Completed or Cancelled)
-      if (finalStatus === 'Pending') {
-        const scheduledDateObj = new Date(finalDate);
-        const actionDateObj = new Date(scheduledDateObj);
-        actionDateObj.setDate(scheduledDateObj.getDate() - 3);
-        
-        ptFollowup = {
-          patient: pt,
-          date: finalDate,
-          status: finalStatus,
-          type: 'Detox',
-          actionDate: actionDateObj.toISOString().split('T')[0]
-        };
-        list.push(ptFollowup);
-      }
+      const detoxFinalDate = receptionistData?.date || detoxDate;
+      const detoxReferenceDate = latestDetox.sessionDate || latestDetox.date || latestDetox.session_date || null;
+      detoxFollowup = {
+        patient: pt,
+        date: detoxFinalDate,
+        status: getFollowupStatus(pt.id, detoxFinalDate, receptionistData?.status, detoxStatus, detoxReferenceDate),
+        type: hasCompletedThreeDetox ? 'Review' : 'Detox',
+        source: 'DetoxSession'
+      };
     }
-    
-    // If no detox follow-up, check consultation follow-up
-    if (!ptFollowup && latestCons) {
+
+    let consultationFollowup = null;
+    if (latestCons) {
       const rec = latestCons.receptionistFollowup || latestCons.receptionist_followup;
-      const doctorDate = latestCons.followup_date || latestCons.followupDate;
-      const doctorStatus = 'Pending';
+      let doctorDate = latestCons.followup_date || latestCons.followupDate;
+      let doctorStatus = 'Pending';
       
-      let receptionistDate = null;
-      let receptionistStatus = null;
-      
+      let receptionistData = null;
       if (rec) {
-        receptionistDate = rec.followupDate || rec.followup_date || null;
-        receptionistStatus = rec.status || 'Pending';
+        receptionistData = {
+          date: rec.followupDate || rec.followup_date || null,
+          status: rec.status || 'Pending',
+          notes: rec.notes || rec.notes_text || ''
+        };
       }
       
-      const consultationReferenceDate = latestCons.consultationDate || latestCons.consultation_date || null;
-      const finalDate = receptionistDate || doctorDate;
-      const consultationExcludedAppointmentIds = [];
-      if (latestCons.appointmentId) consultationExcludedAppointmentIds.push(latestCons.appointmentId);
-      if (latestCons.appointment_id) consultationExcludedAppointmentIds.push(latestCons.appointment_id);
-      const finalStatus = getFollowupStatus(pt.id, finalDate, receptionistStatus, doctorStatus, consultationReferenceDate, consultationExcludedAppointmentIds);
-      
-      // Only include if Pending and has a date
-      if (finalStatus === 'Pending' && finalDate) {
-        const scheduledDateObj = new Date(finalDate);
-        const actionDateObj = new Date(scheduledDateObj);
-        actionDateObj.setDate(scheduledDateObj.getDate() - 3);
-        
-        const isDetox = latestCons.detox_recommended || latestCons.detoxRecommended;
-        ptFollowup = {
+      if (doctorDate || receptionistData) {
+        const consultationFinalDate = receptionistData?.date || doctorDate;
+        const consultationReferenceDate = latestCons.consultationDate || latestCons.consultation_date || null;
+        const excludedAppointmentIds = [];
+        if (latestCons.appointmentId) excludedAppointmentIds.push(latestCons.appointmentId);
+        if (latestCons.appointment_id) excludedAppointmentIds.push(latestCons.appointment_id);
+        consultationFollowup = {
           patient: pt,
-          date: finalDate,
-          status: finalStatus,
-          type: isDetox ? 'Detox' : 'Review',
-          actionDate: actionDateObj.toISOString().split('T')[0]
+          date: consultationFinalDate,
+          status: getFollowupStatus(
+            pt.id,
+            consultationFinalDate,
+            receptionistData?.status,
+            doctorStatus,
+            consultationReferenceDate,
+            excludedAppointmentIds
+          ),
+          type: hasCompletedThreeDetox ? 'Review' : (latestCons.detox_recommended || latestCons.detoxRecommended ? 'Detox' : 'Review'),
+          source: 'Doctor'
         };
-        list.push(ptFollowup);
       }
     }
+
+    ptFollowup = chooseLaterFollowup(detoxFollowup, consultationFollowup);
     
-    // Fallback to followups array
+    // Fallback to derived followups
     if (!ptFollowup) {
       const fup = (followups || [])
         .filter(f => String(f.patient_id) === String(pt.id))
         .sort((a, b) => new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date))[0];
         
-      const fallbackDate = fup?.scheduled_date || fup?.date;
-      const fallbackReferenceDate = latestCons?.consultationDate || latestCons?.consultation_date || null;
-      const fallbackStatus = fup ? getFollowupStatus(pt.id, fallbackDate, fup.status, 'Pending', fallbackReferenceDate) : 'Pending';
-      if (fup && fallbackDate && fallbackStatus === 'Pending') {
-        const scheduledDateObj = new Date(fallbackDate);
-        const actionDateObj = new Date(scheduledDateObj);
-        actionDateObj.setDate(scheduledDateObj.getDate() - 3);
-        
+      if (fup) {
+        const derivedType = fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review';
+        const fallbackDate = fup.scheduled_date || fup.date;
+        const fallbackReferenceDate = latestCons?.consultationDate || latestCons?.consultation_date || null;
         ptFollowup = {
           patient: pt,
           date: fallbackDate,
-          status: fallbackStatus,
-          type: fup.notes?.toLowerCase().includes('detox') ? 'Detox' : 'Review',
-          actionDate: actionDateObj.toISOString().split('T')[0]
+          status: getFollowupStatus(pt.id, fallbackDate, fup.status, 'Pending', fallbackReferenceDate),
+          type: hasCompletedThreeDetox ? 'Review' : derivedType,
+          source: 'System'
         };
-        list.push(ptFollowup);
       }
+    }
+    
+    if (ptFollowup && ptFollowup.status === 'Pending') {
+      const scheduledDateObj = new Date(ptFollowup.date);
+      const actionDateObj = new Date(scheduledDateObj);
+      actionDateObj.setDate(scheduledDateObj.getDate() - 3);
+      ptFollowup.actionDate = actionDateObj.toISOString().split('T')[0];
+      list.push(ptFollowup);
     }
   });
   
