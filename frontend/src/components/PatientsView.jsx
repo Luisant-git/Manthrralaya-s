@@ -38,7 +38,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
   const getAppointmentTypeBadge = (type) => {
     if (!type) return "px-2 py-0.5 rounded text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200";
     const t = type.toLowerCase();
-    if (t.includes('initial')) return "px-2 py-0.5 rounded text-xs font-medium border bg-purple-50 text-purple-600 border-purple-200";
+    if (t.includes('new')) return "px-2 py-0.5 rounded text-xs font-medium border bg-purple-50 text-purple-600 border-purple-200";
     if (t.includes('detox')) return "px-2 py-0.5 rounded text-xs font-medium border bg-teal-50 text-teal-600 border-teal-200";
     if (t.includes('review')) return "px-2 py-0.5 rounded text-xs font-medium border bg-amber-50 text-amber-600 border-amber-200";
     return "px-2 py-0.5 rounded text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200";

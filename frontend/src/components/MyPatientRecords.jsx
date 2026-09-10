@@ -148,7 +148,7 @@ export default function UnifiedPatientRecords({
     const t = type.toLowerCase();
     if (t.includes('detox')) return 'border-teal-200 bg-teal-50 text-teal-700';
     if (t.includes('review')) return 'border-amber-200 bg-amber-50 text-amber-700';
-    if (t.includes('initial')) return 'border-purple-200 bg-purple-50 text-purple-700';
+    if (t.includes('new')) return 'border-purple-200 bg-purple-50 text-purple-700';
     return 'border-purple-200 bg-purple-50 text-purple-700';
   };
 
