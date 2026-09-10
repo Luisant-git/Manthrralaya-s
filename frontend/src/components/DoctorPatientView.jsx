@@ -2,6 +2,46 @@ import React, { useState, useEffect } from 'react';
 import { Stethoscope, CalendarDays, Clock, CheckCircle2, XCircle, Droplets, AlertCircle, Loader2, Search, ChevronLeft, ChevronRight, RefreshCw, Eye, Users } from 'lucide-react';
 import { getDoctorsPatientStats } from '../api/doctorApi';
 
+const CARD_CHIP = {
+  blue:   'bg-blue-100 text-blue-600',
+  emerald:'bg-emerald-100 text-emerald-600',
+  amber:  'bg-amber-100 text-amber-600',
+  teal:   'bg-teal-100 text-teal-600',
+  violet: 'bg-violet-100 text-violet-600',
+  rose:   'bg-rose-100 text-rose-600',
+  slate:  'bg-slate-200 text-slate-600',
+};
+
+const StatCard = ({ label, value, icon: Icon, color, b }) => (
+  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col h-full">
+    <div className="flex items-center justify-between mb-3">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${CARD_CHIP[color] || CARD_CHIP.slate}`}>
+        <Icon className="w-4 h-4" />
+      </span>
+    </div>
+    <p className="text-3xl font-extrabold text-slate-800 leading-none">{value}</p>
+    {b ? <BreakdownChips b={b} /> : <div className="flex-1" />}
+  </div>
+);
+
+const BreakdownChips = ({ b }) => (
+  <div className="mt-3 grid grid-cols-3 gap-1.5 border-t border-slate-100 pt-3">
+    <span className="flex flex-col items-center rounded-lg bg-blue-50 text-blue-700 px-1 py-1.5 leading-tight">
+      <span className="text-[9px] font-semibold uppercase tracking-wide opacity-80">Initial</span>
+      <span className="text-sm font-extrabold">{b.initial}</span>
+    </span>
+    <span className="flex flex-col items-center rounded-lg bg-teal-50 text-teal-700 px-1 py-1.5 leading-tight">
+      <span className="text-[9px] font-semibold uppercase tracking-wide opacity-80">Detox</span>
+      <span className="text-sm font-extrabold">{b.detox}</span>
+    </span>
+    <span className="flex flex-col items-center rounded-lg bg-indigo-50 text-indigo-700 px-1 py-1.5 leading-tight">
+      <span className="text-[9px] font-semibold uppercase tracking-wide opacity-80">Review</span>
+      <span className="text-sm font-extrabold">{b.review}</span>
+    </span>
+  </div>
+);
+
 export default function DoctorPatientView({ onSelectDoctor }) {
   const [stats, setStats] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,11 +89,27 @@ export default function DoctorPatientView({ onSelectDoctor }) {
 
   const totalPatientsAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.booked || 0), 0);
   const totalConsultingAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.consulting || 0), 0);
+  const totalArrivedAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.arrived || 0), 0);
   const totalStartedDetoxAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.startedDetox || 0), 0);
-  const totalDetoxAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.detox || 0), 0);
-  const totalReviewsAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.reviews || 0), 0);
+  const totalDetoxCompletedAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.detoxCompleted || 0), 0);
   const totalPendingAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.pending || 0), 0);
   const totalCancelledAllDoctors = stats.reduce((sum, d) => sum + (d.stats?.cancelled || 0), 0);
+
+  const aggBreakdown = (key) => {
+    const acc = { initial: 0, detox: 0, review: 0 };
+    stats.forEach((d) => {
+      const b = d.stats?.breakdown ? d.stats.breakdown[key] : null;
+      if (b) {
+        acc.initial += b.initial || 0;
+        acc.detox += b.detox || 0;
+        acc.review += b.review || 0;
+      }
+    });
+    return acc;
+  };
+  const bookedBreakdown = aggBreakdown('booked');
+  const checkinBreakdown = aggBreakdown('checkin');
+  const arrivedBreakdown = aggBreakdown('arrived');
 
   return (
     <div className="space-y-6">
@@ -115,89 +171,13 @@ export default function DoctorPatientView({ onSelectDoctor }) {
       {/* Summary Cards */}
       {!isLoading && stats.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalPatientsAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Total Booked</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalConsultingAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Consulting</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
-                <Droplets className="w-5 h-5 text-teal-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalStartedDetoxAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Detox Started</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center">
-                <Droplets className="w-5 h-5 text-violet-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalDetoxAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Detox Sessions</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                <Eye className="w-5 h-5 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalReviewsAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Reviews</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalPendingAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Pending</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
-                <XCircle className="w-5 h-5 text-rose-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-extrabold text-slate-800">{totalCancelledAllDoctors}</p>
-                <p className="text-xs text-slate-500 font-medium">Cancelled</p>
-              </div>
-            </div>
-          </div>
+          <StatCard label="Total Booked" value={totalPatientsAllDoctors} icon={Users} color="blue" b={bookedBreakdown} />
+          <StatCard label="Checked-in" value={totalConsultingAllDoctors} icon={CheckCircle2} color="emerald" b={checkinBreakdown} />
+          <StatCard label="Arrived" value={totalArrivedAllDoctors} icon={Clock} color="amber" b={arrivedBreakdown} />
+          <StatCard label="Detox Going On" value={totalStartedDetoxAllDoctors} icon={Droplets} color="teal" />
+          <StatCard label="Detox Completed" value={totalDetoxCompletedAllDoctors} icon={CheckCircle2} color="violet" />
+          <StatCard label="Cancelled" value={totalCancelledAllDoctors} icon={XCircle} color="rose" />
+          <StatCard label="Pending" value={totalPendingAllDoctors} icon={Clock} color="slate" />
         </div>
       )}
 

@@ -8,6 +8,16 @@ import * as bcrypt from 'bcrypt';
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
+  private typeBreakdown(list: any[]) {
+    const ofType = (keyword: string) =>
+      list.filter((a) => String(a.appointmentType || '').toLowerCase().includes(keyword)).length;
+    return {
+      initial: ofType('consult'),
+      detox: ofType('detox'),
+      review: ofType('review'),
+    };
+  }
+
   // ========== CREATE USER ==========
   async createUser(role: UserRole, dto: CreateUserDto, allowAdminCreation = false) {
     if ((role === UserRole.DOCTOR || role === UserRole.THERAPIST) && !dto.specialization) {
@@ -404,8 +414,9 @@ async getUserById(id: number) {
 
         const booked = appointments.length;
         const pending = appointments.filter(
-          (a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting',
+          (a) => a.status === 'Scheduled' || a.status === 'Waiting',
         ).length;
+        const arrived = appointments.filter((a) => a.status === 'Arrived').length;
         // Consider an appointment as 'consulting' if it's checked-in, or already has a consultation record, or its type mentions consultation
         const consulting = appointments.filter((a) =>
           a.status === 'Checked-in' || !!a.consultation || String(a.appointmentType || '').toLowerCase().includes('consult')
@@ -416,6 +427,10 @@ async getUserById(id: number) {
         const detox = detoxSessions.length;
         // Reviews determined by appointmentType containing 'review'
         const reviews = appointments.filter((a) => String(a.appointmentType || '').toLowerCase().includes('review')).length;
+        // Detox completed appointments = completed appointments whose type is detox
+        const detoxCompleted = appointments.filter((a) =>
+          a.status === 'Completed' && String(a.appointmentType || '').toLowerCase().includes('detox')
+        ).length;
 
         const appointmentList = appointments.map((a) => ({
           id: a.id,
@@ -452,12 +467,19 @@ async getUserById(id: number) {
           stats: {
             booked,
             pending,
+            arrived,
             consulting,
             startedDetox,
             completed,
             cancelled,
             detox,
             reviews,
+            detoxCompleted,
+            breakdown: {
+              booked: this.typeBreakdown(appointments),
+              checkin: this.typeBreakdown(appointments.filter((a) => a.status === 'Checked-in')),
+              arrived: this.typeBreakdown(appointments.filter((a) => a.status === 'Arrived')),
+            },
           },
           appointments: appointmentList,
           detoxSessions: detoxList,
@@ -534,11 +556,13 @@ async getUserById(id: number) {
       orderBy: { createdAt: 'desc' }
     });
 
-    const pending = appointments.filter((a) => a.status === 'Scheduled' || a.status === 'Arrived' || a.status === 'Waiting');
+    const pending = appointments.filter((a) => a.status === 'Scheduled' || a.status === 'Waiting');
+    const arrived = appointments.filter((a) => a.status === 'Arrived');
     const consulting = appointments.filter((a) => a.status === 'Checked-in');
     const startedDetox = appointments.filter((a) => a.status === 'Started Detox');
     const completed = appointments.filter((a) => a.status === 'Completed');
     const cancelled = appointments.filter((a) => a.status === 'Cancelled');
+    const detoxCompleted = completed.filter((a) => String(a.appointmentType || '').toLowerCase().includes('detox'));
 
     return {
       success: true,
@@ -556,11 +580,18 @@ async getUserById(id: number) {
       stats: {
         booked: appointments.length,
         pending: pending.length,
+        arrived: arrived.length,
         consulting: consulting.length,
         startedDetox: startedDetox.length,
         completed: completed.length,
         cancelled: cancelled.length,
         detox: detoxSessions.length,
+        detoxCompleted: detoxCompleted.length,
+        breakdown: {
+          booked: this.typeBreakdown(appointments),
+          checkin: this.typeBreakdown(consulting),
+          arrived: this.typeBreakdown(arrived),
+        },
       },
       appointments: {
         pending: pending.map((a) => ({

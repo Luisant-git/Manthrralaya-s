@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Stethoscope, Clock, CheckCircle2, XCircle, Droplets, CalendarDays, Search, Loader2, AlertCircle, RefreshCw, User, Eye } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, Droplets, CalendarDays, Search, Loader2, AlertCircle, RefreshCw, User, Eye } from 'lucide-react';
 import { getDoctorPatientDetail } from '../api/doctorApi';
 import PatientHistoryModal from './PatientHistoryModal';
 
@@ -26,6 +26,46 @@ function formatDate(d) {
   if (isNaN(date.getTime())) return '-';
   return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+const CARD_CHIP = {
+  blue:   'bg-blue-100 text-blue-600',
+  emerald:'bg-emerald-100 text-emerald-600',
+  amber:  'bg-amber-100 text-amber-600',
+  teal:   'bg-teal-100 text-teal-600',
+  violet: 'bg-violet-100 text-violet-600',
+  rose:   'bg-rose-100 text-rose-600',
+  slate:  'bg-slate-200 text-slate-600',
+};
+
+const StatCard = ({ label, value, icon: Icon, color, b }) => (
+  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col h-full">
+    <div className="flex items-center justify-between mb-3">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</span>
+      <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${CARD_CHIP[color] || CARD_CHIP.slate}`}>
+        <Icon className="w-4 h-4" />
+      </span>
+    </div>
+    <p className="text-3xl font-extrabold text-slate-800 leading-none">{value}</p>
+    {b ? <BreakdownChips b={b} /> : <div className="flex-1" />}
+  </div>
+);
+
+const BreakdownChips = ({ b }) => (
+  <div className="mt-3 grid grid-cols-3 gap-1.5 border-t border-slate-100 pt-3">
+    <span className="flex flex-col items-center rounded-lg bg-blue-50 text-blue-700 px-1 py-1.5 leading-tight">
+      <span className="text-[9px] font-semibold uppercase tracking-wide opacity-80">Initial</span>
+      <span className="text-sm font-extrabold">{b.initial || 0}</span>
+    </span>
+    <span className="flex flex-col items-center rounded-lg bg-teal-50 text-teal-700 px-1 py-1.5 leading-tight">
+      <span className="text-[9px] font-semibold uppercase tracking-wide opacity-80">Detox</span>
+      <span className="text-sm font-extrabold">{b.detox || 0}</span>
+    </span>
+    <span className="flex flex-col items-center rounded-lg bg-indigo-50 text-indigo-700 px-1 py-1.5 leading-tight">
+      <span className="text-[9px] font-semibold uppercase tracking-wide opacity-80">Review</span>
+      <span className="text-sm font-extrabold">{b.review || 0}</span>
+    </span>
+  </div>
+);
 
 export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, initialTo, consultations = [], detoxSessions = [], doctors = [], onGiveConsultation, onGiveReview }) {
   const today = new Date().toISOString().split('T')[0];
@@ -60,9 +100,6 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
   };
 
   const stats = detail?.stats || {};
-  const completedAppointments = detail?.appointments?.completed || [];
-  const completedConsultationsCount = completedAppointments.filter(a => String(a.appointmentType || '').toLowerCase().includes('consultation')).length;
-  const completedReviewsCount = completedAppointments.filter(a => String(a.appointmentType || '').toLowerCase().includes('review')).length;
 
   const baseItems = (detail?.appointments?.[activeTab] || [])
     .concat(activeTab === 'detox' ? detail?.detoxSessions || [] : []);
@@ -179,42 +216,15 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
         </div>
       ) : (
         <>
-          {/* Stats Cards (ordered: Total Booked, Consulting, Detox Started, Detox Sessions, Reviews, Pending, Cancelled) */}
+          {/* Stats Cards (ordered: Total Booked, Checked-in, Arrived, Detox Going On, Detox Completed, Cancelled, Pending) */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-slate-800">{stats.booked || 0}</p>
-              <p className="text-xs text-slate-500 font-medium flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Total Booked</p>
-            </div>
-
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-amber-700">{stats.consulting || 0}</p>
-              <p className="text-xs text-amber-600 font-medium flex items-center gap-1"><Stethoscope className="w-3.5 h-3.5" /> Consulting</p>
-            </div>
-
-            <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-teal-700">{stats.startedDetox || 0}</p>
-              <p className="text-xs text-teal-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox Started</p>
-            </div>
-
-            <div className="bg-violet-50 border border-violet-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-violet-700">{stats.detox || 0}</p>
-              <p className="text-xs text-violet-600 font-medium flex items-center gap-1"><Droplets className="w-3.5 h-3.5" /> Detox Sessions</p>
-            </div>
-
-            <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-indigo-700">{stats.reviews || completedReviewsCount}</p>
-              <p className="text-xs text-indigo-600 font-medium flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> Reviews</p>
-            </div>
-
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-amber-700">{stats.pending || 0}</p>
-              <p className="text-xs text-amber-600 font-medium flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Pending</p>
-            </div>
-
-            <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 shadow-sm">
-              <p className="text-2xl font-extrabold text-rose-700">{stats.cancelled || 0}</p>
-              <p className="text-xs text-rose-600 font-medium flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Cancelled</p>
-            </div>
+            <StatCard label="Total Booked" value={stats.booked || 0} icon={CalendarDays} color="blue" b={stats.breakdown?.booked} />
+            <StatCard label="Checked-in" value={stats.consulting || 0} icon={CheckCircle2} color="emerald" b={stats.breakdown?.checkin} />
+            <StatCard label="Arrived" value={stats.arrived || 0} icon={Clock} color="amber" b={stats.breakdown?.arrived} />
+            <StatCard label="Detox Going On" value={stats.startedDetox || 0} icon={Droplets} color="teal" />
+            <StatCard label="Detox Completed" value={stats.detoxCompleted || 0} icon={CheckCircle2} color="violet" />
+            <StatCard label="Cancelled" value={stats.cancelled || 0} icon={XCircle} color="rose" />
+            <StatCard label="Pending" value={stats.pending || 0} icon={Clock} color="slate" />
           </div>
 
           {/* Status Tabs */}

@@ -21,24 +21,24 @@ export class ShareService {
     const patient = await this.prisma.patient.findUnique({ where: { id: patientId } });
     if (!patient) throw new NotFoundException('Patient not found');
 
-    // resolve the sharing doctor from the authenticated user's linked Doctor record
-    if (!authUser || authUser.sub === undefined || authUser.sub === null) {
-      throw new BadRequestException('Unable to identify the sharing doctor');
-    }
-    const fromDoctor = await this.prisma.doctor.findUnique({ where: { userId: Number(authUser.sub) } });
-    if (!fromDoctor) throw new BadRequestException('Authenticated user is not a doctor');
+    // Resolve the sharing doctor from the authenticated user's linked Doctor record.
+    // Admin/receptionist users may not have a linked Doctor record, so allow the
+    // share without a from-doctor in that case.
+    const fromDoctor = authUser && authUser.sub !== undefined && authUser.sub !== null
+      ? await this.prisma.doctor.findUnique({ where: { userId: Number(authUser.sub) } })
+      : null;
 
     // ensure toDoctor exists
     const toDoctorId = Number(dto.toDoctorId);
     if (isNaN(toDoctorId)) throw new BadRequestException('Invalid toDoctorId');
-    if (toDoctorId === fromDoctor.id) throw new BadRequestException('Cannot share a record with yourself');
+    if (fromDoctor && toDoctorId === fromDoctor.id) throw new BadRequestException('Cannot share a record with yourself');
     const toDoctor = await this.prisma.doctor.findUnique({ where: { id: toDoctorId } });
     if (!toDoctor) throw new NotFoundException('Target doctor not found');
 
     const share = await this.prisma.share.create({
       data: {
         patientId: patientId,
-        fromDoctorId: fromDoctor.id,
+        fromDoctorId: fromDoctor ? fromDoctor.id : null,
         toDoctorId: toDoctorId,
         notes: dto.notes || null,
       },
