@@ -1318,7 +1318,20 @@ export default function ReceptionistView({
                           </td>
                           <td className="py-2.5 px-4 text-slate-500 max-w-[150px] truncate" title={appt.notes}>{appt.notes}</td>
                           <td className="py-2.5 px-4 text-right space-x-2 whitespace-nowrap">
-                            <button onClick={() => { setBookingModalPatient(pt); setModalBookingData(prev => ({ ...prev, notes: appt.notes, appointmentType: appt.appointmentType, session: appt.session })); }} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors">Confirm & Book</button>
+                            <button onClick={() => {
+                              const assignedDoc = allDoctors.find(d => String(d.id) === String(appt.doctorId || appt.doctor_id));
+                              const docName = assignedDoc?.user?.fullName || assignedDoc?.name || '';
+                              const docSpecialty = assignedDoc?.specialization || assignedDoc?.designation || '';
+                              setBookingModalPatient(pt);
+                              setModalBookingData(prev => ({
+                                ...prev,
+                                doctor_id: appt.doctorId || appt.doctor_id || '',
+                                notes: appt.notes,
+                                appointmentType: appt.appointmentType,
+                                session: appt.session
+                              }));
+                              setDoctorSearchTerm(docName ? `${docName} (${docSpecialty}) (${assignedDoc?.status || ''})` : '');
+                            }} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold px-3 py-1.5 rounded-lg border border-emerald-200 transition-colors">Confirm & Book</button>
                             <button onClick={() => handleDeleteWaiting(appt.id)} className="text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-colors inline-flex align-middle"><X className="w-4 h-4" /></button>
                           </td>
                         </tr>
