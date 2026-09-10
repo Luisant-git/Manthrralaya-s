@@ -433,7 +433,7 @@ export default function AppointmentsView({
                   }).map(d => (
                     <option key={d.id} value={d.id} disabled={d.status !== 'Available'}>
                       {d.user?.fullName || d.name} ({d.specialization}) 
-                      {d.status !== 'Available' ? ' - On Leave' : ''}
+                      {d.status !== 'Available' ? ' - Not Available' : ''}
                     </option>
                   ))}
                 </select>

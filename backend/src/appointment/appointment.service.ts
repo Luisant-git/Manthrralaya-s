@@ -16,6 +16,27 @@ export class AppointmentService {
     return date.getTime();
   }
 
+  private toDateOnly(value: Date | string): Date {
+    const d = new Date(value);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  private async assertDoctorAvailableOnDate(doctorId: number, date: Date | string) {
+    const schedule = await this.prisma.doctorSchedule.findUnique({
+      where: {
+        doctorId_date: {
+          doctorId,
+          date: this.toDateOnly(date),
+        },
+      },
+    });
+
+    if (schedule && !schedule.isAvailable) {
+      throw new BadRequestException('Doctor is not available on this date.');
+    }
+  }
+
   private async findLatestActiveReceptionistFollowup(patientId: number, maxAppointmentDate: Date) {
     return this.prisma.receptionistFollowup.findFirst({
       where: {
@@ -90,6 +111,12 @@ export class AppointmentService {
       if (doctor.status !== 'Available') {
         throw new BadRequestException('Selected doctor is not available');
       }
+
+      // Check date-wise schedule
+      await this.assertDoctorAvailableOnDate(
+        createAppointmentDto.doctorId,
+        createAppointmentDto.appointmentDate,
+      );
     }
 
     const appointment = await this.prisma.appointment.create({
@@ -285,7 +312,14 @@ export class AppointmentService {
   }
 
   async update(id: number, updateAppointmentDto: UpdateAppointmentDto) {
-    await this.findOne(id); // Check if exists
+    const existing = await this.findOne(id); // Check if exists
+
+    const effectiveDoctorId = updateAppointmentDto.doctorId ?? existing.doctorId;
+    const effectiveDate = updateAppointmentDto.appointmentDate ?? existing.appointmentDate;
+
+    if (effectiveDoctorId) {
+      await this.assertDoctorAvailableOnDate(effectiveDoctorId, effectiveDate);
+    }
 
     return this.prisma.appointment.update({
       where: { id },
