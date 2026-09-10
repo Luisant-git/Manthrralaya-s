@@ -19,7 +19,7 @@ export default function AppointmentsView({
   const [formData, setFormData] = useState({
     patient_id: '',
     doctor_id: '',
-    appointmentType: 'Initial consultation',
+    appointmentType: 'New consultation',
     date: new Date().toISOString().split('T')[0],
     time: '10:00 AM',
     notes: ''
@@ -291,7 +291,7 @@ export default function AppointmentsView({
     setFormData({ 
       patient_id: '', 
       doctor_id: '', 
-      appointmentType: 'Initial consultation', 
+      appointmentType: 'New consultation', 
       date: new Date().toISOString().split('T')[0], 
       time: '10:00 AM', 
       notes: '' 
@@ -464,7 +464,7 @@ export default function AppointmentsView({
                     }
                     return (
                       <>
-                        <option value="Initial consultation">Initial Consultation</option>
+                        <option value="New consultation">New Consultation</option>
                         <option value="Detox">{getNextDetoxSessionLabel(formData.patient_id)}</option>
                         <option value="Review">Follow-up</option>
                       </>

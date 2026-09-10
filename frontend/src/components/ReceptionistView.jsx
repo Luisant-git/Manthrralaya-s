@@ -48,7 +48,7 @@ export default function ReceptionistView({
     whatsapp: '',
     doctor_id: '',
     date: new Date().toISOString().split('T')[0],
-    appointmentType: 'Initial consultation',
+    appointmentType: 'New consultation',
     session: 'FN',
     notes: ''
   });
@@ -57,7 +57,7 @@ export default function ReceptionistView({
   const [modalBookingData, setModalBookingData] = useState({
     doctor_id: '',
     date: new Date().toISOString().split('T')[0],
-    appointmentType: 'Initial consultation',
+    appointmentType: 'New consultation',
     session: 'FN',
     notes: ''
   });
@@ -167,7 +167,7 @@ export default function ReceptionistView({
     doctor_id: '',
     doctor_name: '',
     date: defaultDate,
-    appointmentType: 'Initial consultation',
+    appointmentType: 'New consultation',
     session: 'FN'
   };
 
@@ -488,7 +488,7 @@ export default function ReceptionistView({
       whatsapp: prev.phoneAsWhatsapp ? prev.phone : '',
       doctor_id: '',
       date: new Date().toISOString().split('T')[0],
-      appointmentType: 'Initial consultation',
+      appointmentType: 'New consultation',
       session: 'FN',
       notes: ''
     }));
@@ -859,11 +859,11 @@ export default function ReceptionistView({
 
   const getAppointmentTypeBadge = (type) => {
     const colors = {
-      'Initial consultation': 'bg-purple-50 text-purple-600 border-purple-200',
+      'New consultation': 'bg-purple-50 text-purple-600 border-purple-200',
       'Detox': 'bg-teal-50 text-teal-600 border-teal-200',
       'Review': 'bg-amber-50 text-amber-600 border-amber-200'
     };
-    return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || colors['Initial consultation']}`;
+    return `px-2 py-0.5 rounded text-xs font-medium border ${colors[type] || colors['New consultation']}`;
   };
 
   const getDisplayAppointmentType = (appt) => {
@@ -905,7 +905,7 @@ export default function ReceptionistView({
       whatsapp: '',
       doctor_id: '',
       date: new Date().toISOString().split('T')[0],
-      appointmentType: 'Initial consultation',
+      appointmentType: 'New consultation',
       session: 'FN',
       notes: ''
     });
@@ -1231,7 +1231,7 @@ export default function ReceptionistView({
                     <option value="Detox">{getNextDetoxSessionLabel(foundPatient?.id)}</option>
                   ) : (
                     <>
-                      <option value="Initial consultation">Initial Consultation</option>
+                      <option value="New consultation">New Consultation</option>
                       <option value="Detox">{getNextDetoxSessionLabel(foundPatient?.id)}</option>
                       <option value="Review">Review</option>
                     </>
@@ -1411,7 +1411,7 @@ export default function ReceptionistView({
                     <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
                       <option value="all">All Types</option>
-                      <option value="Initial consultation">Initial Consultation</option>
+                      <option value="New consultation">New Consultation</option>
                       <option value="Detox">Detox</option>
                       <option value="Review">Review</option>
                     </select>
@@ -1607,7 +1607,7 @@ export default function ReceptionistView({
                       )
                     ) : (
                       <>
-                        <option value="Initial consultation">Initial Consultation</option>
+                        <option value="New consultation">New Consultation</option>
                         <option value="Detox">{getNextDetoxSessionLabel(bookingModalPatient?.id)}</option>
                         <option value="Review">Review</option>
                       </>
