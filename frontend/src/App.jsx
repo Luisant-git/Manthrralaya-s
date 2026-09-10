@@ -326,7 +326,6 @@ export default function App() {
         setCurrentUser(payload.email || payload.name);
         setCurrentUserId(userId);
         setIsAuthenticated(true);
-        setActiveTab('dashboard');
         
       } catch (e) {
         console.error('Session restoration failed:', e.message);
