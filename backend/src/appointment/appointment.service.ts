@@ -170,18 +170,100 @@ export class AppointmentService {
     return appointment;
   }
 
-  async findAll() {
-    return this.prisma.appointment.findMany({
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
+  async findAll(page?: number, pageSize?: number, date?: string, options: { search?: string; appointmentType?: string; doctorId?: number; from?: string; to?: string } = {}) {
+    const wherePrisma: any = {};
+
+    if (date) {
+      const d = new Date(date);
+      const startOfDay = new Date(d);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(d);
+      endOfDay.setHours(23, 59, 59, 999);
+      wherePrisma.appointmentDate = {
+        gte: startOfDay,
+        lte: endOfDay,
+      };
+    }
+
+    if (options.from || options.to) {
+      const range: any = {};
+      if (options.from) {
+        const from = new Date(options.from);
+        from.setHours(0, 0, 0, 0);
+        range.gte = from;
+      }
+      if (options.to) {
+        const to = new Date(options.to);
+        to.setHours(23, 59, 59, 999);
+        range.lte = to;
+      }
+      wherePrisma.appointmentDate = range;
+    }
+
+    if (options.doctorId) {
+      wherePrisma.doctorId = Number(options.doctorId);
+    }
+
+    if (options.appointmentType) {
+      wherePrisma.appointmentType = {
+        contains: options.appointmentType,
+        mode: 'insensitive',
+      };
+    }
+
+    if (options.search && options.search.trim()) {
+      const term = options.search.trim();
+      wherePrisma.patient = {
+        OR: [
+          { name: { contains: term, mode: 'insensitive' } },
+          { phone: { contains: term } },
+          { whatsapp: { contains: term } },
+        ],
+      };
+    }
+
+    const include = {
+      patient: true,
+      doctor: {
+        include: {
+          user: true
         }
+      }
+    };
+
+    // Without pagination params, keep legacy behavior: return the full array
+    if (page === undefined && pageSize === undefined) {
+      return this.prisma.appointment.findMany({
+        where: wherePrisma,
+        include,
+        orderBy: { appointmentDate: 'desc' }
+      });
+    }
+
+    const take = pageSize ? Math.max(1, Number(pageSize)) : undefined;
+    const safePage = page ? Math.max(1, Number(page)) : 1;
+    const skip = take ? (safePage - 1) * take : undefined;
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.appointment.findMany({
+        where: wherePrisma,
+        include,
+        orderBy: { appointmentDate: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.appointment.count({ where: wherePrisma }),
+    ]);
+
+    return {
+      data,
+      pagination: {
+        page: safePage,
+        pageSize: take ?? total,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / (take ?? Math.max(total, 1)))),
       },
-      orderBy: { appointmentDate: 'desc' }
-    });
+    };
   }
 
   async findOne(id: number) {

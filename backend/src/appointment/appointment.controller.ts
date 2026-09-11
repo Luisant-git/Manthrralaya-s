@@ -19,9 +19,37 @@ export class AppointmentController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all appointments' })
-  findAll() {
-    return this.appointmentService.findAll();
+  @ApiOperation({ summary: 'Get all appointments (optionally paginated/filtered)' })
+  @ApiQuery({ name: 'page', required: false, example: 1, description: 'Page number (page + pageSize enables pagination)' })
+  @ApiQuery({ name: 'pageSize', required: false, example: 8, description: 'Number of items per page' })
+  @ApiQuery({ name: 'date', required: false, example: '2024-01-15', description: 'Filter by appointment date' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by patient name' })
+  @ApiQuery({ name: 'appointmentType', required: false, description: 'Filter by appointment type' })
+  @ApiQuery({ name: 'doctorId', required: false, description: 'Filter by doctor ID' })
+  @ApiQuery({ name: 'from', required: false, example: '2024-01-01', description: 'Start date of range' })
+  @ApiQuery({ name: 'to', required: false, example: '2024-01-31', description: 'End date of range' })
+  findAll(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('date') date?: string,
+    @Query('search') search?: string,
+    @Query('appointmentType') appointmentType?: string,
+    @Query('doctorId') doctorId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.appointmentService.findAll(
+      page ? parseInt(page, 10) : undefined,
+      pageSize ? parseInt(pageSize, 10) : undefined,
+      date || undefined,
+      {
+        search: search || undefined,
+        appointmentType: appointmentType || undefined,
+        doctorId: doctorId ? parseInt(doctorId, 10) : undefined,
+        from: from || undefined,
+        to: to || undefined,
+      },
+    );
   }
 
   @Get('date')

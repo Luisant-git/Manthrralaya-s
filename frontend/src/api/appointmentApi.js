@@ -59,6 +59,18 @@ export const getAllAppointments = async () => {
     return await response.json();
 };
 
+export const getPagedAppointments = async (page = 1, pageSize = 8, params = {}) => {
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') query.set(key, String(value));
+    });
+    const response = await fetch(`${API_URL}?${query.toString()}`, {
+        headers: getAuthHeader()
+    });
+    if (!response.ok) throw new Error('Failed to fetch appointments');
+    return await response.json();
+};
+
 export const deleteAppointment = async (id) => {
     const response = await fetch(`${API_URL}/${id}`, {
         method: 'DELETE',

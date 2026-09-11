@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPlus, Calendar } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPlus, Calendar, ChevronLeft, ChevronRight, Loader2, Search, FilterX } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { getPagedAppointments } from '../api/appointmentApi';
 
 export default function AppointmentsView({ 
   appointments, 
@@ -15,6 +16,73 @@ export default function AppointmentsView({
 }) {
   const [isBooking, setIsBooking] = useState(false);
   const [showFollowups, setShowFollowups] = useState(false);
+  
+  // Server-side pagination for the schedule log (Patient Records UI style)
+  const [serverPage, setServerPage] = useState(1);
+  const serverPageSize = 8;
+  const appointmentTypeOptions = ['New consultation', 'Detox', 'Review', 'Follow-up'];
+  const [serverItems, setServerItems] = useState([]);
+  const [totalBooked, setTotalBooked] = useState(0);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Filters
+  const [searchText, setSearchText] = useState('');
+  const [searchTextDebounced, setSearchTextDebounced] = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [doctorFilter, setDoctorFilter] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchTextDebounced(searchText.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchText]);
+
+  // Reset to first page whenever a filter changes
+  useEffect(() => {
+    setServerPage(1);
+  }, [searchTextDebounced, typeFilter, doctorFilter, fromDate, toDate]);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingAppointments(true);
+    getPagedAppointments(serverPage, serverPageSize, {
+      search: searchTextDebounced || undefined,
+      appointmentType: typeFilter || undefined,
+      doctorId: doctorFilter || undefined,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+    })
+      .then(res => {
+        if (!active) return;
+        const data = Array.isArray(res) ? res : (res?.data || []);
+        const pag = res?.pagination;
+        setServerItems(data);
+        setTotalBooked(pag?.total ?? data.length);
+      })
+      .catch(err => {
+        console.error('Failed to load appointments page:', err);
+        if (active) {
+          setServerItems([]);
+          setTotalBooked(0);
+        }
+      })
+      .finally(() => { if (active) setLoadingAppointments(false); });
+    return () => { active = false; };
+  }, [serverPage, serverPageSize, refreshKey, searchTextDebounced, typeFilter, doctorFilter, fromDate, toDate]);
+
+  const goToPage = (page) => {
+    if (page >= 1 && page <= totalSchedulePages) setServerPage(page);
+  };
+
+  const clearFilters = () => {
+    setSearchText('');
+    setTypeFilter('');
+    setDoctorFilter('');
+    setFromDate('');
+    setToDate('');
+  };
   
   const [formData, setFormData] = useState({
     patient_id: '',
@@ -173,9 +241,9 @@ export default function AppointmentsView({
     return candidates.sort((a, b) => new Date(b.scheduled_date) - new Date(a.scheduled_date))[0];
   };
 
-  // Combine booked appointments with pending follow-ups
+  // Combine booked appointments (from backend page) with pending follow-ups
   const getAllAppointmentsWithFollowups = () => {
-    const bookedAppointments = appointments.map(appt => {
+    const bookedAppointments = serverItems.map(appt => {
       const patientId = appt.patient_id || appt.patientId;
       const rawType = appt.appointmentType || appt.type || appt.appointment_type;
       const appointmentType = getFinalAppointmentType(patientId, rawType);
@@ -234,6 +302,10 @@ export default function AppointmentsView({
 
   const allItems = getAllAppointmentsWithFollowups();
 
+  const totalSchedulePages = Math.max(1, Math.ceil(totalBooked / serverPageSize));
+  const pendingFollowupCount = allItems.filter(i => i.isFollowup).length;
+  const scheduleStartIndex = (serverPage - 1) * serverPageSize;
+
   const getDisplayAppointmentType = (appt) => {
     if (String(appt.appointmentType).toLowerCase() !== 'detox') return appt.appointmentType || 'General';
     let displaySession = appt.session;
@@ -287,6 +359,7 @@ export default function AppointmentsView({
     };
 
     onAddAppointment(newAppt, patientObj, doctorObj);
+    setRefreshKey(k => k + 1);
     setIsBooking(false);
     setFormData({ 
       patient_id: '', 
@@ -495,6 +568,56 @@ export default function AppointmentsView({
           </form>
         </div>
       ) : (
+        <div className="space-y-4">
+        {/* Filter Bar */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div className="md:col-span-4">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Search Patient</label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Search by patient name or mobile..."
+                  className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Appointment Type</label>
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                <option value="">All Types</option>
+                {appointmentTypeOptions.map(t => (<option key={t} value={t}>{t}</option>))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Doctor</label>
+              <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                <option value="">All Doctors</option>
+                {doctors.map(d => (<option key={d.id} value={d.id}>{d.user?.fullName || d.name}</option>))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">From Date</label>
+              <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+            </div>
+            <div className="md:col-span-1">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">To Date</label>
+              <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+            </div>
+            <div className="md:col-span-1">
+              <button
+                onClick={clearFilters}
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 hover:text-rose-600 transition"
+                title="Clear all filters"
+              >
+                <FilterX className="w-4 h-4" /> Clear
+              </button>
+            </div>
+          </div>
+        </div>
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -502,7 +625,7 @@ export default function AppointmentsView({
               <h3 className="font-bold text-slate-800">Master Schedule Log</h3>
             </div>
             <div className="text-xs text-slate-500">
-              {allItems.filter(i => !i.isFollowup).length} booked | {allItems.filter(i => i.isFollowup).length} pending follow-ups
+              {totalBooked} booked | {pendingFollowupCount} pending follow-ups
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -585,10 +708,63 @@ export default function AppointmentsView({
                 })}
               </tbody>
             </table>
-            {allItems.length === 0 && (
+            {loadingAppointments ? (
+              <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading schedule...
+              </div>
+            ) : allItems.length === 0 ? (
               <div className="py-12 text-center text-slate-500">No appointments or pending follow-ups found</div>
+            ) : (
+              <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-5 px-4 pb-4">
+                <p className="text-sm text-slate-500">
+                  Showing <span className="font-semibold text-slate-800">{totalBooked === 0 ? 0 : scheduleStartIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(scheduleStartIndex + serverPageSize, totalBooked)}</span> of <span className="font-semibold text-slate-800">{totalBooked}</span> appointments
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => goToPage(serverPage - 1)}
+                    disabled={serverPage === 1}
+                    className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+
+                  <div className="flex items-center">
+                    {Array.from({ length: Math.min(5, totalSchedulePages) }, (_, i) => {
+                      let pageNum;
+                      if (totalSchedulePages <= 5) {
+                        pageNum = i + 1;
+                      } else if (serverPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (serverPage >= totalSchedulePages - 2) {
+                        pageNum = totalSchedulePages - 4 + i;
+                      } else {
+                        pageNum = serverPage - 2 + i;
+                      }
+
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => goToPage(pageNum)}
+                          className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${serverPage === pageNum ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={() => goToPage(serverPage + 1)}
+                    disabled={serverPage === totalSchedulePages}
+                    className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
             )}
           </div>
+        </div>
         </div>
       )}
     </div>
