@@ -1,9 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download, Phone, Mail } from 'lucide-react';
+import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download, Phone, Mail, ImagePlus, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAllDetoxSessions } from '../api/detoxSessionApi';
 import { generateConsultationPDF, generateDetoxPDF, generateSingleTopicPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
-import { uploadConsultationPdf } from '../api/consultationApi';
+import { uploadConsultationPdf, uploadReportImages } from '../api/consultationApi';
+import config from '../config.js';
+
+const toAbsoluteUrl = (src) => {
+  if (!src) return '';
+  if (/^(https?:)?\/\//.test(src) || src.startsWith('data:')) return src;
+  return `${config.API_BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
+};
 
 export default function ConsultationsView({ appointments, patients, doctors, consultations, dietCharts, onAddConsultation, onAddDietChart, activeRole, currentUser }) {
   const [selectedApptId, setSelectedApptId] = useState('');
@@ -22,12 +29,16 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [consultationNotes, setConsultationNotes] = useState('');
   const [reviewRecommended, setReviewRecommended] = useState(false);
   const [medicalHistory, setMedicalHistory] = useState('');
+  const [medicalReports, setMedicalReports] = useState('');
   const [detoxProcedure, setDetoxProcedure] = useState('');
   const [dietPlanNote, setDietPlanNote] = useState('');
   const [homeCare, setHomeCare] = useState('');
+  const [uploadingEditor, setUploadingEditor] = useState('');
+  const [previewImageSrc, setPreviewImageSrc] = useState('');
   
   const consultationEditorRef = useRef(null);
   const medicalHistoryEditorRef = useRef(null);
+  const medicalReportsEditorRef = useRef(null);
   const detoxProcedureEditorRef = useRef(null);
   const dietPlanEditorRef = useRef(null);
 
@@ -120,6 +131,51 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     e.target.value = '';
   };
 
+  const wrapImgHtml = (url) => `
+    <span class="img-wrap" contenteditable="false">
+      <img src="${url}" alt="Uploaded Image"/>
+      <button type="button" class="img-remove-btn" onmousedown="event.preventDefault()" title="Remove image">&times;</button>
+    </span>`;
+
+  const handleUploadImages = async (e, editorKey, editorRef, setter) => {
+    const files = Array.from(e.target.files || [])
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    if (!files.length) return;
+    if (!editorRef.current) return;
+
+    setUploadingEditor(editorKey);
+    try {
+      const res = await uploadReportImages(files);
+      const urls = (res && res.urls) || [];
+      if (!urls.length) throw new Error('No image URLs returned');
+
+      const editor = editorRef.current;
+      editor.focus();
+
+      const imgs = urls.map(u => wrapImgHtml(toAbsoluteUrl(u))).join('<br/>');
+      editor.innerHTML = `${editor.innerHTML}<br/>${imgs}`;
+
+      setter(editor.innerHTML);
+      toast.success(`${urls.length} image${urls.length > 1 ? 's' : ''} uploaded.`);
+    } catch (err) {
+      console.error('Image upload error:', err);
+      toast.error(err.message || 'Failed to upload images.');
+    } finally {
+      setUploadingEditor('');
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const uploadTool = (editorKey, editorRef, setter) => {
+    const isUploading = uploadingEditor === editorKey;
+    return (
+      <label className={`cursor-pointer rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1.5 ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+        {isUploading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><ImagePlus className="w-3.5 h-3.5 text-emerald-600" /> Upload Images</>}
+        <input type="file" accept="image/*" multiple className="hidden" onChange={e => handleUploadImages(e, editorKey, editorRef, setter)} disabled={isUploading} />
+      </label>
+    );
+  };
+
   // Diet Chart sub-form
   const [diet, setDiet] = useState({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
   
@@ -128,7 +184,17 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [detoxDoctorId, setDetoxDoctorId] = useState('');
   const [detoxFollowupDate, setDetoxFollowupDate] = useState(new Date().toISOString().split('T')[0]);
   const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('');
+  const [detoxMorningSessions, setDetoxMorningSessions] = useState('');
+  const [detoxEveningSessions, setDetoxEveningSessions] = useState('');
   const todayDate = new Date().toLocaleDateString('en-CA');
+
+  // Admission Recommended flag
+  const [admissionRecommended, setAdmissionRecommended] = useState(false);
+  const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [admissionDoctorId, setAdmissionDoctorId] = useState('');
+  const [admissionDoctorName, setAdmissionDoctorName] = useState('');
+
+  const sessionCountOptions = ['', ...Array.from({ length: 10 }, (_, i) => i + 1)];
 
   const fontSizeOptions = [
     { label: '12px', value: '12px' },
@@ -279,6 +345,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     }
     setConsultationNotes(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.consultation_notes || ''}`);
     setMedicalHistory(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.medical_history || ''}`);
+    setMedicalReports(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.medical_reports || ''}`);
     setDietPlanNote(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.diet_plan_note || ''}`);
     setDetoxProcedure(prev => `${prev || ''}${prev ? '<br/><br/>' : ''}${latestHistory.detox_procedure || ''}`);
     setHistoryAppended(true);
@@ -288,8 +355,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const handleCompleteConsultation = async () => {
     if (!activeAppt || !activePt) return;
 
-    if (!detoxRecommended && !reviewRecommended) {
-      toast.warn('Please select either "Recommend Detox" or "Recommend Review" before finalizing.');
+    if (!detoxRecommended && !reviewRecommended && !admissionRecommended) {
+      toast.warn('Please select either "Recommend Detox", "Recommend Review" or "Recommend for Admission" before finalizing.');
       return;
     }
 
@@ -299,6 +366,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       const doctorName = activeAppt.doctor_name || currentDoctor?.name || activeAppt.doctor?.user?.fullName || activeAppt.doctor?.name || 'Assigned Provider';
       const doctorId = activeAppt.doctor_id || activeAppt.doctorId || currentDoctorId;
       const selectedDetoxDoctor = availableDoctors.find(d => String(d.id) === String(detoxDoctorId));
+      const selectedAdmissionDoctor = availableDoctors.find(d => String(d.id) === String(admissionDoctorId));
       
       const newCons = {
         patient_id: Number(activePt.id),
@@ -308,14 +376,21 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         date: new Date().toISOString().split('T')[0],
         consultation_notes: consultationNotes,
         medical_history: medicalHistory,
+        medical_reports: medicalReports,
         detox_procedure: detoxProcedure,
         diet_plan_note: dietPlanNote,
         home_care: homeCare,
         detox_recommended: detoxRecommended,
         detox_doctor_id: detoxRecommended && detoxDoctorId ? parseInt(detoxDoctorId) : null,
         detox_doctor_name: detoxRecommended && selectedDetoxDoctor ? selectedDetoxDoctor.name : null,
+        detox_morning_sessions: detoxRecommended && detoxMorningSessions ? parseInt(detoxMorningSessions) : 0,
+        detox_evening_sessions: detoxRecommended && detoxEveningSessions ? parseInt(detoxEveningSessions) : 0,
         followup_date: (detoxRecommended || reviewRecommended) ? detoxFollowupDate : null,
-        followup_remarks: (detoxRecommended || reviewRecommended) ? detoxFollowupRemarks : null
+        followup_remarks: (detoxRecommended || reviewRecommended) ? detoxFollowupRemarks : null,
+        admission_recommended: admissionRecommended,
+        admission_date: admissionRecommended ? admissionDate : null,
+        admission_doctor_id: admissionRecommended && admissionDoctorId ? parseInt(admissionDoctorId) : null,
+        admission_doctor_name: admissionRecommended && selectedAdmissionDoctor ? selectedAdmissionDoctor.name : null
       };
 
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
@@ -420,8 +495,15 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     }
   };
 
+  const handleHistoryImageClick = (e) => {
+    const target = e.target;
+    if (!target || !target.closest) return;
+    const img = target.tagName === 'IMG' ? target : target.closest('img');
+    if (img) setPreviewImageSrc(img.src);
+  };
+
   // Reusable Editor Component
-  const RichTextEditor = ({ editorRef, content, setContent, placeholder }) => {
+  const RichTextEditor = ({ editorRef, content, setContent, placeholder, extraTools }) => {
     const placeholderRef = useRef(null);
 
     useEffect(() => {
@@ -440,6 +522,26 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       placeholderRef.current.style.display = empty ? 'block' : 'none';
     };
 
+    const handleEditorClick = (e) => {
+      const target = e.target;
+      if (!target || !target.closest) return;
+
+      const removeBtn = target.closest('.img-remove-btn');
+      if (removeBtn) {
+        const wrap = removeBtn.closest('.img-wrap');
+        if (wrap) {
+          wrap.remove();
+          if (editorRef.current) setContent(editorRef.current.innerHTML);
+        }
+        return;
+      }
+
+      const img = target.tagName === 'IMG' ? target : target.closest('img');
+      if (img) {
+        setPreviewImageSrc(img.src);
+      }
+    };
+
     return (
       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
         <div className="mb-2 flex flex-wrap gap-2">
@@ -452,9 +554,33 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           </select>
           <button type="button" onClick={() => applyEditorCommand('insertUnorderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Bullet List"><span className="text-base">•</span> Bullets</button>
           <button type="button" onClick={() => applyEditorCommand('insertOrderedList', null, editorRef, setContent)} className="rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Numbered List"><span className="text-xs font-bold">1.</span> Numbers</button>
+          <div className="flex gap-1 ml-1 border-l border-slate-200 pl-2">
+            <button type="button" onClick={() => applyEditorCommand('justifyLeft', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Align Left">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="15" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <button type="button" onClick={() => applyEditorCommand('justifyCenter', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Align Center">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="6" y1="12" x2="18" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <button type="button" onClick={() => applyEditorCommand('justifyRight', null, editorRef, setContent)} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1" title="Align Right">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="9" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+          </div>
+          {extraTools}
         </div>
         <div className="relative">
-          <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onInput={handleInput} onBlur={e => setContent(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" dangerouslySetInnerHTML={{ __html: content }} />
+          <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onInput={handleInput} onClick={handleEditorClick} onBlur={e => setContent(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" dangerouslySetInnerHTML={{ __html: content }} />
           <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>{placeholder}</div>
         </div>
       </div>
@@ -468,6 +594,11 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         .editor-content ul { list-style-type: disc; }
         .editor-content ol { list-style-type: decimal; }
         .editor-content li { margin-bottom: 0.25rem; }
+        .editor-content img, .history-list img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; border: 1px solid #e2e8f0; }
+        .editor-content .img-wrap { position: relative; display: inline-block; margin: 8px 4px 8px 0; vertical-align: middle; max-width: 100%; }
+        .editor-content .img-wrap img { margin: 0; display: block; cursor: zoom-in; }
+        .editor-content .img-remove-btn { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 9999px; background: #ef4444; color: #fff; border: 2px solid #fff; font-weight: 700; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); opacity: 0; transition: opacity .2s; }
+        .editor-content .img-wrap:hover .img-remove-btn { opacity: 1; }
         [contenteditable="true"] ul, [contenteditable="true"] ol { padding-left: 1.5rem; }
         [contenteditable="true"] ul { list-style-type: disc; }
         [contenteditable="true"] ol { list-style-type: decimal; }
@@ -475,6 +606,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         .history-list ul { list-style-type: disc; }
         .history-list ol { list-style-type: decimal; }
         .history-list li { margin-bottom: 0.25rem; }
+        .history-list img { cursor: zoom-in; }
       `}</style>
       
       <div className="space-y-6">
@@ -541,9 +673,20 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                             {latestHistory ? (historyAppended ? 'Latest history already added' : 'Add latest history notes') : 'No previous history available'}
                           </button>
                         </div>
-                        <RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." />
+                        <RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." extraTools={uploadTool('medicalHistory', medicalHistoryEditorRef, setMedicalHistory)} />
                       </div>
-                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes  [Prescription]</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes  [Prescription]</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." extraTools={uploadTool('consultationNotes', consultationEditorRef, setConsultationNotes)} /></div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">Medical Reports</label>
+                        <RichTextEditor
+                          editorRef={medicalReportsEditorRef}
+                          content={medicalReports}
+                          setContent={setMedicalReports}
+                          placeholder="Enter medical reports or upload images (reports, scans, lab results)..."
+                          extraTools={uploadTool('medicalReports', medicalReportsEditorRef, setMedicalReports)}
+                        />
+                        <p className="text-xs text-slate-400 mt-1.5">You can upload multiple images. They will be embedded into the report and included in the PDF.</p>
+                      </div>
                       <div><label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label><RichTextEditor editorRef={detoxProcedureEditorRef} content={detoxProcedure} setContent={setDetoxProcedure} placeholder="Enter detox procedure notes..." /></div>
                     </div>
 
@@ -571,16 +714,30 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       </div>
                       {detoxRecommended && (
                         <div className="mt-3 ml-8 space-y-3">
-                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-slate-600">Assign Detox Doctor</label>
+                          <div className="flex flex-wrap items-end gap-3">
+                            <div className="flex-1 min-w-[170px] space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600 whitespace-nowrap">Assign Detox Doctor</label>
                               <select value={detoxDoctorId} onChange={e => setDetoxDoctorId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                                 <option value="">Select Detox Doctor</option>
                                 {availableDoctors.length > 0 ? (availableDoctors.map(doc => (<option key={doc.id} value={doc.id}>Dr. {doc.name || doc.user?.fullName} — {doc.specialization || 'General'}</option>))) : (<option disabled>No doctors available</option>)}
                               </select>
                             </div>
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-slate-600">Follow-up Date</label>
+                            <div className="w-28 space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600 whitespace-nowrap"><Sun className="inline w-3.5 h-3.5 mr-1 text-amber-500" />Morning</label>
+                              <select value={detoxMorningSessions} onChange={e => setDetoxMorningSessions(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <option value="">Select</option>
+                                {sessionCountOptions.filter(v => v !== '').map(n => (<option key={n} value={n}>{n}</option>))}
+                              </select>
+                            </div>
+                            <div className="w-28 space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600 whitespace-nowrap"><Moon className="inline w-3.5 h-3.5 mr-1 text-indigo-500" />Evening</label>
+                              <select value={detoxEveningSessions} onChange={e => setDetoxEveningSessions(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                                <option value="">Select</option>
+                                {sessionCountOptions.filter(v => v !== '').map(n => (<option key={n} value={n}>{n}</option>))}
+                              </select>
+                            </div>
+                            <div className="flex-1 min-w-[170px] space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600 whitespace-nowrap">Follow-up Date</label>
                               <input type="date" value={detoxFollowupDate} onChange={e => setDetoxFollowupDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
                             </div>
                           </div>
@@ -589,6 +746,38 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                             <textarea value={detoxFollowupRemarks} onChange={e => setDetoxFollowupRemarks(e.target.value)} rows={3} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" placeholder="Enter any special instructions for the receptionist..." />
                           </div>
                           <p className="text-xs text-emerald-700 mt-1.5 font-medium">These follow-up details will be sent to reception so they can call the patient later.</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Admission Recommendation */}
+                    <div className={`p-5 border-b ${admissionRecommended ? 'bg-sky-50 border-sky-100' : 'bg-slate-50 border-slate-100'}`}>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="admissionCheck"
+                          checked={admissionRecommended}
+                          onChange={e => setAdmissionRecommended(e.target.checked)}
+                          className="w-5 h-5 text-sky-600 border-slate-300 rounded focus:ring-sky-500"
+                        />
+                        <label htmlFor="admissionCheck" className="font-bold text-slate-800 text-sm">Recommend for Admission</label>
+                      </div>
+                      {admissionRecommended && (
+                        <div className="mt-3 ml-8 space-y-3">
+                          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600"><User className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Admission Doctor</label>
+                              <select value={admissionDoctorId} onChange={e => setAdmissionDoctorId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500">
+                                <option value="">Select Admission Doctor</option>
+                                {availableDoctors.length > 0 ? (availableDoctors.map(doc => (<option key={doc.id} value={doc.id}>Dr. {doc.name || doc.user?.fullName} — {doc.specialization || 'General'}</option>))) : (<option disabled>No doctors available</option>)}
+                              </select>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="block text-xs font-semibold text-slate-600"><Calendar className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Admission Date</label>
+                              <input type="date" value={admissionDate} onChange={e => setAdmissionDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
+                            </div>
+                          </div>
+                          <p className="text-xs text-sky-700 mt-1.5 font-medium">The patient will be scheduled for admission under the selected doctor.</p>
                         </div>
                       )}
                     </div>
@@ -729,6 +918,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               </div>
               <div 
                 className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
+                onClick={handleHistoryImageClick}
                 dangerouslySetInnerHTML={{ 
                   __html: record.consultation_notes || '<p class="text-slate-500 italic">No notes recorded.</p>' 
                 }} 
@@ -749,12 +939,36 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               </div>
               <div 
                 className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
+                onClick={handleHistoryImageClick}
                 dangerouslySetInnerHTML={{ 
                   __html: record.medical_history || '<p class="text-slate-500 italic">No medical history recorded.</p>' 
                 }} 
               />
             </div>
           </div>
+
+          {/* Medical Reports - Full Width */}
+          {(record.medical_reports || record.medicalReports) && (record.medical_reports || record.medicalReports) !== '<br>' && (
+            <div className="mb-4 group">
+              <div className="flex items-center justify-between mb-2 h-6">
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
+                  <FileText className="w-3 h-3 text-sky-600" /> Medical Reports
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Medical Reports', record.medical_reports || record.medicalReports)}
+                  className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-sky-200 text-sky-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-sky-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
+                  title="Download Medical Reports">
+                  <Download className="w-3 h-3" /> Export PDF
+                </button>
+              </div>
+              <div 
+                className="rounded-2xl bg-white border border-sky-100 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-sky-200"
+                onClick={handleHistoryImageClick}
+                dangerouslySetInnerHTML={{ __html: record.medical_reports || record.medicalReports }} 
+              />
+            </div>
+          )}
 
           {/* Row 2: Detox Procedure Note & Diet Plan Note - Side by Side */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -773,6 +987,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               </div>
               <div 
                 className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
+                onClick={handleHistoryImageClick}
                 dangerouslySetInnerHTML={{ 
                   __html: record.detox_procedure || '<p class="text-slate-500 italic">No detox procedure notes recorded.</p>' 
                 }} 
@@ -793,6 +1008,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               </div>
               <div 
                 className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
+                onClick={handleHistoryImageClick}
                 dangerouslySetInnerHTML={{ 
                   __html: record.diet_plan_note || '<p class="text-slate-500 italic">No diet plan note recorded.</p>' 
                 }} 
@@ -814,13 +1030,19 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
                                 <Calendar className="w-3 h-3" /> Recommendation
               </div>
-                              <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50/50 border-amber-100'}`}>
-                                {record.detox_recommended ? (
+                              <div className={`rounded-2xl border p-4 text-sm min-h-[100px] space-y-3 ${record.detox_recommended ? 'bg-emerald-50 border-emerald-200' : (record.admission_recommended ? 'bg-sky-50 border-sky-200' : 'bg-amber-50/50 border-amber-100')}`}>
+                                {record.detox_recommended && (
                                   <div className="space-y-2">
                                     <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
                                     <div className="flex items-start gap-2">
                                       <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
                                       <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Sessions:</span>
+                                      <span className="text-slate-600">
+                                        Morning: {record.detox_morning_sessions || record.detoxMorningSessions || 0} • Evening: {record.detox_evening_sessions || record.detoxEveningSessions || 0}
+                                      </span>
                                     </div>
                                     <div className="flex items-start gap-2">
                                       <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
@@ -831,7 +1053,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                       <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
                                     </div>
                                   </div>
-                                ) : (record.followup_date || record.followupDate) ? (
+                                )}
+                                {(record.followup_date || record.followupDate) && !record.detox_recommended && (
                                   <div className="space-y-2">
                                     <div className="text-amber-700 font-bold text-xs uppercase mb-1">Follow-up Review</div>
                                     <div className="flex items-start gap-2">
@@ -843,7 +1066,21 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                       <span className="text-slate-600">{record.followup_remarks || record.followupRemarks || 'No remarks'}</span>
                                     </div>
                                   </div>
-                                ) : (
+                                )}
+                                {record.admission_recommended && (
+                                  <div className="space-y-2">
+                                    <div className="text-sky-700 font-bold text-xs uppercase mb-1">Admission Recommended</div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
+                                      <span className="text-slate-600">{record.admission_doctor_name || 'Not assigned'}</span>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                      <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
+                                      <span className="text-slate-600">{record.admission_date || 'Not scheduled'}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                {!record.detox_recommended && !record.admission_recommended && !(record.followup_date || record.followupDate) && (
                                   <span className="text-slate-500 italic">No recommendation recorded.</span>
                                 )}
                               </div>
@@ -1041,6 +1278,22 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           </div>
         </div>
       </div>
+
+      {/* Image Zoom Preview Modal */}
+      {previewImageSrc && (
+        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => setPreviewImageSrc('')}>
+          <img src={previewImageSrc} alt="Zoomed preview" className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+          <button
+            type="button"
+            onClick={() => setPreviewImageSrc('')}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition-colors"
+            title="Close"
+          >
+            ✕
+          </button>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-white/60 text-xs">Click outside or press ✕ to close</span>
+        </div>
+      )}
     </>
   );
 }

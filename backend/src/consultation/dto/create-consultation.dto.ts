@@ -59,4 +59,34 @@ export class CreateConsultationDto {
   @IsOptional()
   @IsString()
   followupRemarks?: string;
+
+  @ApiPropertyOptional({ example: '<p>X-ray report attached</p>' })
+  @IsOptional()
+  @IsString()
+  medicalReports?: string;
+
+  @ApiPropertyOptional({ example: 5, description: 'Number of detox morning sessions recommended' })
+  @IsOptional()
+  @IsInt()
+  detoxMorningSessions?: number;
+
+  @ApiPropertyOptional({ example: 3, description: 'Number of detox evening sessions recommended' })
+  @IsOptional()
+  @IsInt()
+  detoxEveningSessions?: number;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  admissionRecommended?: boolean;
+
+  @ApiPropertyOptional({ example: '2026-07-01' })
+  @IsOptional()
+  @IsDateString()
+  admissionDate?: string;
+
+  @ApiPropertyOptional({ example: 3, description: 'Recommended Admission Doctor ID' })
+  @IsOptional()
+  @IsInt()
+  admissionDoctorId?: number;
 }

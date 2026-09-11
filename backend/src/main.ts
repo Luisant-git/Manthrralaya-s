@@ -1,12 +1,14 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { join } from 'path';
 
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(ConfigService);
 
@@ -14,6 +16,13 @@ async function bootstrap() {
     origin: true,
     credentials: true,
   });
+
+  const uploadsDir = process.env.UPLOADS_DIR || join(process.cwd(), 'uploads');
+  app.use('/uploads', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    next();
+  });
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
  
   app.useGlobalPipes(

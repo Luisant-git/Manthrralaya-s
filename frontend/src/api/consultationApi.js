@@ -109,6 +109,26 @@ export const uploadConsultationPdf = async (consultationId, formData) => {
     return response.json();
 };
 
+export const uploadReportImages = async (files) => {
+    const formData = new FormData();
+    files.forEach(file => formData.append('images', file));
+
+    const response = await fetch(`${API_URL}/upload-report-images`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        },
+        body: formData
+    });
+
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to upload report images');
+    }
+
+    return response.json();
+};
+
 export const sendFollowupReminder = async (consultationId) => {
     const response = await fetch(`${config.API_BASE_URL}/receptionist-followup/${consultationId}/send-reminder`, {
         method: 'POST',

@@ -91,6 +91,33 @@ const RICH_TEXT_CSS = `
 
 const isHtml = (content) => typeof content === 'string' && /^\s*</.test(content);
 
+const sanitizeHtmlForPdf = (html) => {
+  if (!html) return html;
+  let cleaned = html.replace(/<span\s+class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, (match) => {
+    const imgMatch = match.match(/<img\s+[^>]*src="([^"]*)"[^>]*\/?>/i);
+    return imgMatch ? imgMatch[0] : '';
+  });
+  cleaned = cleaned.replace(/<button[^>]*class="img-remove-btn"[^>]*>[\s\S]*?<\/button>/gi, '');
+  cleaned = cleaned.replace(/<button[^>]*>&times;<\/button>/gi, '');
+  return cleaned;
+};
+
+const waitForAllImages = (container) => {
+  const imgs = Array.from(container.querySelectorAll('img'));
+  if (!imgs.length) return Promise.resolve();
+  return Promise.all(
+    imgs.map(
+      (img) =>
+        new Promise((resolve) => {
+          if (img.complete && img.naturalWidth !== 0) return resolve();
+          img.onload = resolve;
+          img.onerror = resolve;
+          setTimeout(resolve, 5000);
+        })
+    )
+  );
+};
+
 const renderHtmlImage = async (html, widthPt) => {
   const widthPx = Math.round(widthPt * PT_TO_PX);
   const holder = document.createElement('div');
@@ -108,9 +135,11 @@ const renderHtmlImage = async (html, widthPt) => {
     padding: '0',
     zIndex: '-1000',
   });
-  holder.innerHTML = `<style>${RICH_TEXT_CSS}</style><div class="pdf-richtext">${html || ''}</div>`;
+  const sanitized = sanitizeHtmlForPdf(html);
+  holder.innerHTML = `<style>${RICH_TEXT_CSS}</style><div class="pdf-richtext">${sanitized || ''}</div>`;
   document.body.appendChild(holder);
   try {
+    await waitForAllImages(holder);
     const scale = 2;
     const canvas = await html2canvas(holder, {
       scale,
@@ -135,29 +164,118 @@ const sliceCanvas = (canvas, srcY, height) => {
   return slice;
 };
 
-const drawHtmlContent = async (doc, html, x, y, widthPt, pageHeight, onNewPage) => {
-  const { canvas, scale } = await renderHtmlImage(html, widthPt);
-  const cssHeight = canvas.height / scale;
-  const heightPt = cssHeight * (72 / 96);
-
-  let srcY = 0;
-  let remainingPt = heightPt;
-
-  while (remainingPt > 0) {
-    const availablePt = pageHeight - 30 - y;
-    if (availablePt <= 0) {
-      doc.addPage();
-      y = onNewPage();
-      continue;
+const splitHtmlSegments = (html) => {
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html || '';
+  const segments = [];
+  Array.from(tmp.childNodes).forEach((node) => {
+    if (node.nodeType === 1 && node.tagName === 'IMG') {
+      segments.push({ type: 'image', src: node.getAttribute('src') });
+    } else if (node.nodeType === 1 && node.tagName === 'SPAN' && node.classList.contains('img-wrap')) {
+      const img = node.querySelector('img');
+      if (img) segments.push({ type: 'image', src: img.getAttribute('src') });
+    } else if (node.nodeType === 1 && (node.tagName === 'BR' || (node.textContent || '').trim() === '')) {
+      // skip empty nodes
+    } else {
+      segments.push({ type: 'html', html: node.outerHTML || node.textContent });
     }
-    const slicePt = Math.min(remainingPt, availablePt);
-    const sliceCssPx = slicePt * PT_TO_PX;
-    const slice = sliceCanvas(canvas, srcY * scale, Math.ceil(sliceCssPx * scale));
-    doc.addImage(slice, 'PNG', x, y, widthPt, slicePt);
-    srcY += sliceCssPx;
-    y += slicePt;
-    remainingPt -= slicePt;
+  });
+  return segments;
+};
+
+const renderSingleImage = async (src, widthPt) => {
+  const widthPx = Math.round(widthPt * PT_TO_PX);
+  const holder = document.createElement('div');
+  Object.assign(holder.style, {
+    position: 'fixed',
+    left: '-100000px',
+    top: '0',
+    width: `${widthPx}px`,
+    background: '#ffffff',
+    zIndex: '-1000',
+  });
+  holder.innerHTML = `<img src="${src}" style="width:100%;display:block;" crossorigin="anonymous"/>`;
+  document.body.appendChild(holder);
+  try {
+    await waitForAllImages(holder);
+    const scale = 2;
+    const canvas = await html2canvas(holder, {
+      scale,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+    });
+    return canvas;
+  } finally {
+    document.body.removeChild(holder);
   }
+};
+
+const drawHtmlContent = async (doc, html, x, y, widthPt, pageHeight, onNewPage) => {
+  const segments = splitHtmlSegments(html);
+  if (!segments.length) return;
+
+  const hasImages = segments.some(s => s.type === 'image');
+  const HEADER_ROOM = 30;
+
+  const drawCanvasAcrossPages = (canvas, scale) => {
+    const cssHeight = canvas.height / scale;
+    const totalPt = cssHeight * (72 / 96);
+    let srcY = 0;
+    let remainingPt = totalPt;
+    while (remainingPt > 0) {
+      const availablePt = pageHeight - HEADER_ROOM - y;
+      if (availablePt <= 0) {
+        doc.addPage();
+        y = onNewPage();
+        continue;
+      }
+      const slicePt = Math.min(remainingPt, availablePt);
+      const sliceCssPx = slicePt * PT_TO_PX;
+      const slice = sliceCanvas(canvas, srcY * scale, Math.ceil(sliceCssPx * scale));
+      doc.addImage(slice, 'PNG', x, y, widthPt, slicePt);
+      srcY += sliceCssPx;
+      y += slicePt;
+      remainingPt -= slicePt;
+    }
+  };
+
+  if (!hasImages) {
+    const { canvas, scale } = await renderHtmlImage(html, widthPt);
+    drawCanvasAcrossPages(canvas, scale);
+    return;
+  }
+
+  let textBuffer = '';
+
+  const flushText = async () => {
+    if (!textBuffer.trim()) return;
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = textBuffer;
+    const hasOnlyBr = !tmp.textContent.trim();
+    textBuffer = '';
+    if (hasOnlyBr) return;
+
+    const { canvas, scale } = await renderHtmlImage(tmp.innerHTML, widthPt);
+    drawCanvasAcrossPages(canvas, scale);
+  };
+
+  for (const seg of segments) {
+    if (seg.type === 'image') {
+      await flushText();
+      const imgCanvas = await renderSingleImage(seg.src, widthPt);
+      const availablePt = pageHeight - HEADER_ROOM - y;
+      if (availablePt <= 40) {
+        doc.addPage();
+        y = onNewPage();
+      }
+      drawCanvasAcrossPages(imgCanvas, 2);
+    } else {
+      textBuffer += seg.html;
+    }
+  }
+
+  await flushText();
 };
 
 const drawTopicContent = async (doc, content, x, y, widthPt, pageHeight, onNewPage) => {
@@ -186,9 +304,31 @@ const buildConsultationDoc = async (data, specificTopic = null, omitTopics = [])
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
+  const buildRecommendationText = (data) => {
+    const lines = [];
+    if (data.detox_recommended || data.detoxRecommended) {
+      lines.push('Detox Program Recommended');
+      lines.push(`Detox Doctor: Dr. ${data.detox_doctor_name || data.detoxDoctorName || 'Not assigned'}`);
+      const mornings = data.detox_morning_sessions || data.detoxMorningSessions || 0;
+      const evenings = data.detox_evening_sessions || data.detoxEveningSessions || 0;
+      lines.push(`Morning Sessions: ${mornings} | Evening Sessions: ${evenings}`);
+    }
+    if (data.followup_date || data.followupDate) {
+      lines.push(`Follow-up Date: ${data.followup_date || data.followupDate}`);
+      if (data.followup_remarks || data.followupRemarks) lines.push(`Follow-up Remarks: ${data.followup_remarks || data.followupRemarks}`);
+    }
+    if (data.admission_recommended || data.admissionRecommended) {
+      lines.push('Admission Recommended');
+      lines.push(`Admission Doctor: Dr. ${data.admissionDoctorName || 'Not assigned'}`);
+      if (data.admission_date || data.admissionDate) lines.push(`Admission Date: ${data.admission_date || data.admissionDate}`);
+    }
+    return lines.length ? lines.join('\n') : 'No recommendation recorded.';
+  };
+
   const rawTopics = [
     { title: 'Medical History', content: data.medical_history || data.medicalHistoryNotes },
     { title: 'Consultation Notes', content: data.consultation_notes || data.consultationNotes },
+    { title: 'Medical Reports', content: data.medical_reports || data.medicalReports },
     { title: 'Detox Procedure', content: data.detox_procedure || data.detoxProcedureNotes },
     { title: 'Diet Plan', content: data.diet_plan_note || data.dietPlanNotes },
     { title: 'Home Care Guidelines', content: data.home_care ? data.home_care.toString().trim() : 'None' }

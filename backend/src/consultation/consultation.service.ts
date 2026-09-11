@@ -45,6 +45,15 @@ async create(createConsultationDto: CreateConsultationDto) {
     }
   }
 
+  if (createConsultationDto.admissionDoctorId) {
+    const admissionDoctor = await this.prisma.doctor.findUnique({
+      where: { id: createConsultationDto.admissionDoctorId }
+    });
+    if (!admissionDoctor) {
+      throw new NotFoundException(`Admission doctor not found`);
+    }
+  }
+
   // Prevent duplicate
   if (createConsultationDto.appointmentId) {
     const existingConsultation = await this.prisma.consultation.findFirst({
@@ -59,6 +68,7 @@ async create(createConsultationDto: CreateConsultationDto) {
           doctor: { include: { user: true } },
           appointment: true,
           detoxDoctor: { include: { user: true } },
+          admissionDoctor: { include: { user: true } },
           receptionistFollowup: true
         }
       });
@@ -81,12 +91,21 @@ async create(createConsultationDto: CreateConsultationDto) {
         ? new Date(createConsultationDto.followupDate)
         : null,
       followupRemarks: createConsultationDto.followupRemarks,
+      medicalReports: createConsultationDto.medicalReports,
+      detoxMorningSessions: createConsultationDto.detoxMorningSessions ?? 0,
+      detoxEveningSessions: createConsultationDto.detoxEveningSessions ?? 0,
+      admissionRecommended: createConsultationDto.admissionRecommended || false,
+      admissionDate: createConsultationDto.admissionDate
+        ? new Date(createConsultationDto.admissionDate)
+        : null,
+      admissionDoctorId: createConsultationDto.admissionDoctorId || null,
     },
     include: {
       patient: true,
       doctor: { include: { user: true } },
       appointment: true,
       detoxDoctor: { include: { user: true } },
+      admissionDoctor: { include: { user: true } },
       receptionistFollowup: true
     }
   });
@@ -254,6 +273,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
             user: true
           }
         },
+        admissionDoctor: {
+          include: {
+            user: true
+          }
+        },
         receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
@@ -272,6 +296,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
         },
         appointment: true,
         detoxDoctor: {
+          include: {
+            user: true
+          }
+        },
+        admissionDoctor: {
           include: {
             user: true
           }
@@ -303,6 +332,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
             user: true
           }
         },
+        admissionDoctor: {
+          include: {
+            user: true
+          }
+        },
         receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
@@ -323,6 +357,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
         },
         appointment: true,
         detoxDoctor: {
+          include: {
+            user: true
+          }
+        },
+        admissionDoctor: {
           include: {
             user: true
           }
@@ -354,6 +393,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
             user: true
           }
         },
+        admissionDoctor: {
+          include: {
+            user: true
+          }
+        },
         receptionistFollowup: true
       },
       orderBy: { consultationDate: 'desc' }
@@ -379,6 +423,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
           }
         },
         detoxDoctor: {
+          include: {
+            user: true
+          }
+        },
+        admissionDoctor: {
           include: {
             user: true
           }
@@ -418,6 +467,15 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
       }
     }
 
+    if (updateConsultationDto.admissionDoctorId) {
+      const admissionDoctor = await this.prisma.doctor.findUnique({
+        where: { id: updateConsultationDto.admissionDoctorId }
+      });
+      if (!admissionDoctor) {
+        throw new NotFoundException(`Admission doctor with ID ${updateConsultationDto.admissionDoctorId} not found`);
+      }
+    }
+
     return this.prisma.consultation.update({
       where: { id },
       data: {
@@ -430,6 +488,12 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
         detoxDoctorId: updateConsultationDto.detoxDoctorId,
         followupDate: updateConsultationDto.followupDate ? new Date(updateConsultationDto.followupDate) : undefined,
         followupRemarks: updateConsultationDto.followupRemarks,
+        medicalReports: updateConsultationDto.medicalReports,
+        detoxMorningSessions: updateConsultationDto.detoxMorningSessions,
+        detoxEveningSessions: updateConsultationDto.detoxEveningSessions,
+        admissionRecommended: updateConsultationDto.admissionRecommended,
+        admissionDate: updateConsultationDto.admissionDate ? new Date(updateConsultationDto.admissionDate) : undefined,
+        admissionDoctorId: updateConsultationDto.admissionDoctorId,
       },
       include: {
         patient: true,
@@ -440,6 +504,11 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
         },
         appointment: true,
         detoxDoctor: {
+          include: {
+            user: true
+          }
+        },
+        admissionDoctor: {
           include: {
             user: true
           }

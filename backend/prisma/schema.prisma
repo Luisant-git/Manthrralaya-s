@@ -44,6 +44,7 @@ model Doctor {
   appointments   Appointment[]
   consultations  Consultation[]
   detoxConsultations Consultation[] @relation("DetoxDoctor")
+  admissionConsultations Consultation[] @relation("AdmissionDoctor")
   detoxSessions   DetoxSession[] 
   sharesSent      Share[]   @relation("ShareFrom")
   sharesReceived  Share[]   @relation("ShareTo")
@@ -130,6 +131,18 @@ model Consultation {
    detoxDoctorId     Int?      // Reference to the recommended detox doctor
   followupDate      DateTime?
   followupRemarks   String?
+
+  // Medical reports (rich text with embedded images)
+  medicalReports    String?
+
+  // Detox program session counts
+  detoxMorningSessions Int?   @default(0)
+  detoxEveningSessions Int?   @default(0)
+
+  // Admission recommendation fields
+  admissionRecommended Boolean @default(false)
+  admissionDate       DateTime?
+  admissionDoctorId   Int?
   
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
@@ -139,12 +152,14 @@ model Consultation {
   doctor            Doctor    @relation(fields: [doctorId], references: [id])
   appointment       Appointment? @relation(fields: [appointmentId], references: [id])
   detoxDoctor       Doctor?   @relation("DetoxDoctor", fields: [detoxDoctorId], references: [id])
+  admissionDoctor   Doctor?   @relation("AdmissionDoctor", fields: [admissionDoctorId], references: [id])
   detoxSessions     DetoxSession[] 
   receptionistFollowup ReceptionistFollowup?
 
   @@index([patientId])
   @@index([doctorId])
   @@index([detoxDoctorId])
+  @@index([admissionDoctorId])
   @@index([appointmentId])
   @@index([consultationDate])
 }

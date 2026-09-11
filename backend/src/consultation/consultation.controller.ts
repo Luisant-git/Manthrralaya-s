@@ -1,12 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, ParseIntPipe, UseGuards, UploadedFile, UploadedFiles, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { ConsultationService } from './consultation.service';
 import { CreateConsultationDto } from './dto/create-consultation.dto';
 import { UpdateConsultationDto } from './dto/update-consultation.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -16,6 +17,47 @@ import * as path from 'path';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ConsultationController {
   constructor(private readonly consultationService: ConsultationService) {}
+
+  @Post('upload-report-images')
+  @Roles('DOCTOR', 'ADMIN')
+  @ApiOperation({ summary: 'Upload multiple images for medical reports' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        images: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FilesInterceptor('images', 12, {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
+          const reportsDir = path.join(uploadsDir, 'medical-reports');
+          fs.mkdirSync(reportsDir, { recursive: true });
+          cb(null, reportsDir);
+        },
+        filename: (req, file, cb) => {
+          const ext = path.extname(file.originalname) || '.jpg';
+          const safeBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 40);
+          cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}-${safeBase}${ext}`);
+        },
+      }),
+      limits: { fileSize: 25 * 1024 * 1024 },
+    }),
+  )
+  async uploadReportImages(@UploadedFiles() files: Express.Multer.File[]) {
+    if (!files || files.length === 0) {
+      throw new BadRequestException('At least one image is required');
+    }
+    const urls = files.map(f => `/uploads/medical-reports/${f.filename}`);
+    return { urls };
+  }
 
   @Post()
   @Roles('DOCTOR', 'ADMIN')
