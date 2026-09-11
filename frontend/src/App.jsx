@@ -23,6 +23,7 @@ import FollowUpsView from './components/FollowUpsView';
 import ChangeMyPin from './components/ChangeMyPin';
 import DoctorPatientView from './components/DoctorPatientView';
 import DoctorPatientDetailView from './components/DoctorPatientDetailView';
+import AdmissionSchedulingView from './components/AdmissionSchedulingView';
 import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
@@ -797,6 +798,14 @@ export default function App() {
             currentUser={currentUserObj} 
             onLogout={handleLogout}
             onCancel={() => setActiveTab('dashboard')}
+          />
+        );
+      case 'admission-scheduling':
+        return (
+          <AdmissionSchedulingView
+            consultations={consultations}
+            activeRole={activeRole}
+            currentUserId={currentUserId}
           />
         );
       case 'user-management':

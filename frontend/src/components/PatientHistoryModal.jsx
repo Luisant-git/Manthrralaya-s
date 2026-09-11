@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, Eye, MessageSquare, Share2, Edit3, Save, Plus, ImagePlus, Loader2 } from 'lucide-react';
-import { Sun, Moon, SunMoon } from 'lucide-react';
+import { Sun, Moon, SunMoon, Utensils } from 'lucide-react';
 import { toast } from 'react-toastify';
+import FoodChartTab from './FoodChartTab';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
 import { uploadConsultationPdf, updateConsultation, createConsultation, uploadReportImages, toAbsoluteUrl } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
@@ -532,9 +533,9 @@ export default function PatientHistoryModal({
     .filter(d => String(d.patientId || d.patient_id) === patientId)
     .sort((a, b) => new Date(b.sessionDate || b.scheduled_date) - new Date(a.sessionDate || a.scheduled_date));
 
-  const totalHistoryPages = historySubTab === 'consultations'
-    ? Math.max(1, Math.ceil(patientConsultations.length / historyItemsPerPage))
-    : Math.max(1, Math.ceil(patientDetoxSessions.length / historyItemsPerPage));
+  const totalHistoryPages = historySubTab === 'detox'
+    ? Math.max(1, Math.ceil(patientDetoxSessions.length / historyItemsPerPage))
+    : Math.max(1, Math.ceil(patientConsultations.length / historyItemsPerPage));
 
   const historyStartIndex = (historyPage - 1) * historyItemsPerPage;
   const currentConsultation = patientConsultations[historyStartIndex];
@@ -911,6 +912,19 @@ export default function PatientHistoryModal({
                     Detox Sessions ({patientDetoxSessions.length})
                   </span>
                 </button>
+                <button
+                  onClick={() => { setHistorySubTab('foodchart'); setHistoryPage(1); }}
+                  className={`pb-3 px-2 text-sm font-semibold transition-colors border-b-2 ${
+                    historySubTab === 'foodchart'
+                      ? 'border-emerald-600 text-emerald-700'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Utensils className="w-4 h-4" />
+                    Food Chart
+                  </span>
+                </button>
                 </div>
                 {historySubTab === 'consultations' && canCreateConsultation && (
                   <button
@@ -936,10 +950,15 @@ export default function PatientHistoryModal({
                         <FileText className="w-5 h-5 text-emerald-600" />
                         <h3 className="text-base font-bold text-slate-800">Consultation Notes</h3>
                       </>
-                    ) : (
+                    ) : historySubTab === 'detox' ? (
                       <>
                         <Droplets className="w-5 h-5 text-emerald-600" />
                         <h3 className="text-base font-bold text-slate-800">Detox Session Details</h3>
+                      </>
+                    ) : (
+                      <>
+                        <Utensils className="w-5 h-5 text-emerald-600" />
+                        <h3 className="text-base font-bold text-slate-800">Food Chart & Diet</h3>
                       </>
                     )}
                   </div>
@@ -973,7 +992,7 @@ export default function PatientHistoryModal({
                       </button>
                     )}
                     <div className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
-                      {historySubTab === 'consultations' ? `${patientConsultations.length} total` : `${patientDetoxSessions.length} total`}
+                      {historySubTab === 'detox' ? `${patientDetoxSessions.length} total` : `${patientConsultations.length} total`}
                     </div>
                   </div>
                 </div>
@@ -1522,12 +1541,19 @@ export default function PatientHistoryModal({
                   </>
                 )}
 
+                {/* Food Chart History */}
+                {historySubTab === 'foodchart' && (
+                  <div className="mt-4">
+                    <FoodChartTab consultation={currentConsultation} patient={patient} />
+                  </div>
+                )}
+
                 {/* Pagination */}
                 {totalHistoryPages > 1 && (
                   <div className="mt-6 pt-4 border-t border-slate-100">
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="text-sm text-slate-600">
-                        {historySubTab === 'consultations' ? 'Consultation' : 'Session'} <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalHistoryPages}</span>
+                        {historySubTab === 'detox' ? 'Session' : 'Consultation'} <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalHistoryPages}</span>
                       </div>
 
                       <div className="flex items-center gap-3">

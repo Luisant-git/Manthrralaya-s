@@ -84,6 +84,7 @@ model Patient {
   receptionistFollowups ReceptionistFollowup[]
   detoxSessions  DetoxSession[]  
   shares        Share[]
+  foodCharts    FoodChart[]
 
   @@map("patients")
   @@index([phone])
@@ -156,6 +157,7 @@ model Consultation {
   admissionDoctor   Doctor?   @relation("AdmissionDoctor", fields: [admissionDoctorId], references: [id])
   detoxSessions     DetoxSession[] 
   receptionistFollowup ReceptionistFollowup?
+  foodCharts        FoodChart[]
 
   @@index([patientId])
   @@index([doctorId])
@@ -233,4 +235,24 @@ model Share {
 
   @@index([toDoctorId])
   @@index([fromDoctorId])
+}
+
+model FoodChart {
+  id              Int       @id @default(autoincrement())
+  patientId       Int
+  consultationId  Int?
+  date            String    
+  time            String
+  food            String
+  providedTime    String?
+  remarks         String?
+  isDelivered     Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  consultation    Consultation? @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([consultationId])
 }
