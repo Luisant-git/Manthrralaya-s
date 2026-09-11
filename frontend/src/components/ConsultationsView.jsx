@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download, Phone, Mail, ImagePlus, Loader2 } from 'lucide-react';
+import { Stethoscope, Activity, ClipboardList, Save, CheckCircle, Droplets, FileText, Calendar, User, Clock, MessageSquare, Sun, Moon, SunMoon, Download, Phone, Mail, ImagePlus, Eye, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAllDetoxSessions } from '../api/detoxSessionApi';
 import { generateConsultationPDF, generateDetoxPDF, generateSingleTopicPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
@@ -35,6 +35,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [homeCare, setHomeCare] = useState('');
   const [uploadingEditor, setUploadingEditor] = useState('');
   const [previewImageSrc, setPreviewImageSrc] = useState('');
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const previewZoomRef = useRef(null);
+  const [uploadedBySection, setUploadedBySection] = useState({ medicalHistory: [], consultationNotes: [], medicalReports: [], detoxProcedure: [], dietPlan: [] });
   
   const consultationEditorRef = useRef(null);
   const medicalHistoryEditorRef = useRef(null);
@@ -175,6 +178,100 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       </label>
     );
   };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const ImageCardGrid = ({ images, allowRemove, onRemove }) => {
+    if (!images || images.length === 0) return null;
+    return (
+      <div className="mt-3">
+        <div className="flex items-center gap-2 mb-2">
+          <ImagePlus className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uploaded Images ({images.length})</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {images.map((img, idx) => (
+            <div key={`${img.url}-${idx}`} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden group/upload relative">
+              {allowRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove && onRemove(img.url)}
+                  className="absolute top-2 right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover/upload:opacity-100 transition-opacity hover:bg-rose-600 z-10"
+                  title="Remove"
+                >
+                  &times;
+                </button>
+              )}
+              <div className="relative aspect-square bg-slate-100">
+                <img src={img.url} alt={img.name || 'Uploaded image'} className="w-full h-full object-contain p-1" />
+              </div>
+              <div className="px-2 pt-1.5 pb-2 flex items-center justify-between gap-1">
+                <p className="text-[11px] font-semibold text-slate-700 truncate" title={img.name}>{img.name}</p>
+                <button type="button" onClick={() => { setPreviewImageSrc(img.url); setPreviewZoom(1); }} className="shrink-0 w-6 h-6 rounded-lg bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition" title="View">
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const sectionEditorMap = {
+    medicalHistory: { ref: medicalHistoryEditorRef, setter: setMedicalHistory },
+    consultationNotes: { ref: consultationEditorRef, setter: setConsultationNotes },
+    medicalReports: { ref: medicalReportsEditorRef, setter: setMedicalReports },
+    detoxProcedure: { ref: detoxProcedureEditorRef, setter: setDetoxProcedure },
+    dietPlan: { ref: dietPlanEditorRef, setter: setDietPlanNote }
+  };
+
+  const handleRemoveGridImage = (sectionKey, url) => {
+    const entry = sectionEditorMap[sectionKey];
+    const editor = entry?.ref?.current;
+    if (!editor) return;
+    editor.querySelectorAll('img').forEach(img => {
+      if (img.src === url) {
+        const wrap = img.closest('.img-wrap');
+        (wrap || img).remove();
+      }
+    });
+    entry.setter(editor.innerHTML);
+  };
+
+  useEffect(() => {
+    const el = previewZoomRef.current;
+    if (!el || !previewImageSrc) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      setPreviewZoom(z => Math.min(5, Math.max(0.5, +(z + (e.deltaY < 0 ? 0.2 : -0.2)).toFixed(2))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [previewImageSrc]);
+
+  useEffect(() => {
+    const next = {};
+    Object.keys(sectionEditorMap).forEach(key => {
+      const el = sectionEditorMap[key].ref.current;
+      const seen = [];
+      if (el) {
+        el.querySelectorAll('img').forEach(img => {
+          if (img.src && !seen.some(x => x.url === img.src)) {
+            const rawName = decodeURIComponent((img.src.split('/').pop() || 'image').replace(/^\d+-\d+-/, ''));
+            seen.push({ url: img.src, name: rawName || 'uploaded image', size: 0 });
+          }
+        });
+      }
+      next[key] = seen;
+    });
+    setUploadedBySection(next);
+  }, [medicalReports, consultationNotes, medicalHistory, detoxProcedure, dietPlanNote]);
 
   // Diet Chart sub-form
   const [diet, setDiet] = useState({ morning: '', breakfast: '', lunch: '', evening: '', dinner: '', remarks: '' });
@@ -505,8 +602,9 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   };
 
   // Reusable Editor Component
-  const RichTextEditor = ({ editorRef, content, setContent, placeholder, extraTools }) => {
+  const RichTextEditor = ({ editorRef, content, setContent, placeholder, extraTools, grid }) => {
     const placeholderRef = useRef(null);
+    const hasImages = /<img[^>]*>/i.test(content || '');
 
     useEffect(() => {
       if (!editorRef.current || !placeholderRef.current) return;
@@ -582,8 +680,11 @@ export default function ConsultationsView({ appointments, patients, doctors, con
           {extraTools}
         </div>
         <div className="relative">
-          <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onInput={handleInput} onClick={handleEditorClick} onBlur={e => setContent(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" dangerouslySetInnerHTML={{ __html: content }} />
-          <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>{placeholder}</div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
+            <div ref={editorRef} contentEditable tabIndex={0} suppressContentEditableWarning onInput={handleInput} onClick={handleEditorClick} onBlur={e => setContent(e.currentTarget.innerHTML)} className={`editor-content ${hasImages ? 'min-h-[60px]' : 'min-h-[140px]'} text-sm leading-6 text-slate-800 focus:outline-none`} dangerouslySetInnerHTML={{ __html: content }} />
+            <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>{placeholder}</div>
+            {grid}
+          </div>
         </div>
       </div>
     );
@@ -597,7 +698,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         .editor-content ol { list-style-type: decimal; }
         .editor-content li { margin-bottom: 0.25rem; }
         .editor-content img, .history-list img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; border: 1px solid #e2e8f0; }
-        .editor-content .img-wrap { position: relative; display: inline-block; margin: 8px 4px 8px 0; vertical-align: middle; max-width: 100%; }
+        .editor-content .img-wrap { display: none; }
         .editor-content .img-wrap img { margin: 0; display: block; cursor: zoom-in; }
         .editor-content .img-remove-btn { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 9999px; background: #ef4444; color: #fff; border: 2px solid #fff; font-weight: 700; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); opacity: 0; transition: opacity .2s; }
         .editor-content .img-wrap:hover .img-remove-btn { opacity: 1; }
@@ -608,6 +709,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         .history-list ul { list-style-type: disc; }
         .history-list ol { list-style-type: decimal; }
         .history-list li { margin-bottom: 0.25rem; }
+        .history-list { font-size: 0.875rem; }
         .history-list img { cursor: zoom-in; }
       `}</style>
       
@@ -675,9 +777,10 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                             {latestHistory ? (historyAppended ? 'Latest history already added' : 'Add latest history notes') : 'No previous history available'}
                           </button>
                         </div>
-                        <RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." extraTools={uploadTool('medicalHistory', medicalHistoryEditorRef, setMedicalHistory)} />
+                        <RichTextEditor editorRef={medicalHistoryEditorRef} content={medicalHistory} setContent={setMedicalHistory} placeholder="Enter patient medical history..." extraTools={uploadTool('medicalHistory', medicalHistoryEditorRef, setMedicalHistory)} grid={<ImageCardGrid images={uploadedBySection['medicalHistory']} allowRemove onRemove={(url) => handleRemoveGridImage('medicalHistory', url)} />} />
                       </div>
-                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes  [Prescription]</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." extraTools={uploadTool('consultationNotes', consultationEditorRef, setConsultationNotes)} /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes  [Prescription]</label><RichTextEditor editorRef={consultationEditorRef} content={consultationNotes} setContent={setConsultationNotes} placeholder="Enter consultation notes here..." extraTools={uploadTool('consultationNotes', consultationEditorRef, setConsultationNotes)} grid={<ImageCardGrid images={uploadedBySection['consultationNotes']} allowRemove onRemove={(url) => handleRemoveGridImage('consultationNotes', url)} />} />
+                      </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1">Medical Reports</label>
                         <RichTextEditor
@@ -686,6 +789,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                           setContent={setMedicalReports}
                           placeholder="Enter medical reports or upload images (reports, scans, lab results)..."
                           extraTools={uploadTool('medicalReports', medicalReportsEditorRef, setMedicalReports)}
+                          grid={<ImageCardGrid images={uploadedBySection['medicalReports']} allowRemove onRemove={(url) => handleRemoveGridImage('medicalReports', url)} />}
                         />
                         <p className="text-xs text-slate-400 mt-1.5">You can upload multiple images. They will be embedded into the report and included in the PDF.</p>
                       </div>
@@ -835,7 +939,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         {isSaving ? (<><div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Saving...</>) : (<><Save className="w-4 h-4" /> Save & Finalize Consultation</>)}
                       </button>
                     </div>
-                  </>
+              </>
                 ) : (
                   <div className="p-5 space-y-4">
                     {/* Patient History Header - Styled like MyPatientRecords modal */}
@@ -1190,7 +1294,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                 </div>
                               </div>
 
-                              <div className="mt-3">
+<div className="mt-1 border-t border-slate-100 pt-2">
                                 <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
                                   <Activity className="w-3 h-3" />
                                   Detox Procedure Notes
@@ -1284,7 +1388,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       <Download className="w-5 h-5" /> Download PDF
                     </button>
                   </div>
-                  <p className="text-xs text-slate-400 mt-2">Patient: {savedActivePt.name} | Phone: {savedActivePt.phone || 'No phone'}</p>
+<p className="text-xs text-slate-400 mt-2">Patient: {savedActivePt.name} | Phone: {savedActivePt.phone || 'No phone'}</p>
                 </div>
               </div>
             ) : (
@@ -1297,21 +1401,32 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         </div>
       </div>
 
-      {/* Image Zoom Preview Modal */}
       {previewImageSrc && (
-        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => setPreviewImageSrc('')}>
-          <img src={previewImageSrc} alt="Zoomed preview" className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
+        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => { setPreviewImageSrc(''); setPreviewZoom(1); }}>
+          <div ref={previewZoomRef} className="flex items-center justify-center w-full h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewImageSrc}
+              alt="Zoomed preview"
+              className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain select-none"
+              style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.2s ease' }}
+            />
+          </div>
           <button
             type="button"
-            onClick={() => setPreviewImageSrc('')}
+            onClick={() => { setPreviewImageSrc(''); setPreviewZoom(1); }}
             className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition-colors"
             title="Close"
           >
             ✕
           </button>
-          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 text-white/60 text-xs">Click outside or press ✕ to close</span>
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-2" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setPreviewZoom(z => Math.max(0.5, +(z - 0.2).toFixed(2)))} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors" title="Zoom out">−</button>
+            <span className="text-white text-xs font-medium min-w-[48px] text-center">{Math.round(previewZoom * 100)}%</span>
+            <button type="button" onClick={() => setPreviewZoom(z => Math.min(5, +(z + 0.2).toFixed(2)))} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors" title="Zoom in">＋</button>
+            <button type="button" onClick={() => setPreviewZoom(1)} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-xs font-bold flex items-center justify-center transition-colors" title="Reset zoom to 100%">1:1</button>
+          </div>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 mb-14 text-white/50 text-xs">Scroll (mouse wheel) to zoom · Click outside or ✕ to close</span>
         </div>
       )}
-    </>
-  );
+    </>);
 }

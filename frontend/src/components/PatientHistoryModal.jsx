@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, MessageSquare, Share2, Edit3, Save, Plus, ImagePlus, Loader2 } from 'lucide-react';
+import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, Eye, MessageSquare, Share2, Edit3, Save, Plus, ImagePlus, Loader2 } from 'lucide-react';
 import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
@@ -38,7 +38,9 @@ export default function PatientHistoryModal({
   const previewZoomRef = useRef(null);
   const [isSavingNewCons, setIsSavingNewCons] = useState(false);
   const [isUploadingNewImg, setIsUploadingNewImg] = useState('');
+  const [uploadedImagesMap, setUploadedImagesMap] = useState({});
   const [consForm, setConsForm] = useState({ doctorId: '', date: '' });
+  const newConsEditorClass = (key) => `editor-content ${(uploadedImagesMap[key] || []).length ? 'min-h-[60px]' : 'min-h-[100px]'} text-sm leading-6 text-slate-800 focus:outline-none`;
   const [newConsNotes, setNewConsNotes] = useState('');
   const [newConsMedHistory, setNewConsMedHistory] = useState('');
   const [newConsReports, setNewConsReports] = useState('');
@@ -154,7 +156,7 @@ export default function PatientHistoryModal({
     let defaultDoctorId = '';
     if (fromId && doctorSelectOptions.some(d => Number(d.id) === fromId)) {
       defaultDoctorId = String(fromId);
-    } else if (matchedCurrentDoctor) {
+    } else if (matchedCurrentDoctor && effectiveRole === 'DOCTOR') {
       defaultDoctorId = String(matchedCurrentDoctor.id);
     }
     setConsForm({ doctorId: defaultDoctorId, date: new Date().toISOString().split('T')[0] });
@@ -175,6 +177,7 @@ export default function PatientHistoryModal({
     setAdmissionDate(new Date().toISOString().split('T')[0]);
     setAdmissionDoctorId('');
     setAdmissionRemarks('');
+    setUploadedImagesMap({});
     setShowAddCons(true);
   };
 
@@ -226,20 +229,27 @@ export default function PatientHistoryModal({
     e.target.value = '';
   };
 
-  const handleNewConsImageUpload = async (e, ref, setter) => {
+  const handleNewConsImageUpload = async (e, ref, setter, sectionKey) => {
     const files = Array.from(e.target.files || [])
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-    if (!files.length || !ref.current) return;
+    if (!files.length) return;
     setIsUploadingNewImg('uploading');
     try {
       const res = await uploadReportImages(files);
       const urls = (res && res.urls) || [];
       if (!urls.length) throw new Error('No image URLs returned');
-      const editor = ref.current;
-      editor.focus();
-      const imgs = urls.map(u => wrapNewImgHtml(toAbsoluteUrl(u))).join('<br/>');
-      editor.innerHTML = `${editor.innerHTML}<br/>${imgs}`;
-      setter(editor.innerHTML);
+      // Only store as card metadata — do NOT embed into editor to avoid visual gap
+      if (sectionKey) {
+        const newCards = urls.map((u, i) => ({
+          url: toAbsoluteUrl(u),
+          name: files[i]?.name || `image-${i + 1}.jpg`,
+          size: files[i]?.size || 0,
+        }));
+        setUploadedImagesMap(prev => ({
+          ...prev,
+          [sectionKey]: [...(prev[sectionKey] || []), ...newCards],
+        }));
+      }
       toast.success(`${urls.length} image${urls.length > 1 ? 's' : ''} uploaded.`);
     } catch (err) {
       console.error('Image upload error:', err);
@@ -250,7 +260,116 @@ export default function PatientHistoryModal({
     }
   };
 
-  const NewConsToolbar = ({ refEl, setter }) => (
+  // Build final HTML by appending image cards as <img> at save time
+  const appendImagesHtml = (editorHtml, sectionKey) => {
+    const imgs = (uploadedImagesMap[sectionKey] || []);
+    if (!imgs.length) return editorHtml;
+    const imgHtml = imgs.map(img => wrapNewImgHtml(img.url)).join('<br/>');
+    return `${editorHtml || ''}<br/>${imgHtml}`;
+  };
+
+  // Helper: format file size to human-readable string
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // Helper: extract image srcs from HTML string
+  const extractImgSrcsFromHtml = (html) => {
+    if (!html) return [];
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return Array.from(div.querySelectorAll('img')).map(img => img.src).filter(Boolean);
+  };
+
+  // Card grid component for uploaded/existing images
+  const ImageCardGrid = ({ images, onPreview, sectionKey, allowRemove, onRemove, noSeparator, hideSave }) => {
+    if (!images || images.length === 0) return null;
+    return (
+      <div className={noSeparator ? '' : 'mt-2 pt-2 border-t border-slate-100'}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+          {images.map((img, idx) => {
+            const name = img.name || img.url?.split('/').pop() || `image-${idx + 1}`;
+            const displayName = name.length > 22 ? name.slice(0, 19) + '...' : name;
+            const ext = name.split('.').pop()?.toUpperCase() || 'IMG';
+            return (
+              <div
+                key={idx}
+                className="group relative bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all"
+              >
+                {/* Thumbnail */}
+                <div
+                  className="relative h-28 bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer"
+                  onClick={() => onPreview && onPreview(img.url)}
+                >
+                  <img
+                    src={img.url}
+                    alt={name}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all" />
+                  <span className="absolute top-2 left-2 bg-black/50 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">{ext}</span>
+                  {allowRemove && (sectionKey || onRemove) && (
+                    <button
+                      type="button"
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (onRemove) {
+                          onRemove(img.url);
+                        } else {
+                          setUploadedImagesMap(prev => ({
+                            ...prev,
+                            [sectionKey]: (prev[sectionKey] || []).filter((_, i) => i !== idx),
+                          }));
+                        }
+                      }}
+                      className="absolute top-2 right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-rose-600"
+                      title="Remove"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+                {/* File info */}
+                <div className="px-2 pt-1.5 pb-1">
+                  <p className="text-[11px] font-semibold text-slate-700 truncate" title={name}>{displayName}</p>
+                  {img.size ? <p className="text-[10px] text-slate-400">{formatFileSize(img.size)}</p> : null}
+                </div>
+                {/* Actions */}
+                <div className="flex items-center gap-1 px-2 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => onPreview && onPreview(img.url)}
+                    className={`${hideSave ? 'w-full' : 'flex-1'} flex items-center justify-center gap-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold transition`}
+                    title="View"
+                  >
+                    <Eye className="w-3 h-3" /> View
+                  </button>
+                  {!hideSave && (
+                    <a
+                      href={img.url}
+                      download={name}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold transition"
+                      title="Download"
+                    >
+                      <Download className="w-3 h-3" /> Save
+                    </a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const NewConsToolbar = ({ refEl, setter, sectionKey }) => (
     <div className="mb-2 flex flex-wrap gap-2">
       <button type="button" onClick={() => execOnEditor(refEl, setter, 'bold')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Bold</button>
       <button type="button" onClick={() => execOnEditor(refEl, setter, 'italic')} className="rounded px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50">Italic</button>
@@ -274,7 +393,7 @@ export default function PatientHistoryModal({
       </div>
       <label className={`cursor-pointer rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1.5 ${isUploadingNewImg ? 'opacity-50 pointer-events-none' : ''}`}>
         {isUploadingNewImg ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><ImagePlus className="w-3.5 h-3.5 text-emerald-600" /> Upload Images</>}
-        <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleNewConsImageUpload(e, refEl, setter)} disabled={!!isUploadingNewImg} />
+        <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleNewConsImageUpload(e, refEl, setter, sectionKey)} disabled={!!isUploadingNewImg} />
       </label>
     </div>
   );
@@ -308,11 +427,11 @@ export default function PatientHistoryModal({
       patientId: Number(patient.id ?? patient.patientId),
       doctorId: parseInt(consForm.doctorId),
       consultationDate: consultationDateTs.toISOString(),
-      consultationNotes: notes || '',
-      medicalHistoryNotes: medHistory || '',
-      medicalReports: reports || '',
-      detoxProcedureNotes: detoxText || '',
-      dietPlanNotes: dietText || '',
+      consultationNotes: appendImagesHtml(notes, 'consNotes') || '',
+      medicalHistoryNotes: appendImagesHtml(medHistory, 'medHistory') || '',
+      medicalReports: appendImagesHtml(reports, 'medReports') || '',
+      detoxProcedureNotes: appendImagesHtml(detoxText, 'detoxProc') || '',
+      dietPlanNotes: appendImagesHtml(dietText, 'dietPlan') || '',
       homecareGuideliness: homeCare || '',
       detoxRecommended: detoxRecommended || false,
       detoxDoctorId: detoxRecommended && detoxDoctorId ? parseInt(detoxDoctorId) : null,
@@ -334,6 +453,7 @@ export default function PatientHistoryModal({
         id: created.id,
         patient_id: created.patientId,
         patientId: created.patientId,
+        patient_name: patient.name || patient.fullName || patient.patientName,
         doctor_id: created.doctorId,
         doctorId: created.doctorId,
         doctor_name: doctorName,
@@ -455,25 +575,42 @@ export default function PatientHistoryModal({
 
   const startEditing = (section, content) => {
     setEditingSection(section);
-    setEditContent(content || '');
+    // Strip embedded img/img-wrap tags, then remove leftover <br> separators
+    const textOnly = content
+      ? content
+          .replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '')
+          .replace(/<img[^>]*>/gi, '')
+          .replace(/(<br\s*\/?>\s*){2,}/gi, '') // collapse consecutive <br> from image separators
+          .replace(/^(\s*<br\s*\/?>\s*)+|(\s*<br\s*\/?>\s*)+$/gi, '') // strip leading/trailing <br>
+          .trim()
+      : '';
+    setEditContent(textOnly || '');
+    // Pre-populate edit mode images from saved HTML
+    const srcs = extractImgSrcsFromHtml(content || '');
+    setEditModeImages(srcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' })));
   };
 
   const saveEdit = async (consultation, dbField) => {
     setIsSavingEdit(true);
     try {
-      await updateConsultation(consultation.id, { [dbField]: editContent });
+      // Re-append remaining images (not removed) to the text content before saving
+      let finalContent = editContent;
+      if (editModeImages.length) {
+        const imgHtml = editModeImages.map(img => wrapNewImgHtml(img.url)).join('<br/>');
+        finalContent = `${finalContent}<br/>${imgHtml}`;
+      }
+      await updateConsultation(consultation.id, { [dbField]: finalContent });
       // Update locally
-      consultation[dbField] = editContent;
-      // Some fields have dual naming in frontend, update both for safety
-      if (dbField === 'consultationNotes') consultation.consultation_notes = editContent;
-      if (dbField === 'medicalHistoryNotes') consultation.medical_history = editContent;
-      if (dbField === 'dietPlanNotes') consultation.diet_plan_note = editContent;
-      if (dbField === 'detoxProcedureNotes') consultation.detox_procedure = editContent;
-      if (dbField === 'homecareGuideliness') consultation.home_care = editContent;
-      if (dbField === 'medicalReports') consultation.medical_reports = editContent;
-
+      consultation[dbField] = finalContent;
+      if (dbField === 'consultationNotes') consultation.consultation_notes = finalContent;
+      if (dbField === 'medicalHistoryNotes') consultation.medical_history = finalContent;
+      if (dbField === 'dietPlanNotes') consultation.diet_plan_note = finalContent;
+      if (dbField === 'detoxProcedureNotes') consultation.detox_procedure = finalContent;
+      if (dbField === 'homecareGuideliness') consultation.home_care = finalContent;
+      if (dbField === 'medicalReports') consultation.medical_reports = finalContent;
       toast.success('Notes updated successfully');
       setEditingSection(null);
+      setEditModeImages([]);
     } catch (error) {
       console.error('Error updating notes:', error);
       toast.error(error.message || 'Failed to update notes');
@@ -483,6 +620,38 @@ export default function PatientHistoryModal({
   };
 
   const editEditorRef = useRef(null);
+  const [editModeImages, setEditModeImages] = useState([]);
+
+  // Upload images in edit mode — only stored in state, appended to HTML on save
+  const handleEditModeImageUpload = async (e) => {
+    const files = Array.from(e.target.files || [])
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    if (!files.length) return;
+    setIsUploadingNewImg('uploading');
+    try {
+      const res = await uploadReportImages(files);
+      const urls = (res && res.urls) || [];
+      if (!urls.length) throw new Error('No image URLs returned');
+      // Only add to card state — NOT embedded into editor to avoid visual gap
+      const newCards = urls.map((u, i) => ({
+        url: toAbsoluteUrl(u),
+        name: files[i]?.name || `image-${i + 1}.jpg`,
+        size: files[i]?.size || 0,
+      }));
+      setEditModeImages(prev => [...prev, ...newCards]);
+      toast.success(`${urls.length} image${urls.length > 1 ? 's' : ''} uploaded.`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to upload images.');
+    } finally {
+      setIsUploadingNewImg('');
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  // Remove an image from edit mode card grid
+  const removeEditImage = (urlToRemove) => {
+    setEditModeImages(prev => prev.filter(img => img.url !== urlToRemove));
+  };
 
   const fontSizeOptions = [
     { label: '12px', value: '12px' },
@@ -581,7 +750,22 @@ export default function PatientHistoryModal({
           </svg>
         </button>
       </div>
+      {/* Upload Images button in edit mode */}
+      <label className={`cursor-pointer rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1.5 ml-1 border-l border-slate-200 pl-2 ${isUploadingNewImg ? 'opacity-50 pointer-events-none' : ''}`}>
+        {isUploadingNewImg ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><ImagePlus className="w-3.5 h-3.5 text-emerald-600" /> Upload Images</>}
+        <input type="file" accept="image/*" multiple className="hidden" onChange={handleEditModeImageUpload} disabled={!!isUploadingNewImg} />
+      </label>
     </div>
+  );
+
+  // Edit mode image card grid rendered below each edit editor
+  const EditModeImageGrid = () => (
+    <ImageCardGrid
+      images={editModeImages}
+      onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+      allowRemove
+      onRemove={removeEditImage}
+    />
   );
 
   const confirmAndSendToWhatsApp = async () => {
@@ -817,7 +1001,11 @@ export default function PatientHistoryModal({
                           </div>
                         </div>
 
-                        {(currentConsultation.consultation_notes || currentConsultation.consultationNotes) && (currentConsultation.consultation_notes || currentConsultation.consultationNotes) !== '<br>' && (
+                        {(currentConsultation.consultation_notes || currentConsultation.consultationNotes) && (currentConsultation.consultation_notes || currentConsultation.consultationNotes) !== '<br>' && (() => {
+                          const rawHtml = currentConsultation.consultation_notes || currentConsultation.consultationNotes;
+                          const imgSrcs = extractImgSrcsFromHtml(rawHtml);
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
@@ -835,7 +1023,7 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
-                                    <button onClick={() => startEditing('consultationNotes', currentConsultation.consultation_notes || currentConsultation.consultationNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <button onClick={() => startEditing('consultationNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
                                     <button onClick={() => generateConsultationPDF(currentConsultation, 'Consultation Notes')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -848,25 +1036,41 @@ export default function PatientHistoryModal({
                             {editingSection === 'consultationNotes' ? (
                               <>
                                 <RichTextToolbar />
-                                <div
-                                  ref={editEditorRef}
-                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                  dangerouslySetInnerHTML={{ __html: editContent }}
-                                />
+                                <div className="rounded-xl border border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-500 bg-white overflow-hidden">
+                                  <div
+                                    ref={editEditorRef}
+                                    className="w-full p-4 min-h-[32px] text-sm outline-none consultation-notes-content"
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                    dangerouslySetInnerHTML={{ __html: editContent }}
+                                  />
+                                  <div className="px-3 pb-3"><EditModeImageGrid /></div>
+                                </div>
                               </>
                             ) : (
-                              <div
-                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                                dangerouslySetInnerHTML={{ __html: currentConsultation.consultation_notes || currentConsultation.consultationNotes }}
-                              />
+                              <div className={`bg-slate-50 rounded-xl border border-slate-100 ${textOnlyHtml && textOnlyHtml !== '<br>' ? 'p-4' : 'p-3'}`}>
+                                {textOnlyHtml && textOnlyHtml !== '<br>' && (
+                                  <div className="consultation-notes-content mb-2" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+                                )}
+                                {imgSrcs.length > 0 && (
+                                  <ImageCardGrid
+                                    images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
+                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
+                                  />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
 
-                        {(currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) && (currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) !== '<br>' && (
+                        {(currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) && (currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) !== '<br>' && (() => {
+                          const rawHtml = currentConsultation.medical_history || currentConsultation.medicalHistoryNotes;
+                          const imgSrcs = extractImgSrcsFromHtml(rawHtml);
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
@@ -884,7 +1088,7 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
-                                    <button onClick={() => startEditing('medicalHistoryNotes', currentConsultation.medical_history || currentConsultation.medicalHistoryNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <button onClick={() => startEditing('medicalHistoryNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
                                     <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical History')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -897,25 +1101,41 @@ export default function PatientHistoryModal({
                             {editingSection === 'medicalHistoryNotes' ? (
                               <>
                                 <RichTextToolbar />
-                                <div
-                                  ref={editEditorRef}
-                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                  dangerouslySetInnerHTML={{ __html: editContent }}
-                                />
+                                <div className="rounded-xl border border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-500 bg-white overflow-hidden">
+                                  <div
+                                    ref={editEditorRef}
+                                    className="w-full p-4 min-h-[32px] text-sm outline-none consultation-notes-content"
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                    dangerouslySetInnerHTML={{ __html: editContent }}
+                                  />
+                                  <div className="px-3 pb-3"><EditModeImageGrid /></div>
+                                </div>
                               </>
                             ) : (
-                              <div
-                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                                dangerouslySetInnerHTML={{ __html: currentConsultation.medical_history || currentConsultation.medicalHistoryNotes }}
-                              />
+                              <div className={`bg-slate-50 rounded-xl border border-slate-100 ${textOnlyHtml && textOnlyHtml !== '<br>' ? 'p-4' : 'p-3'}`}>
+                                {textOnlyHtml && textOnlyHtml !== '<br>' && (
+                                  <div className="consultation-notes-content mb-2" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+                                )}
+                                {imgSrcs.length > 0 && (
+                                  <ImageCardGrid
+                                    images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
+                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
+                                  />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
 
-                        {(currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) && (currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) !== '<br>' && (
+                        {(currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) && (currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) !== '<br>' && (() => {
+                          const rawHtml = currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes;
+                          const imgSrcs = extractImgSrcsFromHtml(rawHtml);
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
@@ -933,7 +1153,7 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
-                                    <button onClick={() => startEditing('dietPlanNotes', currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <button onClick={() => startEditing('dietPlanNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
                                     <button onClick={() => generateConsultationPDF(currentConsultation, 'Diet Plan')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -946,25 +1166,41 @@ export default function PatientHistoryModal({
                             {editingSection === 'dietPlanNotes' ? (
                               <>
                                 <RichTextToolbar />
-                                <div
-                                  ref={editEditorRef}
-                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                  dangerouslySetInnerHTML={{ __html: editContent }}
-                                />
+                                <div className="rounded-xl border border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-500 bg-white overflow-hidden">
+                                  <div
+                                    ref={editEditorRef}
+                                    className="w-full p-4 min-h-[32px] text-sm outline-none consultation-notes-content"
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                    dangerouslySetInnerHTML={{ __html: editContent }}
+                                  />
+                                  <div className="px-3 pb-3"><EditModeImageGrid /></div>
+                                </div>
                               </>
                             ) : (
-                              <div
-                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                                dangerouslySetInnerHTML={{ __html: currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes }}
-                              />
+                              <div className={`bg-slate-50 rounded-xl border border-slate-100 ${textOnlyHtml && textOnlyHtml !== '<br>' ? 'p-4' : 'p-3'}`}>
+                                {textOnlyHtml && textOnlyHtml !== '<br>' && (
+                                  <div className="consultation-notes-content mb-2" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+                                )}
+                                {imgSrcs.length > 0 && (
+                                  <ImageCardGrid
+                                    images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
+                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
+                                  />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
 
-                        {(currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) && (currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) !== '<br>' && (
+                        {(currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) && (currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) !== '<br>' && (() => {
+                          const rawHtml = currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes;
+                          const imgSrcs = extractImgSrcsFromHtml(rawHtml);
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
@@ -982,7 +1218,7 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
-                                    <button onClick={() => startEditing('detoxProcedureNotes', currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <button onClick={() => startEditing('detoxProcedureNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
                                     <button onClick={() => generateConsultationPDF(currentConsultation, 'Detox Procedure')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -995,25 +1231,42 @@ export default function PatientHistoryModal({
                             {editingSection === 'detoxProcedureNotes' ? (
                               <>
                                 <RichTextToolbar />
-                                <div
-                                  ref={editEditorRef}
-                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                  dangerouslySetInnerHTML={{ __html: editContent }}
-                                />
+                                <div className="rounded-xl border border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-500 bg-white overflow-hidden">
+                                  <div
+                                    ref={editEditorRef}
+                                    className="w-full p-4 min-h-[32px] text-sm outline-none consultation-notes-content"
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                    dangerouslySetInnerHTML={{ __html: editContent }}
+                                  />
+                                  <div className="px-3 pb-3"><EditModeImageGrid /></div>
+                                </div>
                               </>
                             ) : (
-                              <div
-                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                                dangerouslySetInnerHTML={{ __html: currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes }}
-                              />
+                              <div className={`bg-slate-50 rounded-xl border border-slate-100 ${textOnlyHtml && textOnlyHtml !== '<br>' ? 'p-4' : 'p-3'}`}>
+                                {textOnlyHtml && textOnlyHtml !== '<br>' && (
+                                  <div className="consultation-notes-content mb-2" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+                                )}
+                                {imgSrcs.length > 0 && (
+                                  <ImageCardGrid
+                                    images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
+                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
+                                  />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
 
-                        {(currentConsultation.medical_reports || currentConsultation.medicalReports) && (currentConsultation.medical_reports || currentConsultation.medicalReports) !== '<br>' && (
+                        {(currentConsultation.medical_reports || currentConsultation.medicalReports) && (currentConsultation.medical_reports || currentConsultation.medicalReports) !== '<br>' && (() => {
+                          const rawHtml = currentConsultation.medical_reports || currentConsultation.medicalReports;
+                          const imgSrcs = extractImgSrcsFromHtml(rawHtml);
+                          // Strip img tags from displayed HTML — images shown in card grid below
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').replace(/<br\s*\/?>/gi, (m, offset, str) => str.slice(offset - 3, offset + m.length + 3).trim() === m.trim() ? '' : m).trim();
+                          return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
                               <div className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
@@ -1031,7 +1284,7 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
-                                    <button onClick={() => startEditing('medicalReports', currentConsultation.medical_reports || currentConsultation.medicalReports)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                                    <button onClick={() => startEditing('medicalReports', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
                                     <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical Reports')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
@@ -1044,23 +1297,35 @@ export default function PatientHistoryModal({
                             {editingSection === 'medicalReports' ? (
                               <>
                                 <RichTextToolbar />
-                                <div
-                                  ref={editEditorRef}
-                                  className="w-full bg-white p-4 rounded-xl border border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[100px] text-sm outline-none consultation-notes-content"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onBlur={(e) => setEditContent(e.target.innerHTML)}
-                                  dangerouslySetInnerHTML={{ __html: editContent }}
-                                />
+                                <div className="rounded-xl border border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-500 bg-white overflow-hidden">
+                                  <div
+                                    ref={editEditorRef}
+                                    className="w-full p-4 min-h-[32px] text-sm outline-none consultation-notes-content"
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => setEditContent(e.target.innerHTML)}
+                                    dangerouslySetInnerHTML={{ __html: editContent }}
+                                  />
+                                  <div className="px-3 pb-3"><EditModeImageGrid /></div>
+                                </div>
                               </>
                             ) : (
-                              <div
-                                className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                                dangerouslySetInnerHTML={{ __html: currentConsultation.medical_reports || currentConsultation.medicalReports }}
-                              />
+                              <div className={`bg-slate-50 rounded-xl border border-slate-100 ${textOnlyHtml && textOnlyHtml !== '<br>' ? 'p-4' : 'p-3'}`}>
+                                {textOnlyHtml && textOnlyHtml !== '<br>' && (
+                                  <div className="consultation-notes-content mb-2" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+                                )}
+                                {imgSrcs.length > 0 && (
+                                  <ImageCardGrid
+                                    images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'report-image.jpg' }))}
+                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
+                                  />
+                                )}
+                              </div>
                             )}
                           </div>
-                        )}
+                          );
+                        })()}
 
                         {(currentConsultation.home_care || currentConsultation.homecareGuideliness) && (currentConsultation.home_care || currentConsultation.homecareGuideliness) !== '<br>' && (
                           <div>
@@ -1448,30 +1713,41 @@ export default function PatientHistoryModal({
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Patient Medical History</label>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <NewConsToolbar refEl={newConsMedHistoryRef} setter={setNewConsMedHistory} />
-                      <div ref={newConsMedHistoryRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsMedHistory(e.currentTarget.innerHTML)} className="editor-content min-h-[100px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                      <NewConsToolbar refEl={newConsMedHistoryRef} setter={setNewConsMedHistory} sectionKey="medHistory" />
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <div ref={newConsMedHistoryRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsMedHistory(e.currentTarget.innerHTML)} className={newConsEditorClass('medHistory')} />
+                        <ImageCardGrid images={uploadedImagesMap['medHistory'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="medHistory" allowRemove noSeparator hideSave />
+                      </div>
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Notes [Prescription]</label>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <NewConsToolbar refEl={newConsNotesRef} setter={setNewConsNotes} />
-                      <div ref={newConsNotesRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsNotes(e.currentTarget.innerHTML)} className="editor-content min-h-[140px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                      <NewConsToolbar refEl={newConsNotesRef} setter={setNewConsNotes} sectionKey="consNotes" />
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <div ref={newConsNotesRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsNotes(e.currentTarget.innerHTML)} className={newConsEditorClass('consNotes')} />
+                        <ImageCardGrid images={uploadedImagesMap['consNotes'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="consNotes" allowRemove noSeparator hideSave />
+                      </div>
                     </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Medical Reports</label>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <NewConsToolbar refEl={newConsReportsRef} setter={setNewConsReports} />
-                      <div ref={newConsReportsRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsReports(e.currentTarget.innerHTML)} className="editor-content min-h-[100px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                      <NewConsToolbar refEl={newConsReportsRef} setter={setNewConsReports} sectionKey="medReports" />
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <div ref={newConsReportsRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsReports(e.currentTarget.innerHTML)} className={newConsEditorClass('medReports')} />
+                        <ImageCardGrid images={uploadedImagesMap['medReports'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="medReports" allowRemove noSeparator hideSave />
+                      </div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1.5">You can upload multiple images. They will be embedded into the report and included in the PDF.</p>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <NewConsToolbar refEl={detoxProcedureEditorRef} setter={setDetoxProcedureNote} />
-                      <div ref={detoxProcedureEditorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setDetoxProcedureNote(e.currentTarget.innerHTML)} className="editor-content min-h-[100px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                      <NewConsToolbar refEl={detoxProcedureEditorRef} setter={setDetoxProcedureNote} sectionKey="detoxProc" />
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <div ref={detoxProcedureEditorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setDetoxProcedureNote(e.currentTarget.innerHTML)} className={newConsEditorClass('detoxProc')} />
+                        <ImageCardGrid images={uploadedImagesMap['detoxProc'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="detoxProc" allowRemove noSeparator hideSave />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1482,8 +1758,11 @@ export default function PatientHistoryModal({
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">Diet Plan Note</label>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <NewConsToolbar refEl={dietPlanEditorRef} setter={setDietPlanNote} />
-                      <div ref={dietPlanEditorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setDietPlanNote(e.currentTarget.innerHTML)} className="editor-content min-h-[100px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200" />
+                      <NewConsToolbar refEl={dietPlanEditorRef} setter={setDietPlanNote} sectionKey="dietPlan" />
+                      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                        <div ref={dietPlanEditorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setDietPlanNote(e.currentTarget.innerHTML)} className={newConsEditorClass('dietPlan')} />
+                        <ImageCardGrid images={uploadedImagesMap['dietPlan'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="dietPlan" allowRemove noSeparator hideSave />
+                      </div>
                     </div>
                   </div>
                   <div>

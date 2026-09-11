@@ -98,6 +98,7 @@ export default function App() {
       const normalizedConsultations = consultationsData.map(cons => ({
         id: cons.id,
         patient_id: cons.patientId,
+        patient_name: cons.patient?.user?.fullName || cons.patient?.name,
         doctor_id: cons.doctorId,
         doctor_name: cons.doctor?.user?.fullName || cons.doctor?.name,
         date: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],

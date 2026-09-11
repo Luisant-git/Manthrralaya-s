@@ -89,7 +89,7 @@ const RICH_TEXT_CSS = `
 .pdf-richtext u{text-decoration:underline;}
 `;
 
-const isHtml = (content) => typeof content === 'string' && /^\s*</.test(content);
+const isHtml = (content) => typeof content === 'string' && /<[a-zA-Z][^>]*>/.test(content);
 
 const sanitizeHtmlForPdf = (html) => {
   if (!html) return html;
@@ -359,8 +359,8 @@ const buildConsultationDoc = async (data, specificTopic = null, omitTopics = [])
     doc.setFontSize(10);
     doc.setTextColor(0);
     doc.text(`Date: ${data.date}`, pageWidth - 14, 65, { align: 'right' });
-    doc.text(`Patient Name: ${data.patient_name}`, 14, 72);
-    doc.text(`Consulting Doctor: ${data.doctor_name}`, 14, 79);
+    doc.text(`Patient Name: ${data.patient_name || data.patient?.user?.fullName || data.patient?.name || '—'}`, 14, 72);
+    doc.text(`Consulting Doctor: ${data.doctor_name || data.doctor?.user?.fullName || data.doctor?.name || '—'}`, 14, 79);
   };
 
   const onNewPage = () => {
@@ -415,8 +415,8 @@ export const generateSingleTopicPDF = async (data, title, htmlContent) => {
     doc.setFontSize(10);
     doc.setTextColor(0);
     doc.text(`Date: ${data.date}`, pageWidth - 14, 65, { align: 'right' });
-    doc.text(`Patient Name: ${data.patient_name}`, 14, 72);
-    doc.text(`Consulting Doctor: ${data.doctor_name}`, 14, 79);
+    doc.text(`Patient Name: ${data.patient_name || data.patient?.user?.fullName || data.patient?.name || '—'}`, 14, 72);
+    doc.text(`Consulting Doctor: ${data.doctor_name || data.doctor?.user?.fullName || data.doctor?.name || '—'}`, 14, 79);
   };
 
   drawChrome();
@@ -470,8 +470,8 @@ export const generateDetoxPDF = async (data) => {
     doc.setFontSize(10);
     doc.setTextColor(0);
     doc.text(`Date: ${data.sessionDate}`, pageWidth - 14, 65, { align: 'right' });
-    doc.text(`Patient Name: ${data.patient_name}`, 14, 72);
-    doc.text(`Therapist: ${data.doctorName}`, 14, 79);
+    doc.text(`Patient Name: ${data.patient_name || data.patient?.user?.fullName || data.patient?.name || '—'}`, 14, 72);
+    doc.text(`Therapist: ${data.doctorName || data.doctor?.user?.fullName || data.doctor?.name || '—'}`, 14, 79);
     doc.text(`Session Number: ${data.sessionNumber}`, 14, 86);
     doc.text(`Session Type: ${data.sessionType}`, 14, 93);
   };
