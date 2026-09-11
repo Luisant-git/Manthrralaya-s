@@ -1273,6 +1273,9 @@ const allPendingFollowUps = React.useMemo(() => {
         appointments={appointments}
         doctors={doctors}
         onShare={() => { try { onRefresh && onRefresh(); } catch(e){} }}
+        onRefresh={() => { try { onRefresh && onRefresh(); } catch(e){} }}
+        currentUser={currentUser}
+        activeRole={activeRole}
         fromDoctorId={currentDoctorId}
       />
     </div>

@@ -123,6 +123,7 @@ export default function App() {
         admission_date: cons.admissionDate ? (typeof cons.admissionDate === 'string' ? cons.admissionDate.split('T')[0] : new Date(cons.admissionDate).toISOString().split('T')[0]) : null,
         admission_doctor_id: cons.admissionDoctorId,
         admission_doctor_name: cons.admissionDoctor?.user?.fullName || cons.admissionDoctor?.name || cons.admissionDoctorName,
+        admission_remarks: cons.admissionRemarks || cons.admission_remarks,
         created_at: cons.createdAt,
         updated_at: cons.updatedAt
       }));
@@ -538,7 +539,8 @@ export default function App() {
         detoxEveningSessions: newCons.detox_evening_sessions,
         admissionRecommended: newCons.admission_recommended || false,
         admissionDate: newCons.admission_date,
-        admissionDoctorId: newCons.admission_doctor_id
+        admissionDoctorId: newCons.admission_doctor_id,
+        admissionRemarks: newCons.admission_remarks
       };
 
       if (isNaN(patientId)) throw new Error("Invalid Patient ID format.");
@@ -781,6 +783,8 @@ export default function App() {
               consultations={consultations}
               detoxSessions={detoxSessions}
               doctors={doctors}
+              activeRole={activeRole}
+              currentUser={currentUser}
               onBack={() => setSelectedDoctorPatient(null)}
             />
           );

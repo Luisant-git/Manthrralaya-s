@@ -10,6 +10,11 @@ export class CreateConsultationDto {
   @IsInt()
   doctorId: number;
 
+  @ApiPropertyOptional({ example: '2026-09-11T10:30:00.000Z', description: 'Consultation date/time (defaults to now)' })
+  @IsOptional()
+  @IsDateString()
+  consultationDate?: string;
+
   @ApiPropertyOptional({ example: 5, description: 'Appointment ID' })
   @IsOptional()
   @IsInt()
@@ -89,4 +94,9 @@ export class CreateConsultationDto {
   @IsOptional()
   @IsInt()
   admissionDoctorId?: number;
+
+  @ApiPropertyOptional({ example: 'Arrange bed on arrival, notify billing desk' })
+  @IsOptional()
+  @IsString()
+  admissionRemarks?: string;
 }

@@ -193,6 +193,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
   const [admissionDoctorId, setAdmissionDoctorId] = useState('');
   const [admissionDoctorName, setAdmissionDoctorName] = useState('');
+  const [admissionRemarks, setAdmissionRemarks] = useState('');
 
   const sessionCountOptions = ['', ...Array.from({ length: 10 }, (_, i) => i + 1)];
 
@@ -390,7 +391,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         admission_recommended: admissionRecommended,
         admission_date: admissionRecommended ? admissionDate : null,
         admission_doctor_id: admissionRecommended && admissionDoctorId ? parseInt(admissionDoctorId) : null,
-        admission_doctor_name: admissionRecommended && selectedAdmissionDoctor ? selectedAdmissionDoctor.name : null
+        admission_doctor_name: admissionRecommended && selectedAdmissionDoctor ? selectedAdmissionDoctor.name : null,
+        admission_remarks: admissionRecommended ? admissionRemarks : null
       };
 
       const savedConsultation = await onAddConsultation(newCons, activeAppt.id);
@@ -777,6 +779,16 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                               <input type="date" value={admissionDate} onChange={e => setAdmissionDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
                             </div>
                           </div>
+                          <div className="space-y-2">
+                            <label className="block text-xs font-semibold text-slate-600">Remarks for Receptionist</label>
+                            <textarea
+                              value={admissionRemarks}
+                              onChange={e => setAdmissionRemarks(e.target.value)}
+                              rows={2}
+                              placeholder="e.g. Arrange bed on arrival, notify billing desk, patient needs assistance..."
+                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                            />
+                          </div>
                           <p className="text-xs text-sky-700 mt-1.5 font-medium">The patient will be scheduled for admission under the selected doctor.</p>
                         </div>
                       )}
@@ -1078,6 +1090,12 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                                       <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
                                       <span className="text-slate-600">{record.admission_date || 'Not scheduled'}</span>
                                     </div>
+                                    {(record.admission_remarks || record.admissionRemarks) && (
+                                      <div className="flex items-start gap-2">
+                                        <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
+                                        <span className="text-slate-600">{record.admission_remarks || record.admissionRemarks}</span>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                                 {!record.detox_recommended && !record.admission_recommended && !(record.followup_date || record.followupDate) && (

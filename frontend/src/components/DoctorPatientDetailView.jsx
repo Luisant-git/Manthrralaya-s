@@ -67,7 +67,9 @@ const BreakdownChips = ({ b }) => (
   </div>
 );
 
-export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, initialTo, consultations = [], detoxSessions = [], doctors = [], onGiveConsultation, onGiveReview }) {
+export default function DoctorPatientDetailView({ doctor, 
+onBack, initialFrom, initialTo, consultations = [], detoxSessions = [], doctors = [], onGiveConsultation, onGiveReview, activeRole 
+}) {
   const today = new Date().toISOString().split('T')[0];
   const [detail, setDetail] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -363,7 +365,9 @@ export default function DoctorPatientDetailView({ doctor, onBack, initialFrom, i
           doctors={doctors}
           onClose={() => setHistoryPatient(null)}
           onShare={() => loadDetail()}
+          onRefresh={() => loadDetail()}
           fromDoctorId={doctor.doctorId || doctor.id}
+          activeRole={activeRole}
         />
       )}
     </div>

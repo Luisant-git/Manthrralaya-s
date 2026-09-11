@@ -2,6 +2,12 @@ import config from "../config.js";
 
 const API_URL = `${config.API_BASE_URL}/consultations`;
 
+export const toAbsoluteUrl = (src) => {
+    if (!src) return '';
+    if (/^(https?:)?\/\//.test(src) || src.startsWith('data:')) return src;
+    return `${config.API_BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
+};
+
 const getAuthHeader = () => ({
     'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
     'Content-Type': 'application/json'

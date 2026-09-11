@@ -913,6 +913,9 @@ export default function UnifiedPatientRecords({
               doctors={availableDoctors}
               onClose={closeModal}
               onShare={() => { try { onRefresh && onRefresh(); } catch(e){} }}
+              onRefresh={() => { try { onRefresh && onRefresh(); } catch(e){} }}
+              currentUser={currentUser}
+              activeRole={activeRole}
             />
         )}
       </div>

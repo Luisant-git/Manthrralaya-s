@@ -80,6 +80,9 @@ async create(createConsultationDto: CreateConsultationDto) {
       patientId: createConsultationDto.patientId,
       doctorId: createConsultationDto.doctorId,
       appointmentId: createConsultationDto.appointmentId,
+      consultationDate: createConsultationDto.consultationDate
+        ? new Date(createConsultationDto.consultationDate)
+        : undefined,
       consultationNotes: createConsultationDto.consultationNotes,
       medicalHistoryNotes: createConsultationDto.medicalHistoryNotes,
       detoxProcedureNotes: createConsultationDto.detoxProcedureNotes,
@@ -99,6 +102,7 @@ async create(createConsultationDto: CreateConsultationDto) {
         ? new Date(createConsultationDto.admissionDate)
         : null,
       admissionDoctorId: createConsultationDto.admissionDoctorId || null,
+      admissionRemarks: createConsultationDto.admissionRemarks || null,
     },
     include: {
       patient: true,
@@ -494,6 +498,7 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
         admissionRecommended: updateConsultationDto.admissionRecommended,
         admissionDate: updateConsultationDto.admissionDate ? new Date(updateConsultationDto.admissionDate) : undefined,
         admissionDoctorId: updateConsultationDto.admissionDoctorId,
+        admissionRemarks: updateConsultationDto.admissionRemarks,
       },
       include: {
         patient: true,
