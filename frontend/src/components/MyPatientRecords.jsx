@@ -6,6 +6,7 @@ import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } f
 import { getSharesForDoctor } from '../api/shareApi';
 import { uploadConsultationPdf } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
+import { createPatient } from '../api/patientApi';
 import PatientHistoryModal from './PatientHistoryModal';
 
 export default function UnifiedPatientRecords({
@@ -38,9 +39,13 @@ export default function UnifiedPatientRecords({
 
   // New Patient Form State
   const [isAdding, setIsAdding] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [existingPatientId, setExistingPatientId] = useState(null);
+  const [locallyAddedPatientIds, setLocallyAddedPatientIds] = useState(new Set());
   const [formData, setFormData] = useState({
     name: '',
     age: '',
+    gender: '',
     location: '',
     address: '',
     phone: '',
@@ -375,7 +380,7 @@ export default function UnifiedPatientRecords({
   }
 
   const basePatients = isDoctor
-    ? allAvailablePatients.filter(p => myPatientIds.has(String(p.id)))
+    ? allAvailablePatients.filter(p => myPatientIds.has(String(p.id)) || locallyAddedPatientIds.has(String(p.id)))
     : allAvailablePatients;
 
   const filteredPatients = basePatients.filter(pt => {
@@ -502,34 +507,99 @@ export default function UnifiedPatientRecords({
     return date.toISOString().split('T')[0];
   };
 
-  const handleSubmit = (e) => {
+  const handlePhoneChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+    const cleanVal = val;
+    
+    let foundPatient = null;
+    if (cleanVal.length === 10) {
+      foundPatient = patients.find(p => (p.phone || '').replace(/\D/g, '').slice(-10) === cleanVal);
+    }
+
+    if (foundPatient && !existingPatientId) {
+      setExistingPatientId(foundPatient.id);
+      toast.info(`Found existing record for ${foundPatient.name || foundPatient.fullName}!`);
+      setFormData(prev => ({
+        ...prev,
+        phone: val,
+        whatsapp: foundPatient.whatsapp || (prev.phoneAsWhatsapp ? val : prev.whatsapp),
+        name: foundPatient.name || foundPatient.fullName || '',
+        age: foundPatient.age || '',
+        gender: foundPatient.gender || '',
+        location: foundPatient.location || '',
+        address: foundPatient.address || '',
+        medical_conditions: foundPatient.medical_conditions || ''
+      }));
+    } else if (!foundPatient && existingPatientId) {
+      setExistingPatientId(null);
+      setFormData(prev => ({
+        ...prev,
+        phone: val,
+        whatsapp: prev.phoneAsWhatsapp ? val : '',
+        name: '',
+        age: '',
+        gender: '',
+        location: '',
+        address: '',
+        medical_conditions: ''
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, phone: val, whatsapp: prev.phoneAsWhatsapp ? val : prev.whatsapp }));
+    }
+  };
+
+  const handleCheckboxChange = (e) => {
+    const checked = e.target.checked;
+    setFormData(prev => ({ ...prev, phoneAsWhatsapp: checked, whatsapp: checked ? prev.phone : '' }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newPt = {
-      id: `P-${100 + patients.length + 1}`,
-      name: formData.name,
-      age: parseInt(formData.age) || 30,
-      gender: 'Other',
-      blood_group: 'O+',
-      phone: formData.phone,
-      whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
-      location: formData.location,
-      address: formData.address || 'n/a',
-      medical_conditions: formData.medical_conditions || 'Registered via Intake form',
-      email: 'n/a',
-      registered_at: new Date().toISOString().split('T')[0]
-    };
-    if (onAddPatient) onAddPatient(newPt);
-    setIsAdding(false);
-    setFormData({
-      name: '',
-      age: '',
-      location: '',
-      address: '',
-      phone: '',
-      phoneAsWhatsapp: true,
-      whatsapp: '',
-      medical_conditions: ''
-    });
+    if (!formData.name.trim() || !formData.age || !formData.gender || !formData.phone.trim()) {
+      toast.warn('Name, Age, Gender, and Phone are required.');
+      return;
+    }
+
+    if (existingPatientId) {
+      setLocallyAddedPatientIds(prev => new Set(prev).add(String(existingPatientId)));
+      setIsAdding(false);
+      setExistingPatientId(null);
+      setFormData({
+        name: '', age: '', gender: '', location: '', address: '', phone: '', phoneAsWhatsapp: true, whatsapp: '', medical_conditions: ''
+      });
+      toast.success('Patient added to your records successfully!');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const newPatient = await createPatient({
+        name: formData.name,
+        age: parseInt(formData.age),
+        gender: formData.gender,
+        blood_group: 'O+',
+        phone: formData.phone,
+        whatsapp: formData.phoneAsWhatsapp ? formData.phone : formData.whatsapp,
+        location: formData.location,
+        address: formData.address || 'n/a',
+        medical_conditions: formData.medical_conditions || 'Registered via Intake form',
+        email: 'n/a'
+      });
+      
+      if (onAddPatient) onAddPatient(newPatient);
+      setLocallyAddedPatientIds(prev => new Set(prev).add(String(newPatient.id)));
+      
+      setIsAdding(false);
+      setFormData({
+        name: '', age: '', gender: '', location: '', address: '', phone: '', phoneAsWhatsapp: true, whatsapp: '', medical_conditions: ''
+      });
+      toast.success('Patient record created successfully!');
+    } catch (err) {
+      console.error('Error creating patient:', err);
+      toast.error(err.message || 'Failed to create patient record');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -607,8 +677,8 @@ export default function UnifiedPatientRecords({
             <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Records</h1>
             <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation history.</p>
           </div>
-          {isDoctor && (
-            <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
+            {isDoctor && (
               <div className="px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2 shadow-sm">
                 <Droplets className="w-5 h-5 text-teal-600" />
                 <div className="flex flex-col">
@@ -616,8 +686,17 @@ export default function UnifiedPatientRecords({
                   <span className="text-lg font-extrabold text-teal-700 leading-none">{activeDetoxCount} patients</span>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+            {activeRole?.toLowerCase() === 'admin' && (
+              <button
+                onClick={() => setIsAdding(!isAdding)}
+                className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-sm text-sm"
+              >
+                {isAdding ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                {isAdding ? 'Cancel' : 'New Patient Record'}
+              </button>
+            )}
+          </div>
         </div>
 
         {isAdding ? (
@@ -627,6 +706,68 @@ export default function UnifiedPatientRecords({
               <h2 className="text-lg font-bold text-slate-800">New Patient Registration</h2>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                  Phone Number <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    required
+                    maxLength="10"
+                    pattern="\d{10}"
+                    placeholder="10 digit number"
+                    value={formData.phone}
+                    onChange={handlePhoneChange}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                  />
+                  {formData.phone && (
+                    <button
+                      type="button"
+                      onClick={() => handlePhoneChange({ target: { value: '' } })}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      title="Clear phone number"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2.5 py-1">
+                <input
+                  id="phoneAsWhatsappIntake"
+                  type="checkbox"
+                  checked={formData.phoneAsWhatsapp}
+                  onChange={handleCheckboxChange}
+                  className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
+                />
+                <label htmlFor="phoneAsWhatsappIntake" className="text-xs text-slate-600 font-bold select-none cursor-pointer">
+                  Use Phone number as WhatsApp number
+                </label>
+              </div>
+
+              {!formData.phoneAsWhatsapp && (
+                <div className="animate-fadeIn">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                    WhatsApp Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required={!formData.phoneAsWhatsapp}
+                    maxLength="10"
+                    pattern="\d{10}"
+                    placeholder="10 digit number"
+                    value={formData.whatsapp}
+                    onChange={e => {
+                      const wVal = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setFormData({ ...formData, whatsapp: wVal });
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                   Patient Name <span className="text-rose-500">*</span>
@@ -641,7 +782,7 @@ export default function UnifiedPatientRecords({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                     Age <span className="text-rose-500">*</span>
@@ -654,6 +795,22 @@ export default function UnifiedPatientRecords({
                     onChange={e => setFormData({ ...formData, age: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
+                    Gender <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.gender}
+                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
@@ -682,49 +839,6 @@ export default function UnifiedPatientRecords({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
-                  Phone Number <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="+91 XXXXX XXXXX"
-                  value={formData.phone}
-                  onChange={handlePhoneChange}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2.5 py-1">
-                <input
-                  id="phoneAsWhatsappIntake"
-                  type="checkbox"
-                  checked={formData.phoneAsWhatsapp}
-                  onChange={handleCheckboxChange}
-                  className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 cursor-pointer"
-                />
-                <label htmlFor="phoneAsWhatsappIntake" className="text-xs text-slate-600 font-bold select-none cursor-pointer">
-                  Use Phone number as WhatsApp number
-                </label>
-              </div>
-
-              {!formData.phoneAsWhatsapp && (
-                <div className="animate-fadeIn">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
-                    WhatsApp Number <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    required={!formData.phoneAsWhatsapp}
-                    placeholder="WhatsApp No with country code"
-                    value={formData.whatsapp}
-                    onChange={e => setFormData({ ...formData, whatsapp: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
-                  />
-                </div>
-              )}
-
-              <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Primary Medical Conditions</label>
                 <textarea
                   rows="2"
@@ -738,9 +852,11 @@ export default function UnifiedPatientRecords({
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition-colors shadow-sm"
+                  disabled={isSubmitting}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
-                  Register Intake Record
+                  {isSubmitting ? <span className="animate-spin border-2 border-white border-t-transparent rounded-full w-4 h-4"></span> : null}
+                  {existingPatientId ? 'Add to My Records' : 'Register Intake Record'}
                 </button>
               </div>
             </form>

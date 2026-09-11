@@ -731,7 +731,7 @@ export default function App() {
       case 'consultations':
         return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} currentUser={currentUser} />;
       case 'my-patient-records':
-        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefresh={fetchAllData} />;
+        return <MyPatientRecords patients={patients} appointments={appointments} consultations={consultations} detoxSessions={detoxSessions} stayManagement={stayManagement} prescriptions={prescriptions} dietCharts={dietCharts} followups={followups} reviews={reviews} activeRole={activeRole} currentUser={currentUser} doctors={doctors} onSelectPatient={(pt) => setTimelinePatient(pt)} onRefresh={fetchAllData} onAddPatient={handleAddPatient} />;
       case 'detox':
       case 'stay':
         return <DetoxStayView
