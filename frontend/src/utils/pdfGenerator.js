@@ -339,6 +339,7 @@ const buildConsultationDoc = async (data, specificTopic = null, omitTopics = [])
 
   let topics = filteredTopics.filter(t => {
     if (!t.content) return false;
+    if (/<img\s/i.test(t.content)) return true;
     const txt = stripHtml(t.content);
     return txt && txt !== 'None' && txt.trim() !== '';
   });
