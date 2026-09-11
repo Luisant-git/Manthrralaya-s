@@ -6,7 +6,19 @@ export default function AdmissionSchedulingView({ consultations = [], activeRole
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAdmission, setSelectedAdmission] = useState(null);
 
-  const admissionList = consultations.filter(c => c.admission_recommended || c.admissionRecommended);
+  const admissionList = consultations.filter(c => {
+    if (!c.admission_recommended && !c.admissionRecommended) return false;
+    if (activeRole?.toLowerCase() === 'doctor') {
+      const uId = String(currentUserId || localStorage.getItem('user_id'));
+      const docName = (localStorage.getItem('user_display_name') || '').toLowerCase();
+      const isAssigned = String(c.admission_doctor_id || c.admissionDoctorId) === uId || 
+                         String(c.doctor_id || c.doctorId) === uId ||
+                         (c.doctor_name && docName && c.doctor_name.toLowerCase() === docName) ||
+                         (c.admission_doctor_name && docName && c.admission_doctor_name.toLowerCase() === docName);
+      return isAssigned;
+    }
+    return true;
+  });
 
   const filteredList = admissionList.filter(c => {
     if (!searchTerm.trim()) return true;
