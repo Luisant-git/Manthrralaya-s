@@ -132,7 +132,7 @@ const renderHtmlImage = async (html, widthPt) => {
     fontFamily: "'Helvetica', 'Arial', sans-serif",
     fontSize: '14px',
     lineHeight: '1.5',
-    padding: '0',
+    padding: '0 0 16px 0',
     zIndex: '-1000',
   });
   const sanitized = sanitizeHtmlForPdf(html);
@@ -264,12 +264,34 @@ const drawHtmlContent = async (doc, html, x, y, widthPt, pageHeight, onNewPage) 
     if (seg.type === 'image') {
       await flushText();
       const imgCanvas = await renderSingleImage(seg.src, widthPt);
-      const availablePt = pageHeight - HEADER_ROOM - y;
-      if (availablePt <= 40) {
+      const scale = 2; // html2canvas scale used in renderSingleImage
+      const imgWidthPx = imgCanvas.width / scale;
+      const imgHeightPx = imgCanvas.height / scale;
+      let finalWidthPt = imgWidthPx * (72 / 96);
+      let finalHeightPt = imgHeightPx * (72 / 96);
+
+      let availablePt = pageHeight - HEADER_ROOM - y;
+      
+      // If the image doesn't fit on the current page, and we're not already at the top of a new page,
+      // let's move to a new page to give it maximum space.
+      if (finalHeightPt > availablePt && availablePt < (pageHeight - HEADER_ROOM) * 0.8) {
         doc.addPage();
         y = onNewPage();
+        availablePt = pageHeight - HEADER_ROOM - y;
       }
-      drawCanvasAcrossPages(imgCanvas, 2);
+
+      // If it STILL doesn't fit, scale it down to exactly fit the page height
+      if (finalHeightPt > availablePt) {
+        const scaleFactor = availablePt / finalHeightPt;
+        finalHeightPt = availablePt;
+        finalWidthPt = finalWidthPt * scaleFactor;
+      }
+
+      // Center the image horizontally
+      const imgX = x + (widthPt - finalWidthPt) / 2;
+      
+      doc.addImage(imgCanvas, 'PNG', imgX, y, finalWidthPt, finalHeightPt);
+      y += finalHeightPt + 15; // 15pt margin after image
     } else {
       textBuffer += seg.html;
     }
