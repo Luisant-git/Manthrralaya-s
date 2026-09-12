@@ -191,7 +191,7 @@ export default function ReceptionistView({
     if (formattedDate) {
       newState.date = formattedDate;
       const isDetox = latestCons?.detox_recommended || latestCons?.detoxRecommended;
-      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (isDetox ? 'Detox' : 'Review');
+      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (isDetox ? 'Detox (FN)' : 'Review');
       
       const dDocId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
       const rDocId = latestCons?.doctor_id;
@@ -221,7 +221,7 @@ export default function ReceptionistView({
     
     // Determine appointment type based on consultation's detox recommendation
     const hasDetoxRecommendation = latestCons?.detox_recommended || latestCons?.detoxRecommended;
-    newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (hasDetoxRecommendation ? 'Detox' : 'Review');
+    newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (hasDetoxRecommendation ? 'Detox (FN)' : 'Review');
     
     // Use the doctor from the detox session if available
     if (latestDetoxSession.doctorId || latestDetoxSession.doctor_id) {
@@ -250,7 +250,7 @@ export default function ReceptionistView({
       }
       
       const isDetoxRecommended = latestCons?.detox_recommended || latestCons?.detoxRecommended;
-      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (isDetoxRecommended ? 'Detox' : 'Review');
+      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : (isDetoxRecommended ? 'Detox (FN)' : 'Review');
       
       const detoxDoctorId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
       const regularDoctorId = latestCons?.doctor_id;
@@ -269,7 +269,7 @@ export default function ReceptionistView({
     }
     // PRIORITY 3: Detox recommendation without follow-up date
     else if (latestCons?.detox_recommended || latestCons?.detoxRecommended) {
-      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : 'Detox';
+      newState.appointmentType = hasCompletedThreeDetoxSessions(patient.id) ? 'Review' : 'Detox (FN)';
       
       const detoxDoctorId = latestCons?.detox_doctor_id || latestCons?.detoxDoctorId;
       const regularDoctorId = latestCons?.doctor_id;
@@ -315,8 +315,9 @@ export default function ReceptionistView({
     }
   }
 
-  if (newState.appointmentType === 'Detox') {
+  if (newState.appointmentType === 'Detox' || newState.appointmentType === 'Detox (FN)' || newState.appointmentType === 'Detox (AN)' || newState.appointmentType === 'Detox (Full Day)') {
     newState.session = getNextDetoxSessionValue(patient.id);
+    newState.appointmentType = getNextDetoxSessionLabel(patient.id);
   }
 
   return newState;
@@ -582,7 +583,7 @@ export default function ReceptionistView({
         patientId: Number(patientObj.id),
         doctorId: formData.doctor_id ? parseInt(formData.doctor_id) : null,
         appointmentDate: formData.date,
-        appointmentType: formData.appointmentType,
+        appointmentType: formData.appointmentType?.startsWith('Detox') ? 'Detox' : formData.appointmentType,
         session: formData.session,
         notes: formData.notes,
         status: type === 'waiting' ? 'Waiting' : 'Scheduled'
@@ -641,7 +642,7 @@ export default function ReceptionistView({
         await updateAppointment(waitingAppt.id, {
           doctorId: doctorIdValue,
           appointmentDate: modalBookingData.date || waitingAppt.appointmentDate || waitingAppt.date,
-          appointmentType: modalBookingData.appointmentType || waitingAppt.appointmentType,
+          appointmentType: (modalBookingData.appointmentType || waitingAppt.appointmentType)?.startsWith('Detox') ? 'Detox' : (modalBookingData.appointmentType || waitingAppt.appointmentType),
           session: modalBookingData.session || waitingAppt.session,
           notes: modalBookingData.notes || waitingAppt.notes
         });
@@ -1161,7 +1162,7 @@ export default function ReceptionistView({
                                 if (isAvailable) {
                                   const update = { doctor_id: d.id };
                                   if (d.role === 'THERAPIST') {
-                                    update.appointmentType = getFinalAppointmentType(foundPatient?.id, 'Detox');
+                                    update.appointmentType = getFinalAppointmentType(foundPatient?.id, getNextDetoxSessionLabel(foundPatient?.id));
                                     update.session = getNextDetoxSessionValue(foundPatient?.id || formData.patient_id);
                                   }
                                   setFormData({ ...formData, ...update });
@@ -1573,7 +1574,10 @@ export default function ReceptionistView({
                               type="button"
                               onClick={() => {
                                 const update = { doctor_id: d.id };
-                                if (d.role === 'THERAPIST') update.appointmentType = getFinalAppointmentType(bookingModalPatient?.id, 'Detox');
+                                if (d.role === 'THERAPIST') {
+                                  update.appointmentType = getFinalAppointmentType(bookingModalPatient?.id, getNextDetoxSessionLabel(bookingModalPatient?.id));
+                                  update.session = getNextDetoxSessionValue(bookingModalPatient?.id);
+                                }
                                 setModalBookingData({ ...modalBookingData, ...update });
                                 setDoctorSearchTerm(`${doctorName} (${doctorSpecialty}) (${d.status})`);
                                 setShowDoctorDropdown(false);

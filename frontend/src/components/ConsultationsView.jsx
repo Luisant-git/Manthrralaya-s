@@ -5,6 +5,7 @@ import { getAllDetoxSessions } from '../api/detoxSessionApi';
 import { generateConsultationPDF, generateDetoxPDF, generateSingleTopicPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
 import { uploadConsultationPdf, uploadReportImages } from '../api/consultationApi';
 import config from '../config.js';
+import PatientHistoryModal from './PatientHistoryModal';
 
 const toAbsoluteUrl = (src) => {
   if (!src) return '';
@@ -17,6 +18,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [selectedTab, setSelectedTab] = useState('consultation');
   const [historySubTab, setHistorySubTab] = useState('consultations');
   const [historyPage, setHistoryPage] = useState(1);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [historyAppended, setHistoryAppended] = useState(false);
@@ -219,6 +221,34 @@ export default function ConsultationsView({ appointments, patients, doctors, con
             </div>
           ))}
         </div>
+      </div>
+    );
+  };
+
+  const HistoryRecordContent = ({ html, emptyText }) => {
+    if (!html || html === '<br>') return <p className="text-slate-500 italic">{emptyText}</p>;
+    
+    // Extract images
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const imgSrcs = Array.from(div.querySelectorAll('img')).map(img => img.src).filter(Boolean);
+    
+    // Strip images and img-wrap (which includes the X button) from HTML
+    const textOnlyHtml = html
+      .replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '')
+      .replace(/<img[^>]*>/gi, '')
+      .replace(/(<br\s*\/?>\s*){2,}/gi, '')
+      .replace(/^(\s*<br\s*\/?>\s*)+|(\s*<br\s*\/?>\s*)+$/gi, '')
+      .trim();
+
+    return (
+      <div>
+        {textOnlyHtml && textOnlyHtml !== '<br>' && (
+          <div className="mb-3" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+        )}
+        {imgSrcs.length > 0 && (
+          <ImageCardGrid images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))} allowRemove={false} />
+        )}
       </div>
     );
   };
@@ -762,10 +792,23 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
                 <div className="p-5 flex flex-wrap items-center gap-3 bg-white border-b border-slate-100">
                   <button type="button" onClick={() => setSelectedTab('consultation')} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedTab === 'consultation' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>Consultation</button>
-                  <button type="button" onClick={() => setSelectedTab('history')} className={`rounded-full px-4 py-2 text-sm font-semibold transition ${selectedTab === 'history' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>History</button>
+                  <button type="button" onClick={() => setShowHistoryModal(true)} className="rounded-full px-4 py-2 text-sm font-semibold transition bg-slate-100 text-slate-600 hover:bg-slate-200">History</button>
                 </div>
 
-                {selectedTab === 'consultation' ? (
+                {showHistoryModal && (
+                  <PatientHistoryModal
+                    patient={activePt}
+                    consultations={consultations}
+                    detoxSessions={detoxSessions}
+                    appointments={appointments}
+                    doctors={doctors}
+                    onClose={() => setShowHistoryModal(false)}
+                    activeRole={activeRole}
+                    currentUser={currentUser}
+                  />
+                )}
+
+                {selectedTab === 'consultation' && (
                   <>
                     {/* 1. Clinical Consultation Notes */}
                     <div className="p-5 space-y-4">
@@ -940,411 +983,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                       </button>
                     </div>
               </>
-                ) : (
-                  <div className="p-5 space-y-4">
-                    {/* Patient History Header - Styled like MyPatientRecords modal */}
-                    
-                    {/* History Sub Tabs */}
-                    <div className="flex flex-wrap gap-3 border-b border-slate-200 pb-3">
-                      <button
-                        type="button"
-                        onClick={() => { setHistorySubTab('consultations'); setHistoryPage(1); }}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
-                          historySubTab === 'consultations' 
-                            ? 'bg-emerald-600 text-white shadow-sm' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <Stethoscope className="w-4 h-4" />
-                        Consultations ({patientConsultations.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setHistorySubTab('detox'); setHistoryPage(1); }}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
-                          historySubTab === 'detox' 
-                            ? 'bg-emerald-600 text-white shadow-sm' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <Droplets className="w-4 h-4" />
-                        Detox Sessions ({patientDetoxSessions.length})
-                      </button>
-                    </div>
-
-                    {/* Consultation History - Show ALL Notes in Grid Layout */}
-{historySubTab === 'consultations' && (
-  <div className="space-y-4">
-    {pagedConsultations.length > 0 ? (
-      pagedConsultations.map(record => ( 
-        <div key={record.id} className="rounded-3xl border border-slate-200 bg-[#F8FAFC] p-5 shadow-sm">
-          {/* Patient and Provider Details Header - Styled like MyPatientRecords */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-emerald-50 p-5 rounded-2xl border border-emerald-100 mb-6">
-            <div className="space-y-1">
-              <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <User className="w-3 h-3" /> Patient Details
-              </h4>
-              <div className="text-lg font-bold text-slate-900 leading-none">{activePt.name}</div>
-              <div className="text-sm font-semibold text-emerald-700">ID: P-{activePt.id}</div>
-              <div className="text-xs text-slate-600 font-medium">Age: {activePt.age || '--'} • Gender: {activePt.gender || '--'}</div>
-              <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-1">
-                <Phone className="w-3 h-3 text-emerald-600" /> {activePt.phone || 'No phone'}
-              </div>
-            </div>
-            <div className="flex flex-col md:items-end justify-between md:border-l md:border-emerald-100 md:pl-6">
-              <div className="w-full">
-                <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2 md:justify-end">
-                  <Stethoscope className="w-3 h-3" /> Provider Details
-                </h4>
-                <div className="text-base font-bold text-slate-800 md:text-right">Dr. {record.doctor_name || 'Assigned Provider'}</div>
-                <div className="flex md:justify-end">
-                  <div className="text-sm font-bold text-slate-600 bg-white inline-block px-3 py-1 rounded-lg border border-emerald-100 mt-1">
-                    Consultation: {record.date}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-4 md:mt-0">
-               
-                <button 
-                  type="button"
-                  onClick={() => generateConsultationPDF({ ...record, patient_name: activePt.name })}
-                  className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
-                  title="Download Full PDF Report"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Row 1: Consultation Notes & Medical History - Side by Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <div className="group">
-              <div className="flex items-center justify-between mb-2 h-6">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                  <Activity className="w-3 h-3 text-emerald-600" /> Consultation Notes
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Consultation Notes', record.consultation_notes)}
-                  className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                  title="Download Consultation Notes">
-                  <Download className="w-3 h-3" /> Export PDF
-                </button>
-              </div>
-              <div 
-                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                onClick={handleHistoryImageClick}
-                dangerouslySetInnerHTML={{ 
-                  __html: record.consultation_notes || '<p class="text-slate-500 italic">No notes recorded.</p>' 
-                }} 
-              />
-            </div>
-            <div className="group">
-              <div className="flex items-center justify-between mb-2 h-6">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                  <FileText className="w-3 h-3 text-emerald-600" /> Medical History
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Medical History', record.medical_history)}
-                  className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                  title="Download Medical History">
-                  <Download className="w-3 h-3" /> Export PDF
-                </button>
-              </div>
-              <div 
-                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                onClick={handleHistoryImageClick}
-                dangerouslySetInnerHTML={{ 
-                  __html: record.medical_history || '<p class="text-slate-500 italic">No medical history recorded.</p>' 
-                }} 
-              />
-            </div>
-          </div>
-
-          {/* Medical Reports - Full Width */}
-          {(record.medical_reports || record.medicalReports) && (record.medical_reports || record.medicalReports) !== '<br>' && (
-            <div className="mb-4 group">
-              <div className="flex items-center justify-between mb-2 h-6">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                  <FileText className="w-3 h-3 text-sky-600" /> Medical Reports
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Medical Reports', record.medical_reports || record.medicalReports)}
-                  className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-sky-200 text-sky-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-sky-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                  title="Download Medical Reports">
-                  <Download className="w-3 h-3" /> Export PDF
-                </button>
-              </div>
-              <div 
-                className="rounded-2xl bg-white border border-sky-100 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-sky-200"
-                onClick={handleHistoryImageClick}
-                dangerouslySetInnerHTML={{ __html: record.medical_reports || record.medicalReports }} 
-              />
-            </div>
-          )}
-
-          {/* Row 2: Detox Procedure Note & Diet Plan Note - Side by Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-            <div className="group">
-              <div className="flex items-center justify-between mb-2 h-6">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                  <Droplets className="w-3 h-3 text-emerald-600" /> Detox Procedure Note
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Detox Procedure Note', record.detox_procedure)}
-                  className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                  title="Download Detox Procedure Notes">
-                  <Download className="w-3 h-3" /> Export PDF
-                </button>
-              </div>
-              <div 
-                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                onClick={handleHistoryImageClick}
-                dangerouslySetInnerHTML={{ 
-                  __html: record.detox_procedure || '<p class="text-slate-500 italic">No detox procedure notes recorded.</p>' 
-                }} 
-              />
-            </div>
-            <div className="group">
-              <div className="flex items-center justify-between mb-2 h-6">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                  <ClipboardList className="w-3 h-3 text-emerald-600" /> Diet Plan Note
-                </div>
-                <button 
-                  type="button" 
-                  onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Diet Plan Note', record.diet_plan_note)}
-                  className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                  title="Download Diet Plan Notes">
-                  <Download className="w-3 h-3" /> Export PDF
-                </button>
-              </div>
-              <div 
-                className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                onClick={handleHistoryImageClick}
-                dangerouslySetInnerHTML={{ 
-                  __html: record.diet_plan_note || '<p class="text-slate-500 italic">No diet plan note recorded.</p>' 
-                }} 
-              />
-            </div>
-          </div>
-
-          {/* Row 3: Home Care Guidelines & Detox Recommendation - Side by Side */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                <MessageSquare className="w-3 h-3" /> Home Care Guidelines
-              </div>
-              <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm text-slate-700 min-h-[100px]">
-                {record.home_care || <span className="text-slate-500 italic">No home care guidelines recorded.</span>}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                <Calendar className="w-3 h-3" /> Recommendation
-              </div>
-                              <div className={`rounded-2xl border p-4 text-sm min-h-[100px] space-y-3 ${record.detox_recommended ? 'bg-emerald-50 border-emerald-200' : (record.admission_recommended ? 'bg-sky-50 border-sky-200' : 'bg-amber-50/50 border-amber-100')}`}>
-                                {record.detox_recommended && (
-                                  <div className="space-y-2">
-                                    <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
-                                      <span className="text-slate-600">{record.detox_doctor_name || 'Not assigned'}</span>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Sessions:</span>
-                                      <span className="text-slate-600">
-                                        Morning: {record.detox_morning_sessions || record.detoxMorningSessions || 0} • Evening: {record.detox_evening_sessions || record.detoxEveningSessions || 0}
-                                      </span>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                      <span className="text-slate-600">{record.followup_date || 'Not scheduled'}</span>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                      <span className="text-slate-600">{record.followup_remarks || 'No remarks'}</span>
-                                    </div>
-                                  </div>
-                                )}
-                                {(record.followup_date || record.followupDate) && !record.detox_recommended && (
-                                  <div className="space-y-2">
-                                    <div className="text-amber-700 font-bold text-xs uppercase mb-1">Follow-up Review</div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                      <span className="text-slate-600">{record.followup_date || record.followupDate}</span>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                      <span className="text-slate-600">{record.followup_remarks || record.followupRemarks || 'No remarks'}</span>
-                                    </div>
-                                  </div>
-                                )}
-                                {record.admission_recommended && (
-                                  <div className="space-y-2">
-                                    <div className="text-sky-700 font-bold text-xs uppercase mb-1">Admission Recommended</div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
-                                      <span className="text-slate-600">{record.admission_doctor_name || 'Not assigned'}</span>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                      <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                      <span className="text-slate-600">{record.admission_date || 'Not scheduled'}</span>
-                                    </div>
-                                    {(record.admission_remarks || record.admissionRemarks) && (
-                                      <div className="flex items-start gap-2">
-                                        <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                        <span className="text-slate-600">{record.admission_remarks || record.admissionRemarks}</span>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                {!record.detox_recommended && !record.admission_recommended && !(record.followup_date || record.followupDate) && (
-                                  <span className="text-slate-500 italic">No recommendation recorded.</span>
-                                )}
-                              </div>
-            </div>
-          </div>
-        </div>
-      ))
-    ) : (
-      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-        <FileText className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-        No consultation history found for this patient.
-      </div>
-    )}
-    
-    {/* Pagination */}
-    {patientConsultations.length > 0 && totalConsultationPages > 1 && (
-      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="text-sm text-slate-500">
-          Record <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalConsultationPages}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-            disabled={historyPage <= 1}
-            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-              historyPage <= 1 
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            ← Previous
-          </button>
-          <button
-            onClick={() => setHistoryPage(prev => Math.min(totalConsultationPages, prev + 1))}
-            disabled={historyPage >= totalConsultationPages}
-            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-              historyPage >= totalConsultationPages 
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Next →
-          </button>
-        </div>
-      </div>
-    )}
-  </div>
-)}
-
-                    {/* Detox Sessions History */}
-                    {historySubTab === 'detox' && (
-                      <div className="space-y-4">
-                        {pagedDetoxSessions.length > 0 ? (
-                          pagedDetoxSessions.map(session => ( 
-        <div key={session.id} className="rounded-3xl border border-slate-200 bg-[#F8FAFC] p-5 shadow-sm">
-          {/* Patient and Provider Details Header - Styled like MyPatientRecords */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-emerald-50 p-5 rounded-2xl border border-emerald-100 mb-6">
-            <div className="space-y-1">
-              <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2">
-                <User className="w-3 h-3" /> Patient Details
-              </h4>
-              <div className="text-lg font-bold text-slate-900 leading-none">{activePt.name}</div>
-              <div className="text-sm font-semibold text-emerald-700">ID: P-{activePt.id}</div>
-              <div className="text-xs text-slate-600 font-medium">Age: {activePt.age || '--'} • Gender: {activePt.gender || '--'}</div>
-              <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 pt-1">
-                <Phone className="w-3 h-3 text-emerald-600" /> {activePt.phone || 'No phone'}
-              </div>
-            </div>
-            <div className="flex flex-col md:items-end justify-between md:border-l md:border-emerald-100 md:pl-6">
-              <div className="w-full">
-                <h4 className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2 flex items-center gap-2 md:justify-end">
-                  <Stethoscope className="w-3 h-3" /> Provider Details
-                </h4>
-                <div className="text-base font-bold text-slate-800 md:text-right">Dr. {session.doctor?.user?.fullName || session.doctorName || 'Assigned Provider'}</div>
-                <div className="flex md:justify-end">
-                  <div className="text-sm font-bold text-slate-600 bg-white inline-block px-3 py-1 rounded-lg border border-emerald-100 mt-1">
-                    Session Date: {new Date(session.sessionDate).toLocaleDateString('en-CA')}
-                  </div>
-                </div>
-                                  </div>
-                                  <button 
-                                    type="button"
-                                    onClick={() => generateDetoxPDF({ ...session, patient_name: activePt.name })}
-                className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105 mt-4 md:mt-0"
-                                    title="Download Full PDF Report"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-
-<div className="mt-1 border-t border-slate-100 pt-2">
-                                <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                  <Activity className="w-3 h-3" />
-                                  Detox Procedure Notes
-                                </div>
-                                <div
-                                  className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-                                  dangerouslySetInnerHTML={{ __html: session.detoxNotes || '<p class="text-slate-500">No detox notes recorded.</p>' }}
-                                />
-                              </div>
-
-                              {session.followupDate && (
-                                <div className="mt-4 pt-3 border-t border-slate-200">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="text-sm">
-                                      <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Follow-up Date</span>
-                                      <div className="text-slate-700 font-medium mt-1">{new Date(session.followupDate).toLocaleDateString('en-CA')}</div>
-                                    </div>
-                                    <div className="text-sm">
-                                      <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>
-                                      <div className="text-slate-700 mt-1">{session.followupRemarks || 'No specific follow-up instructions.'}</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="mt-4 pt-3 border-t border-slate-200">
-                                <div className="text-xs text-slate-400">Session #{session.sessionNumber} • Record ID: {session.id}</div>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-                            <Droplets className="w-10 h-10 mx-auto text-slate-300 mb-2" /> 
-                            No detox session history found for this patient.
-                            <div className="text-sm mt-1">Complete a detox session to see it here.</div>
-                          </div>
-                        )}
-                        
-                        {patientDetoxSessions.length > 0 && totalDetoxPages > 1 && (
-                          <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="text-sm text-slate-500">Record <span className="font-bold text-emerald-600">{historyPage}</span> of <span className="font-bold text-slate-800">{totalDetoxPages}</span></div>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))} disabled={historyPage <= 1} className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage <= 1 ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}>← Previous</button>
-                              <button onClick={() => setHistoryPage(prev => Math.min(totalDetoxPages, prev + 1))} disabled={historyPage >= totalDetoxPages} className={`rounded-full px-3 py-2 text-xs font-semibold transition ${historyPage >= totalDetoxPages ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'}`}>Next →</button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
                 )}
               </div>
             ) : isSaved && lastSavedConsultation && savedActivePt ? (

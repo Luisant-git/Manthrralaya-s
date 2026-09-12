@@ -540,6 +540,19 @@ export default function PatientHistoryModal({
   const [editingSection, setEditingSection] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const editEditorRef = useRef(null);
+  const [editModeImages, setEditModeImages] = useState([]);
+
+  useEffect(() => {
+    const el = previewZoomRef.current;
+    if (!el || !previewImageSrc) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      setPreviewZoom(z => Math.min(5, Math.max(0.5, +(z + (e.deltaY < 0 ? 0.2 : -0.2)).toFixed(2))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [previewImageSrc]);
   const historyItemsPerPage = 1;
 
   if (!patient) return null;
@@ -617,7 +630,7 @@ export default function PatientHistoryModal({
     // Strip embedded img/img-wrap tags, then remove leftover <br> separators
     const textOnly = content
       ? content
-          .replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '')
+          .replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '')
           .replace(/<img[^>]*>/gi, '')
           .replace(/(<br\s*\/?>\s*){2,}/gi, '') // collapse consecutive <br> from image separators
           .replace(/^(\s*<br\s*\/?>\s*)+|(\s*<br\s*\/?>\s*)+$/gi, '') // strip leading/trailing <br>
@@ -658,8 +671,6 @@ export default function PatientHistoryModal({
     }
   };
 
-  const editEditorRef = useRef(null);
-  const [editModeImages, setEditModeImages] = useState([]);
 
   // Upload images in edit mode — only stored in state, appended to HTML on save
   const handleEditModeImageUpload = async (e) => {
@@ -848,16 +859,7 @@ export default function PatientHistoryModal({
     }
   };
 
-  useEffect(() => {
-    const el = previewZoomRef.current;
-    if (!el || !previewImageSrc) return;
-    const onWheel = (e) => {
-      e.preventDefault();
-      setPreviewZoom(z => Math.min(5, Math.max(0.5, +(z + (e.deltaY < 0 ? 0.2 : -0.2)).toFixed(2))));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [previewImageSrc]);
+
 
   return (
     <>
@@ -1092,7 +1094,7 @@ export default function PatientHistoryModal({
                         {(currentConsultation.consultation_notes || currentConsultation.consultationNotes) && (currentConsultation.consultation_notes || currentConsultation.consultationNotes) !== '<br>' && (() => {
                           const rawHtml = currentConsultation.consultation_notes || currentConsultation.consultationNotes;
                           const imgSrcs = extractImgSrcsFromHtml(rawHtml);
-                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
                           return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
@@ -1157,7 +1159,7 @@ export default function PatientHistoryModal({
                         {(currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) && (currentConsultation.medical_history || currentConsultation.medicalHistoryNotes) !== '<br>' && (() => {
                           const rawHtml = currentConsultation.medical_history || currentConsultation.medicalHistoryNotes;
                           const imgSrcs = extractImgSrcsFromHtml(rawHtml);
-                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
                           return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
@@ -1222,7 +1224,7 @@ export default function PatientHistoryModal({
                         {(currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) && (currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes) !== '<br>' && (() => {
                           const rawHtml = currentConsultation.diet_plan_note || currentConsultation.dietPlanNotes;
                           const imgSrcs = extractImgSrcsFromHtml(rawHtml);
-                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
                           return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
@@ -1287,7 +1289,7 @@ export default function PatientHistoryModal({
                         {(currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) && (currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes) !== '<br>' && (() => {
                           const rawHtml = currentConsultation.detox_procedure || currentConsultation.detoxProcedureNotes;
                           const imgSrcs = extractImgSrcsFromHtml(rawHtml);
-                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').trim();
                           return (
                           <div>
                             <div className="flex items-center justify-between mb-2">
@@ -1353,7 +1355,7 @@ export default function PatientHistoryModal({
                           const rawHtml = currentConsultation.medical_reports || currentConsultation.medicalReports;
                           const imgSrcs = extractImgSrcsFromHtml(rawHtml);
                           // Strip img tags from displayed HTML — images shown in card grid below
-                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>.*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').replace(/<br\s*\/?>/gi, (m, offset, str) => str.slice(offset - 3, offset + m.length + 3).trim() === m.trim() ? '' : m).trim();
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').replace(/<br\s*\/?>/gi, (m, offset, str) => str.slice(offset - 3, offset + m.length + 3).trim() === m.trim() ? '' : m).trim();
                           return (
                           <div>
                             <div className="flex items-center justify-between mb-2">

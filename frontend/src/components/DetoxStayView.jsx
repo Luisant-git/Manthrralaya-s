@@ -4,6 +4,7 @@ import { createDetoxSession, getAllDetoxSessions } from '../api/detoxSessionApi'
 import { getAllConsultations } from '../api/consultationApi';
 import { toast } from 'react-toastify';
 import { generateDetoxPDF, generateConsultationPDF, generateSingleTopicPDF } from '../utils/pdfGenerator';
+import PatientHistoryModal from './PatientHistoryModal';
 
 export default function DetoxView({ 
   appointments = [], 
@@ -20,6 +21,7 @@ export default function DetoxView({
   const [selectedTab, setSelectedTab] = useState('detox');
   const [historySubTab, setHistorySubTab] = useState('detox');
   const [historyPage, setHistoryPage] = useState(1);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localDetoxSessions, setLocalDetoxSessions] = useState([]);
   const [localConsultations, setLocalConsultations] = useState([]);
@@ -246,6 +248,42 @@ export default function DetoxView({
             {placeholder}
           </div>
         </div>
+      </div>
+    );
+  };
+
+  const HistoryRecordContent = ({ html, emptyText }) => {
+    if (!html || html === '<br>') return <p className="text-slate-500 italic">{emptyText}</p>;
+    
+    // Extract images
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const imgSrcs = Array.from(div.querySelectorAll('img')).map(img => img.src).filter(Boolean);
+    
+    // Strip images and img-wrap (which includes the X button) from HTML
+    const textOnlyHtml = html
+      .replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '')
+      .replace(/<img[^>]*>/gi, '')
+      .replace(/(<br\s*\/?>\s*){2,}/gi, '')
+      .replace(/^(\s*<br\s*\/?>\s*)+|(\s*<br\s*\/?>\s*)+$/gi, '')
+      .trim();
+
+    return (
+      <div>
+        {textOnlyHtml && textOnlyHtml !== '<br>' && (
+          <div className="mb-3" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+        )}
+        {imgSrcs.length > 0 && (
+          <div className="mt-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {imgSrcs.map((src, idx) => (
+                <a key={idx} href={src} target="_blank" rel="noopener noreferrer" className="block bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative aspect-square bg-slate-100 hover:ring-2 hover:ring-emerald-400 transition-all cursor-zoom-in">
+                  <img src={src} alt="Uploaded image" className="w-full h-full object-contain p-1" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -732,21 +770,30 @@ export default function DetoxView({
                     <Droplets className="w-4 h-4" />
                     Detox Session
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTab('history')}
-                    className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
-                      selectedTab === 'history' 
-                        ? 'bg-emerald-600 text-white shadow-sm' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
+                  <button 
+                    type="button" 
+                    onClick={() => setShowHistoryModal(true)}
+                    className="rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 bg-slate-100 text-slate-600 hover:bg-slate-200"
                   >
                     <ClipboardList className="w-4 h-4" />
                     History
                   </button>
                 </div>
 
-                {selectedTab === 'detox' ? (
+                {showHistoryModal && (
+                  <PatientHistoryModal
+                    patient={activePt}
+                    consultations={localConsultations}
+                    detoxSessions={localDetoxSessions}
+                    appointments={appointments}
+                    doctors={doctors}
+                    onClose={() => setShowHistoryModal(false)}
+                    activeRole={activeRole}
+                    currentUser={currentUser}
+                  />
+                )}
+
+                {selectedTab === 'detox' && (
                   <>
                     {/* Show current session info */}
                     <div className="px-5 pt-4">
@@ -780,18 +827,15 @@ export default function DetoxView({
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <button
                               type="button"
-                              disabled={isMorningCompleted}
                               onClick={() => setSessionType('morning')}
                               className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                                isMorningCompleted
-                                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
-                                  : sessionType === 'morning'
-                                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                                sessionType === 'morning'
+                                  ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                  : 'border-slate-200 bg-white hover:border-emerald-300'
                               }`}
                             >
-                              <Sun className={`w-6 h-6 ${isMorningCompleted ? 'text-slate-400' : sessionType === 'morning' ? 'text-emerald-600' : 'text-amber-500'}`} />
-                              <span className={`font-semibold text-sm ${isMorningCompleted ? 'text-slate-500' : sessionType === 'morning' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              <Sun className={`w-6 h-6 ${sessionType === 'morning' ? 'text-emerald-600' : 'text-amber-500'}`} />
+                              <span className={`font-semibold text-sm ${sessionType === 'morning' ? 'text-emerald-700' : 'text-slate-700'}`}>
                                 Morning Session
                               </span>
                               <span className="text-xs text-slate-500">8:00 AM - 12:00 PM</span>
@@ -804,18 +848,15 @@ export default function DetoxView({
                             
                             <button
                               type="button"
-                              disabled={isEveningCompleted}
                               onClick={() => setSessionType('evening')}
                               className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                                isEveningCompleted
-                                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
-                                  : sessionType === 'evening'
-                                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                                sessionType === 'evening'
+                                  ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                  : 'border-slate-200 bg-white hover:border-emerald-300'
                               }`}
                             >
-                              <Moon className={`w-6 h-6 ${isEveningCompleted ? 'text-slate-400' : sessionType === 'evening' ? 'text-emerald-600' : 'text-indigo-500'}`} />
-                              <span className={`font-semibold text-sm ${isEveningCompleted ? 'text-slate-500' : sessionType === 'evening' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              <Moon className={`w-6 h-6 ${sessionType === 'evening' ? 'text-emerald-600' : 'text-indigo-500'}`} />
+                              <span className={`font-semibold text-sm ${sessionType === 'evening' ? 'text-emerald-700' : 'text-slate-700'}`}>
                                 Evening Session
                               </span>
                               <span className="text-xs text-slate-500">4:00 PM - 8:00 PM</span>
@@ -828,18 +869,15 @@ export default function DetoxView({
                             
                             <button
                               type="button"
-                              disabled={isFullDayCompleted}
                               onClick={() => setSessionType('fullDay')}
                               className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
-                                isFullDayCompleted
-                                  ? 'border-slate-200 bg-slate-50 opacity-60 cursor-not-allowed'
-                                  : sessionType === 'fullDay'
-                                    ? 'border-emerald-500 bg-emerald-50 shadow-md'
-                                    : 'border-slate-200 bg-white hover:border-emerald-300'
+                                sessionType === 'fullDay'
+                                  ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                  : 'border-slate-200 bg-white hover:border-emerald-300'
                               }`}
                             >
-                              <SunMoon className={`w-6 h-6 ${isFullDayCompleted ? 'text-slate-400' : sessionType === 'fullDay' ? 'text-emerald-600' : 'text-purple-500'}`} />
-                              <span className={`font-semibold text-sm ${isFullDayCompleted ? 'text-slate-500' : sessionType === 'fullDay' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              <SunMoon className={`w-6 h-6 ${sessionType === 'fullDay' ? 'text-emerald-600' : 'text-purple-500'}`} />
+                              <span className={`font-semibold text-sm ${sessionType === 'fullDay' ? 'text-emerald-700' : 'text-slate-700'}`}>
                                 Full Day Session
                               </span>
                               <span className="text-xs text-slate-500">8:00 AM - 8:00 PM</span>
@@ -957,405 +995,6 @@ export default function DetoxView({
                       </button>
                     </div>
                   </>
-                ) : (
-                  <div className="p-5 space-y-4 consultation-history">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-emerald-600" />
-                      Patient History - {activePt.name}
-                    </h3>
-                    
-                    {/* History Sub Tabs */}
-                    <div className="flex flex-wrap gap-3 border-b border-slate-200 pb-3">
-                      <button
-                        type="button"
-                        onClick={() => { setHistorySubTab('detox'); setHistoryPage(1); }}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
-                          historySubTab === 'detox' 
-                            ? 'bg-emerald-600 text-white shadow-sm' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <Droplets className="w-4 h-4" />
-                        Detox Sessions ({detoxHistory.length}/3)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setHistorySubTab('consultations'); setHistoryPage(1); }}
-                        className={`rounded-full px-4 py-2 text-sm font-semibold transition flex items-center gap-2 ${
-                          historySubTab === 'consultations' 
-                            ? 'bg-emerald-600 text-white shadow-sm' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        <Stethoscope className="w-4 h-4" />
-                        Medical Consultations ({consHistory.length})
-                      </button>
-                    </div>
-
-                {/* Detox Sessions History with Progress */}
-{historySubTab === 'detox' && (
-  <div className="space-y-4">
-    {pagedDetoxHistory.length > 0 ? (
-      pagedDetoxHistory.map((session) => (
-        <div key={session.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-            <div>
-              <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold flex items-center gap-2">
-                <Calendar className="w-3 h-3" />
-                {session.sessionDate ? new Date(session.sessionDate).toLocaleDateString('en-CA') : new Date().toLocaleDateString('en-CA')}
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <h4 className="text-xl font-bold text-slate-900">Detox Session {session.sessionNumber}</h4>
-                <span className="px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 text-[10px] font-semibold flex items-center gap-1">
-                  {getSessionTypeIcon(session.sessionType)}
-                  {getSessionTypeDisplay(session.sessionType)}
-                </span>
-              </div>
-              <div className="text-sm text-slate-600 mt-1">
-                Patient: {activePt.name} • ID: {activePt.id}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                Provider: {session.doctorName || 'Assigned Provider'}
-              </div>
-              <button 
-                type="button"
-                onClick={() => generateDetoxPDF({ ...session, patient_name: activePt.name })}
-                className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
-                title="Download Full PDF Report"
-              >
-                <Download className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3">
-            <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-              <Activity className="w-3 h-3" />
-              Detox Procedure Notes
-            </div>
-            <div
-              className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list"
-              dangerouslySetInnerHTML={{ 
-                __html: session.detoxNotes || '<p class="text-slate-500">No detox notes recorded.</p>' 
-              }}
-            />
-          </div>
-
-          {session.followupDate && (
-            <div className="mt-4 pt-3 border-t border-slate-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="text-sm">
-                  <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">
-                    Follow-up Date
-                  </span>
-                  <div className="text-slate-700 font-medium mt-1">
-                    {new Date(session.followupDate).toLocaleDateString('en-CA')}
-                  </div>
-                </div>
-                <div className="text-sm">
-                  <span className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold">Remarks</span>
-                  <div className="text-slate-700 mt-1">{session.followupRemarks || 'No specific follow-up instructions.'}</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-4 pt-3 border-t border-slate-200">
-            <div className="text-xs text-slate-400">
-              Session #{session.sessionNumber} • Record ID: {session.id}
-            </div>
-          </div>
-
-          
-        </div>
-      ))
-    ) : (
-      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-        <Droplets className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-        No detox session history found for this patient.
-      </div>
-    )}
-    
-    {/* Pagination */}
-    {detoxHistory.length > 0 && totalDetoxPages > 1 && (
-      <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="text-sm text-slate-500">
-          Showing {Math.min(detoxHistory.length, historyPageSize)} of {detoxHistory.length} records
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-            disabled={historyPage <= 1}
-            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-              historyPage <= 1 
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            ← Previous
-          </button>
-          <span className="text-sm font-medium text-slate-600">
-            Page {historyPage} of {totalDetoxPages}
-          </span>
-          <button
-            onClick={() => setHistoryPage(prev => Math.min(totalDetoxPages, prev + 1))}
-            disabled={historyPage >= totalDetoxPages}
-            className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-              historyPage >= totalDetoxPages 
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            Next →
-          </button>
-        </div>
-      </div>
-    )}
-
-    {/* Overall Progress Summary - at the bottom after pagination */}
-    <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-4 border border-emerald-200 mt-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-semibold text-emerald-800">Overall Detox Progress</span>
-        <span className="text-sm font-bold text-emerald-800">{detoxHistory.length}/3 Sessions</span>
-      </div>
-      <div className="w-full bg-slate-200 rounded-full h-2.5">
-        <div 
-          className="bg-emerald-600 h-2.5 rounded-full transition-all duration-500"
-          style={{ width: `${(detoxHistory.length / 3) * 100}%` }}
-        />
-      </div>
-      {detoxHistory.length === 3 && (
-        <div className="mt-2 text-xs text-emerald-700 font-semibold flex items-center gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Patient has completed all 3 detox sessions!
-        </div>
-      )}
-    </div>
-  </div>
-)}
-
-                    {/* Medical Consultations History */}
-                    {historySubTab === 'consultations' && (
-                      <div className="space-y-4">
-                        {pagedConsultationHistory.length > 0 ? (
-                          pagedConsultationHistory.map((record) => (
-                            <div key={record.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
-                                <div>
-                                  <div className="text-sm uppercase tracking-[0.2em] text-slate-500 font-semibold">{record.date}</div>
-                                  <h4 className="text-xl font-bold text-slate-900 mt-1">{activePt.name}</h4>
-                                  <div className="text-sm text-slate-600">Patient ID: P-{activePt.id}</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="rounded-full bg-white border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
-                                    Provider: {record.doctor_name || 'Assigned Provider'}
-                                  </div>
-                                  <button 
-                                    type="button"
-                                    onClick={() => generateConsultationPDF({ ...record, patient_name: activePt.name })}
-                                    className="p-2 rounded-full bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md flex items-center justify-center hover:scale-105"
-                                    title="Download Full PDF Report"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Row 1: Consultation Notes & Medical History */}
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                                <div className="group">
-                                  <div className="flex items-center justify-between mb-2 h-6">
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                                      <Activity className="w-3 h-3 text-emerald-600" /> Consultation Notes
-                                    </div>
-                                    <button 
-                                      type="button" 
-                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Consultation Notes', record.consultation_notes)}
-                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                                      title="Download Consultation Notes">
-                                      <Download className="w-3 h-3" /> Export PDF
-                                    </button>
-                                  </div>
-                                  <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                                    dangerouslySetInnerHTML={{ 
-                                      __html: record.consultation_notes || '<p class="text-slate-500 italic">No notes recorded.</p>' 
-                                    }} 
-                                  />
-                                </div>
-                                <div className="group">
-                                  <div className="flex items-center justify-between mb-2 h-6">
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                                      <FileText className="w-3 h-3 text-emerald-600" /> Medical History
-                                    </div>
-                                    <button 
-                                      type="button" 
-                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Medical History', record.medical_history)}
-                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                                      title="Download Medical History">
-                                      <Download className="w-3 h-3" /> Export PDF
-                                    </button>
-                                  </div>
-                                  <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[120px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                                    dangerouslySetInnerHTML={{ 
-                                      __html: record.medical_history || '<p class="text-slate-500 italic">No medical history recorded.</p>' 
-                                    }} 
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Row 2: Detox Procedure Note & Diet Plan Note */}
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-                                <div className="group">
-                                  <div className="flex items-center justify-between mb-2 h-6">
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                                      <Droplets className="w-3 h-3 text-emerald-600" /> Detox Procedure Note
-                                    </div>
-                                    <button 
-                                      type="button" 
-                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Detox Procedure Note', record.detox_procedure)}
-                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                                      title="Download Detox Procedure Notes">
-                                      <Download className="w-3 h-3" /> Export PDF
-                                    </button>
-                                  </div>
-                                  <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                                    dangerouslySetInnerHTML={{ 
-                                      __html: record.detox_procedure || '<p class="text-slate-500 italic">No detox procedure notes recorded.</p>' 
-                                    }} 
-                                  />
-                                </div>
-                                <div className="group">
-                                  <div className="flex items-center justify-between mb-2 h-6">
-                                    <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold flex items-center gap-2">
-                                      <ClipboardList className="w-3 h-3 text-emerald-600" /> Diet Plan Note
-                                    </div>
-                                    <button 
-                                      type="button" 
-                                      onClick={() => generateSingleTopicPDF({ ...record, patient_name: activePt.name }, 'Diet Plan Note', record.diet_plan_note)}
-                                      className="opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-300 flex items-center gap-1.5 px-3 py-1 bg-white border border-emerald-200 text-emerald-600 rounded-full text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-600 hover:text-white shadow-sm translate-y-1 group-hover:translate-y-0"
-                                      title="Download Diet Plan Notes">
-                                      <Download className="w-3 h-3" /> Export PDF
-                                    </button>
-                                  </div>
-                                  <div 
-                                    className="rounded-2xl bg-white border border-slate-200 p-4 text-sm leading-6 text-slate-800 history-list min-h-[100px] transition-all duration-300 group-hover:shadow-md group-hover:border-emerald-200" 
-                                    dangerouslySetInnerHTML={{ 
-                                      __html: record.diet_plan_note || '<p class="text-slate-500 italic">No diet plan note recorded.</p>' 
-                                    }} 
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Row 3: Home Care Guidelines & Detox Recommendation */}
-                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                    <MessageSquare className="w-3 h-3" /> Home Care Guidelines
-                                  </div>
-                                  <div className="rounded-2xl bg-white border border-slate-200 p-4 text-sm text-slate-700 min-h-[100px]">
-                                    {record.home_care || <span className="text-slate-500 italic">No home care guidelines recorded.</span>}
-                                  </div>
-                                </div>
-                                <div>
-                                  <div className="text-xs uppercase tracking-[0.18em] text-slate-500 font-semibold mb-2 flex items-center gap-2">
-                                    <Calendar className="w-3 h-3" /> Recommendation
-                                  </div>
-                                  <div className={`rounded-2xl border p-4 text-sm min-h-[100px] ${record.detox_recommended && !hasCompletedThreeDetoxSessions(activePt.id) ? 'bg-white border-slate-200' : 'bg-amber-50/50 border-amber-100'}`}>
-                                    {(() => {
-                                      const recommendation = getConsultationFollowupRecommendation(record, activePt.id);
-
-                                      if (recommendation.type === 'detox') {
-                                        return (
-                                          <div className="space-y-2">
-                                            <div className="text-emerald-700 font-bold text-xs uppercase mb-1">Detox Program</div>
-                                            <div className="flex items-start gap-2">
-                                              <span className="font-semibold text-slate-700 min-w-[100px]">Doctor:</span>
-                                              <span className="text-slate-600">{recommendation.doctorName || record.detox_doctor_name || 'Not assigned'}</span>
-                                            </div>
-                                            <div className="flex items-start gap-2">
-                                              <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                              <span className="text-slate-600">{recommendation.date || 'Not scheduled'}</span>
-                                            </div>
-                                            <div className="flex items-start gap-2">
-                                              <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                              <span className="text-slate-600">{recommendation.remarks || 'No remarks'}</span>
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-
-                                      if (recommendation.type === 'review') {
-                                        return (
-                                          <div className="space-y-2">
-                                            <div className="text-amber-700 font-bold text-xs uppercase mb-1">Follow-up Review</div>
-                                            <div className="flex items-start gap-2">
-                                              <span className="font-semibold text-slate-700 min-w-[100px]">Date:</span>
-                                              <span className="text-slate-600">{recommendation.date}</span>
-                                            </div>
-                                            <div className="flex items-start gap-2">
-                                              <span className="font-semibold text-slate-700 min-w-[100px]">Remarks:</span>
-                                              <span className="text-slate-600">{recommendation.remarks || 'No remarks'}</span>
-                                            </div>
-                                          </div>
-                                        );
-                                      }
-
-                                      return <span className="text-slate-500 italic">No recommendation recorded.</span>;
-                                    })()}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-7 text-center text-slate-500">
-                            <Stethoscope className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                            No medical consultation history found for this patient.
-                          </div>
-                        )}
-                        
-                        {consHistory.length > 0 && totalConsultationPages > 1 && (
-                          <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="text-sm text-slate-500">
-                              Showing {Math.min(consHistory.length, historyPageSize)} of {consHistory.length} records
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-                                disabled={historyPage <= 1}
-                                className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                                  historyPage <= 1 
-                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                                }`}
-                              >
-                                ← Previous
-                              </button>
-                              <span className="text-sm font-medium text-slate-600">
-                                Page {historyPage} of {totalConsultationPages}
-                              </span>
-                              <button
-                                onClick={() => setHistoryPage(prev => Math.min(totalConsultationPages, prev + 1))}
-                                disabled={historyPage >= totalConsultationPages}
-                                className={`rounded-full px-3 py-2 text-xs font-semibold transition ${
-                                  historyPage >= totalConsultationPages 
-                                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                                }`}
-                              >
-                                Next →
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
                 )}
               </div>
             ) : (

@@ -12,7 +12,9 @@ export default function AppointmentsView({
   onCancelAppointment,
   consultations = [],
   detoxSessions = [],
-  followups = []
+  followups = [],
+  activeRole,
+  currentUser
 }) {
   const [isBooking, setIsBooking] = useState(false);
   const [showFollowups, setShowFollowups] = useState(false);
@@ -38,6 +40,20 @@ export default function AppointmentsView({
     const t = setTimeout(() => setSearchTextDebounced(searchText.trim()), 300);
     return () => clearTimeout(t);
   }, [searchText]);
+
+  useEffect(() => {
+    if ((activeRole === 'doctor' || activeRole === 'therapist') && doctors?.length > 0 && !doctorFilter) {
+      const currentUserEmail = (currentUser || '').toLowerCase();
+      const currentDoctor = doctors.find(d => {
+        const dEmail = (d.user?.email || d.email || '').toLowerCase();
+        const dName = (d.user?.fullName || d.name || '').toLowerCase();
+        return dEmail === currentUserEmail || (dName && currentUserEmail.includes(dName));
+      });
+      if (currentDoctor) {
+        setDoctorFilter(currentDoctor.id.toString());
+      }
+    }
+  }, [activeRole, currentUser, doctors]);
 
   // Reset to first page whenever a filter changes
   useEffect(() => {
@@ -571,8 +587,8 @@ export default function AppointmentsView({
         <div className="space-y-4">
         {/* Filter Bar */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div className="md:col-span-4">
+          <div className="flex flex-col md:flex-row flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[220px]">
               <label className="block text-xs font-semibold text-slate-600 mb-1">Search Patient</label>
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -585,32 +601,39 @@ export default function AppointmentsView({
                 />
               </div>
             </div>
-            <div className="md:col-span-2">
+            
+            <div className="w-full md:w-40">
               <label className="block text-xs font-semibold text-slate-600 mb-1">Appointment Type</label>
               <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
                 <option value="">All Types</option>
                 {appointmentTypeOptions.map(t => (<option key={t} value={t}>{t}</option>))}
               </select>
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Doctor</label>
-              <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                <option value="">All Doctors</option>
-                {doctors.map(d => (<option key={d.id} value={d.id}>{d.user?.fullName || d.name}</option>))}
-              </select>
-            </div>
-            <div className="md:col-span-2">
+            
+            {!(activeRole === 'doctor' || activeRole === 'therapist') && (
+              <div className="w-full md:w-44">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Doctor</label>
+                <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  <option value="">All Doctors</option>
+                  {doctors.map(d => (<option key={d.id} value={d.id}>{d.user?.fullName || d.name}</option>))}
+                </select>
+              </div>
+            )}
+            
+            <div className="w-full md:w-36">
               <label className="block text-xs font-semibold text-slate-600 mb-1">From Date</label>
               <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
             </div>
-            <div className="md:col-span-1">
+            
+            <div className="w-full md:w-36">
               <label className="block text-xs font-semibold text-slate-600 mb-1">To Date</label>
               <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
             </div>
-            <div className="md:col-span-1">
+            
+            <div className="w-full md:w-auto">
               <button
                 onClick={clearFilters}
-                className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 hover:text-rose-600 transition"
+                className="w-full md:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 hover:text-rose-600 transition"
                 title="Clear all filters"
               >
                 <FilterX className="w-4 h-4" /> Clear

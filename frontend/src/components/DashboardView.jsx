@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets } from 'lucide-react';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets, Filter } from 'lucide-react';
 import PatientHistoryModal from './PatientHistoryModal';
 import { updateAppointmentStatus } from '../api/appointmentApi';
 
@@ -478,7 +478,7 @@ const allPendingFollowUps = React.useMemo(() => {
       const patientConsultations = consultations.filter(c => String(c.patient_id || c.patientId) === String(pid));
       const historyCount = patientConsultations.length;
       const historyRecords = patientConsultations.sort((a, b) => new Date(b.date) - new Date(a.date));
-      const latestNote = appt.notes || historyRecords[0]?.consultation_notes || 'No consultation notes yet.';
+      const latestNote = (appt.notes && appt.notes.trim() !== '') ? appt.notes : 'No receptionist notes added yet';
       const isCheckedIn = appt.status === 'Checked-in';
       
       // Check if this appointment already has a completed consultation
@@ -577,7 +577,35 @@ const allPendingFollowUps = React.useMemo(() => {
       patient?.phone?.includes(searchQuery) ||
       appt.appointmentType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (appt.notes || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = filterType === 'all' || appt.appointmentType === filterType;
+    let matchesFilter = filterType === 'all';
+    if (!matchesFilter) {
+      if (filterType.startsWith('Detox (')) {
+        const expectedSession = filterType.replace('Detox (', '').replace(')', '');
+        matchesFilter = appt.appointmentType === 'Detox' && appt.session === expectedSession;
+      } else {
+        matchesFilter = appt.appointmentType === filterType;
+      }
+    }
+    return matchesSearch && matchesFilter;
+  });
+
+  const filteredTodayPatientList = todayPatientList.filter((item) => {
+    const matchesSearch = !searchQuery ||
+      item.patient?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.patient?.phone?.includes(searchQuery) ||
+      item.appointmentType?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.notes || '').toLowerCase().includes(searchQuery.toLowerCase());
+    
+    let matchesFilter = filterType === 'all';
+    if (!matchesFilter) {
+      if (filterType.startsWith('Detox (')) {
+        const expectedSession = filterType.replace('Detox (', '').replace(')', '');
+        matchesFilter = item.appointmentType === 'Detox' && item.session === expectedSession;
+      } else {
+        matchesFilter = item.appointmentType === filterType;
+      }
+    }
+    
     return matchesSearch && matchesFilter;
   });
 
@@ -828,8 +856,8 @@ const allPendingFollowUps = React.useMemo(() => {
 
               {/* Search bar for Today's Patient Queue */}
               <div className="p-4 border border-slate-200 bg-slate-50 rounded-xl mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 relative max-w-md">
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="flex-1 relative w-full sm:max-w-md">
                     <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
                     <input
                       type="text"
@@ -839,18 +867,33 @@ const allPendingFollowUps = React.useMemo(() => {
                       className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                     />
                   </div>
+                  <div className="w-full sm:w-auto relative">
+                    <Filter className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <select
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer"
+                    >
+                      <option value="all">All Types</option>
+                      <option value="New consultation">New Consultation</option>
+                      <option value="Detox (FN)">Detox (FN)</option>
+                      <option value="Detox (AN)">Detox (AN)</option>
+                      <option value="Detox (Full Day)">Detox (Full Day)</option>
+                      <option value="Review">Review</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-                {todayPatientList.length === 0 ? (
+                {filteredTodayPatientList.length === 0 ? (
                   <div className="text-center py-12">
                     <CheckCircle className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
-                    <p className="text-slate-500">All appointments completed for today!</p>
+                    <p className="text-slate-500">All appointments completed for today or no matches found!</p>
                     <p className="text-sm text-slate-400 mt-1">Great job, doctor!</p>
                   </div>
                 ) : (
-                  todayPatientList.map((item) => (
+                  filteredTodayPatientList.map((item) => (
                     <div
                       key={item.id}
                       className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}

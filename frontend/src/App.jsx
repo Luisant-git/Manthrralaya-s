@@ -727,7 +727,7 @@ export default function App() {
       case 'phone-calls':
         return <PhoneCallsView phoneCalls={phoneCalls} onAddCall={handleAddCall} onBookFromCall={handleBookFromCall} />;
       case 'appointments':
-        return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment} consultations={consultations} detoxSessions={detoxSessions} followups={followups} />;
+        return <AppointmentsView appointments={appointments} patients={patients} doctors={doctors} onAddAppointment={handleAddAppointment} onCheckIn={handleCheckIn} onCancelAppointment={handleCancelAppointment} consultations={consultations} detoxSessions={detoxSessions} followups={followups} activeRole={activeRole} currentUser={currentUser} />;
       case 'consultations':
         return <ConsultationsView appointments={appointments} patients={patients} doctors={doctors} consultations={consultations} dietCharts={dietCharts} onAddConsultation={handleAddConsultation} onAddDietChart={handleAddDietChart} activeRole={activeRole} currentUser={currentUser} />;
       case 'my-patient-records':
