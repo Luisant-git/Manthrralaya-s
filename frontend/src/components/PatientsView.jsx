@@ -432,8 +432,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     const loadShares = async () => {
       if (!currentDocId) return;
       try {
-        const today = new Date().toISOString().split('T')[0];
-        const res = await getSharesForDoctor(currentDocId, today, today);
+        const res = await getSharesForDoctor(currentDocId);
         if (mounted) setSharesForMe(Array.isArray(res) ? res : (res.data || []));
       } catch (err) {
         console.debug('Failed to load shares for doctor', err);
@@ -441,7 +440,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     };
     loadShares();
     return () => { mounted = false; };
-  }, [currentDocId]);
+  }, [currentDocId, appointments, consultations]);
 
   const myPatientIds = isDoctor ? new Set([
     ...appointments

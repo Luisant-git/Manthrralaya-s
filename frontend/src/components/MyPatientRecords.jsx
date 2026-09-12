@@ -3,7 +3,7 @@ import { Search, Stethoscope, Calendar, Activity, Bed, RefreshCw, ClipboardList,
 import { Sun, Moon, SunMoon } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
-import { getSharesForDoctor } from '../api/shareApi';
+import { getSharesForDoctor, getSharesFromDoctor, deleteShare } from '../api/shareApi';
 import { uploadConsultationPdf } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
 import { createPatient } from '../api/patientApi';
@@ -95,21 +95,25 @@ export default function UnifiedPatientRecords({
 
   // Load shares directed to this doctor so shared patients show up in the doctor's view
   const [sharesForMe, setSharesForMe] = React.useState([]);
+  const [sharesFromMe, setSharesFromMe] = React.useState([]);
+
   React.useEffect(() => {
     let mounted = true;
     const loadShares = async () => {
       if (!currentDocId) return;
       try {
-        const today = new Date().toISOString().split('T')[0];
-        const res = await getSharesForDoctor(currentDocId, today, today);
-        if (mounted) setSharesForMe(Array.isArray(res) ? res : (res.data || []));
+        const resForMe = await getSharesForDoctor(currentDocId);
+        if (mounted) setSharesForMe(Array.isArray(resForMe) ? resForMe : (resForMe.data || []));
+
+        const resFromMe = await getSharesFromDoctor(currentDocId);
+        if (mounted) setSharesFromMe(Array.isArray(resFromMe) ? resFromMe : (resFromMe.data || []));
       } catch (err) {
         console.debug('Failed to load shares for doctor', err);
       }
     };
     loadShares();
     return () => { mounted = false; };
-  }, [currentDocId]);
+  }, [currentDocId, appointments, consultations]);
 
   // Create a robust list of doctors for name lookups
   let availableDoctors = [...doctors];
@@ -453,7 +457,6 @@ export default function UnifiedPatientRecords({
       if (!activeAppt) {
         // No active appointment today — create a Share record so the receiving doctor sees it
         try {
-          const { createShare } = await import('../api/shareApi');
           const resolvedPatientId = Number(patientToShare.id ?? patientToShare.patientId ?? patientToShare.patient_id ?? patientToShare.patient?.id ?? patientToShare.patient?.patientId);
           if (isNaN(resolvedPatientId)) {
             toast.error('Unable to resolve patient id for sharing');
@@ -462,15 +465,21 @@ export default function UnifiedPatientRecords({
           }
           const payload = { patientId: resolvedPatientId, toDoctorId: parseInt(selectedShareDoctor), notes: 'Shared patient record' };
           console.debug('Creating share with payload', payload);
-          await createShare(payload);
+          
+          const { createShare } = await import('../api/shareApi');
+          const newShare = await createShare(payload);
           toast.success('Patient record shared successfully!');
+          
+          setSharesFromMe(prev => [newShare, ...prev]);
+
           try { onRefresh && onRefresh(); } catch (e) {}
         } catch (err) {
           console.error('Share API error:', err);
           toast.error('Failed to share patient record');
         }
-        closeShareModal();
         setIsSharing(false);
+        // keep modal open to allow seeing the newly shared doctor
+        setSelectedShareDoctor('');
         return;
       }
 
@@ -484,19 +493,25 @@ export default function UnifiedPatientRecords({
       // Update local state to immediately remove patient from current doctor's queue
       activeAppt.doctorId = parseInt(selectedShareDoctor);
       activeAppt.doctor_id = parseInt(selectedShareDoctor);
-      if (activeAppt.doctor) activeAppt.doctor.id = parseInt(selectedShareDoctor);
-      activeAppt.status = "Arrived";
-      activeAppt.notes = (activeAppt.notes ? activeAppt.notes + " | " : "") + "Shared to another doctor.";
-
-      toast.success('Patient record shared successfully!');
-      // trigger parent refresh to update appointment lists globally
+      toast.success('Patient appointment transferred to another doctor');
       try { onRefresh && onRefresh(); } catch (e) {}
       closeShareModal();
-    } catch (error) {
-      console.error('Error sharing record:', error);
-      toast.error(error.message || 'Failed to share patient record');
-    } finally {
-      setIsSharing(false);
+    } catch (err) {
+      console.error('Transfer Appointment error:', err);
+      toast.error('Failed to transfer patient appointment');
+    }
+    setIsSharing(false);
+  };
+
+  const handleRevokeShare = async (shareId) => {
+    try {
+      const { deleteShare } = await import('../api/shareApi');
+      await deleteShare(shareId);
+      toast.success('Share access revoked successfully');
+      setSharesFromMe(prev => prev.filter(s => s.id !== shareId));
+    } catch (err) {
+      toast.error('Failed to revoke share access');
+      console.error(err);
     }
   };
 
@@ -1052,25 +1067,54 @@ export default function UnifiedPatientRecords({
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                 <p className="text-slate-700 text-sm">Select a doctor to share <strong>{patientToShare.name}</strong>'s history with.</p>
-                <select
-                  value={selectedShareDoctor}
-                  onChange={(e) => setSelectedShareDoctor(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  <option value="">Select Doctor</option>
-                  {availableDoctors.map(d => (
-                    <option key={d.id} value={d.id}>{d.name || d.user?.fullName}</option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedShareDoctor}
+                    onChange={(e) => setSelectedShareDoctor(e.target.value)}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Select Doctor</option>
+                    {availableDoctors.map(d => (
+                      <option key={d.id} value={d.id}>{d.name || d.user?.fullName}</option>
+                    ))}
+                  </select>
+                  <button onClick={handleShareToDoctor} disabled={isSharing || !selectedShareDoctor} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 rounded-xl text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSharing ? 'Sharing...' : 'Share'}
+                  </button>
+                </div>
+                
+                {(() => {
+                  const activeSharesForSelectedPatient = sharesFromMe.filter(s => String(s.patientId) === String(patientToShare.id || patientToShare.patientId));
+                  if (activeSharesForSelectedPatient.length > 0) {
+                    return (
+                      <div className="pt-4 border-t border-slate-100 mt-4">
+                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Currently Shared With</h4>
+                        <div className="space-y-2">
+                          {activeSharesForSelectedPatient.map(share => (
+                            <div key={share.id} className="flex items-center justify-between bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200">
+                              <span className="text-sm font-semibold text-slate-700">
+                                {share.toDoctor?.user?.fullName || share.toDoctor?.name || `Doctor ${share.toDoctorId}`}
+                              </span>
+                              <button 
+                                onClick={() => handleRevokeShare(share.id)}
+                                className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded transition"
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
                 <button onClick={closeShareModal} className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm">
-                  Cancel
-                </button>
-                <button onClick={handleShareToDoctor} disabled={isSharing || !selectedShareDoctor} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
-                  {isSharing ? 'Sharing...' : 'Share'}
+                  Close
                 </button>
               </div>
             </div>

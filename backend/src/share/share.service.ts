@@ -54,19 +54,40 @@ export class ShareService {
 
   async findByDoctor(doctorId: number, fromDate?: Date, toDate?: Date) {
     const where: any = { toDoctorId: doctorId };
-    if (fromDate && toDate) {
-      // Treat the "to" date as inclusive end-of-day so shares created during
-      // the day are not missed (e.g. today-to-today range).
-      const startOfDay = new Date(fromDate);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(toDate);
-      endOfDay.setHours(23, 59, 59, 999);
-      where.createdAt = { gte: startOfDay, lte: endOfDay };
-    }
+    // Removed fromDate and toDate filtering because shares grant permanent access until revoked.
     return this.prisma.share.findMany({
       where,
       include: { patient: true, fromDoctor: { include: { user: true } }, toDoctor: { include: { user: true } } },
       orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async findByFromDoctor(doctorId: number) {
+    return this.prisma.share.findMany({
+      where: { fromDoctorId: doctorId },
+      include: { patient: true, toDoctor: { include: { user: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async findByPatient(patientId: number) {
+    return this.prisma.share.findMany({
+      where: { patientId: patientId },
+      include: { 
+        patient: true, 
+        fromDoctor: { include: { user: true } }, 
+        toDoctor: { include: { user: true } } 
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
+
+  async delete(id: number) {
+    const share = await this.prisma.share.findUnique({ where: { id } });
+    if (!share) throw new NotFoundException('Share not found');
+    
+    return this.prisma.share.delete({
+      where: { id }
     });
   }
 }

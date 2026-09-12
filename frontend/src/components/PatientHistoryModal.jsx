@@ -33,6 +33,7 @@ export default function PatientHistoryModal({
   const [isSharing, setIsSharing] = useState(false);
   const [shareQuery, setShareQuery] = useState('');
   const [isShareFocused, setIsShareFocused] = useState(false);
+  const [sharesFromMe, setSharesFromMe] = useState([]);
   const [showAddCons, setShowAddCons] = useState(false);
   const [previewImageSrc, setPreviewImageSrc] = useState('');
   const [previewZoom, setPreviewZoom] = useState(1);
@@ -139,14 +140,51 @@ export default function PatientHistoryModal({
       toast.success('Patient record shared successfully!');
       // notify parent views to refresh data (e.g., doctor's dashboard)
       try { onShare && onShare(); } catch (e) { /* ignore */ }
-      setShowShareModal(false);
+      
+      // Keep modal open to show updated share list, reset search
       setSelectedShareDoctor('');
       setShareQuery('');
+      
+      // refresh share list
+      fetchActiveShares();
     } catch (error) {
       console.error('Error sharing record:', error);
       toast.error(error.message || 'Failed to share patient record');
     } finally {
       setIsSharing(false);
+    }
+  };
+
+  const fetchActiveShares = async () => {
+    const patientId = String(patient.id || patient.patientId);
+    if (patientId) {
+      try {
+        const { getSharesByPatient } = await import('../api/shareApi');
+        const res = await getSharesByPatient(patientId);
+        setSharesFromMe(Array.isArray(res) ? res : (res.data || []));
+      } catch (err) {
+        console.debug('Failed to load active shares for patient', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveShares();
+  }, [fromDoctorId, currentUser, doctors]);
+
+  const handleOpenShareModal = async () => {
+    setShowShareModal(true);
+  };
+
+  const handleRevokeShare = async (shareId) => {
+    try {
+      const { deleteShare } = await import('../api/shareApi');
+      await deleteShare(shareId);
+      toast.success('Share access revoked successfully');
+      setSharesFromMe(prev => prev.filter(s => s.id !== shareId));
+    } catch (err) {
+      toast.error('Failed to revoke share access');
+      console.error(err);
     }
   };
   const effectiveRole = (activeRole || currentUser?.role || '').toString().toUpperCase();
@@ -850,7 +888,7 @@ export default function PatientHistoryModal({
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setShowShareModal(true)} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition">
+                  <button onClick={handleOpenShareModal} className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition">
                     <Share2 className="w-4 h-4" /> Share
                   </button>
                   <button onClick={closeModal} className="p-2 rounded-full hover:bg-white/10 transition text-white">
@@ -880,6 +918,37 @@ export default function PatientHistoryModal({
                   </div>
                 </div>
               </div>
+
+              {/* Inline Shared With Info */}
+              {(() => {
+                const activeSharesForSelectedPatient = sharesFromMe.filter(share => 
+                  effectiveRole === 'ADMIN' || (matchedCurrentDoctor && share.fromDoctorId === matchedCurrentDoctor.id)
+                );
+                if (activeSharesForSelectedPatient.length > 0) {
+                  return (
+                    <div className="bg-blue-50/50 px-6 py-2.5 border-b border-blue-100 flex items-center gap-3 overflow-x-auto">
+                      <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider flex-shrink-0 flex items-center gap-1.5"><Share2 className="w-3 h-3" /> Shared With:</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {activeSharesForSelectedPatient.map(share => (
+                          <div key={share.id} className="flex items-center gap-1.5 bg-white border border-blue-200 rounded-full pl-2.5 pr-1 py-1 shadow-sm">
+                            <span className="text-xs font-semibold text-blue-700 whitespace-nowrap">
+                              {share.toDoctor?.user?.fullName || share.toDoctor?.name || `Doctor ${share.toDoctorId}`}
+                            </span>
+                            <button 
+                              onClick={() => handleRevokeShare(share.id)}
+                              className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition"
+                              title="Revoke Access"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             {/* Sub Tabs */}

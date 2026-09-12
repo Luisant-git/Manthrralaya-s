@@ -28,3 +28,24 @@ export const getSharesForDoctor = async (doctorId, from, to) => {
     if (!response.ok) throw new Error('Failed to fetch shares');
     return await response.json();
 };
+
+export const getSharesFromDoctor = async (doctorId) => {
+    const response = await fetch(`${API_URL}/from-doctor/${doctorId}`, { headers: getAuthHeader() });
+    if (!response.ok) throw new Error('Failed to fetch outgoing shares');
+    return await response.json();
+};
+
+export const getSharesByPatient = async (patientId) => {
+    const response = await fetch(`${API_URL}/patient/${patientId}`, { headers: getAuthHeader() });
+    if (!response.ok) throw new Error('Failed to fetch patient shares');
+    return await response.json();
+};
+
+export const deleteShare = async (shareId) => {
+    const response = await fetch(`${API_URL}/${shareId}`, {
+        method: 'DELETE',
+        headers: getAuthHeader()
+    });
+    if (!response.ok) throw new Error('Failed to revoke share');
+    return await response.json();
+};
