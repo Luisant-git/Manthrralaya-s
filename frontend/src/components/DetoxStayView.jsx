@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp, Download, ImagePlus, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp, Download, ImagePlus, Loader2, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { createDetoxSession, getAllDetoxSessions } from '../api/detoxSessionApi';
 import { getAllConsultations, uploadReportImages } from '../api/consultationApi';
 import { toast } from 'react-toastify';
@@ -105,6 +105,13 @@ export default function DetoxView({
 
       const editor = editorRef.current;
       editor.focus();
+
+      const imgs = urls.map(u => wrapImgHtml(toAbsoluteUrl(u))).join('');
+      editor.innerHTML = `${editor.innerHTML}${imgs}`;
+
+      if (setter) {
+        setter(editor.innerHTML);
+      }
 
       const newImgs = urls.map(u => ({ url: toAbsoluteUrl(u), name: u.split('/').pop() || 'image.jpg' }));
       setUploadedDetoxImages(prev => [...prev, ...newImgs]);
@@ -236,6 +243,7 @@ export default function DetoxView({
 
   const RichTextEditor = ({ editorKey = 'default', editorRef, content, setContent, placeholder }) => {
     const placeholderRef = useRef(null);
+    const hasImages = /<img[^>]*>/i.test(content || '');
 
     useEffect(() => {
       if (!editorRef.current || !placeholderRef.current) return;
@@ -348,20 +356,22 @@ export default function DetoxView({
         </div> 
         
         <div className="relative">
-          <div
-            ref={editorRef}
-            contentEditable
-            tabIndex={0}
-            suppressContentEditableWarning
-            onInput={handleInput}
-            onBlur={e => setContent(e.currentTarget.innerHTML)}
-            className="editor-content min-h-[200px] rounded-2xl border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200"
-            dangerouslySetInnerHTML={{ __html: content }}
-          />
-          <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>
-            {placeholder}
+          <div className="rounded-2xl border border-slate-200 bg-white p-3">
+            <div
+              ref={editorRef}
+              contentEditable
+              tabIndex={0}
+              suppressContentEditableWarning
+              onInput={handleInput}
+              onBlur={e => setContent(e.currentTarget.innerHTML)}
+              className={`editor-content ${hasImages ? 'min-h-[60px]' : 'min-h-[200px]'} text-sm leading-6 text-slate-800 focus:outline-none`}
+              dangerouslySetInnerHTML={{ __html: content }}
+            />
+            <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>
+              {placeholder}
+            </div>
+            <ImageCardGrid images={uploadedDetoxImages} allowRemove onRemove={handleRemoveGridImage} />
           </div>
-          <ImageCardGrid images={uploadedDetoxImages} allowRemove onRemove={handleRemoveGridImage} />
         </div>
       </div>
     );
@@ -680,7 +690,7 @@ export default function DetoxView({
         sessionNumber: detoxHistory.length + 1, // Increment session number
         sessionType: sessionType,
         sessionDate: new Date().toISOString(),
-        detoxNotes: `${detoxNotes || ''}${uploadedDetoxImages.length > 0 ? '<br/>' + uploadedDetoxImages.map(img => `<span class="img-wrap" contenteditable="false"><img src="${img.url}" alt="Uploaded Image"/></span>`).join('<br/>') : ''}`,
+        detoxNotes: detoxNotes || '',
         followupDate: followupDate,
         followupRemarks: followupRemarks,
         admission_recommended: admissionRecommended,
@@ -765,6 +775,11 @@ export default function DetoxView({
         .editor-content ul { list-style-type: disc; }
         .editor-content ol { list-style-type: decimal; }
         .editor-content li { margin-bottom: 0.25rem; }
+        .editor-content img, .history-list img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; border: 1px solid #e2e8f0; }
+        .editor-content .img-wrap { display: none; }
+        .editor-content .img-wrap img { margin: 0; display: block; cursor: zoom-in; }
+        .editor-content .img-remove-btn { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 9999px; background: #ef4444; color: #fff; border: 2px solid #fff; font-weight: 700; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); opacity: 0; transition: opacity .2s; }
+        .editor-content .img-wrap:hover .img-remove-btn { opacity: 1; }
         [contenteditable="true"] ul, [contenteditable="true"] ol { padding-left: 1.5rem; }
         [contenteditable="true"] ul { list-style-type: disc; }
         [contenteditable="true"] ol { list-style-type: decimal; }
@@ -1016,6 +1031,8 @@ export default function DetoxView({
                           content={detoxNotes}
                           setContent={setDetoxNotes}
                           placeholder={`Enter detox procedure notes for Session ${getPatientSessionCount(activePt.id).completed + 1}...`}
+                          extraTools={uploadTool('detoxNotes', detoxEditorRef, setDetoxNotes)}
+                          grid={<ImageCardGrid images={uploadedDetoxImages} allowRemove onRemove={handleRemoveGridImage} />}
                         />
                       )}
                     </div>

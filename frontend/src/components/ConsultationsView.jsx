@@ -158,8 +158,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
       const editor = editorRef.current;
       editor.focus();
 
-      const imgs = urls.map(u => wrapImgHtml(toAbsoluteUrl(u))).join('<br/>');
-      editor.innerHTML = `${editor.innerHTML}<br/>${imgs}`;
+      const imgs = urls.map(u => wrapImgHtml(toAbsoluteUrl(u))).join('');
+      editor.innerHTML = `${editor.innerHTML}${imgs}`;
 
       setter(editor.innerHTML);
       toast.success(`${urls.length} image${urls.length > 1 ? 's' : ''} uploaded.`);
@@ -215,7 +215,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               </div>
               <div className="px-2 pt-1.5 pb-2 flex items-center justify-between gap-1">
                 <p className="text-[11px] font-semibold text-slate-700 truncate" title={img.name}>{img.name}</p>
-                <button type="button" onClick={() => { setPreviewImages(uploadedBySection[key].map(i => ({url: i.url}))); setPreviewImageIndex(idx); setPreviewZoom(1); }} className="shrink-0 w-6 h-6 rounded-lg bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition" title="View">
+                <button type="button" onClick={() => { setPreviewImages(images.map(i => ({url: i.url}))); setPreviewImageIndex(idx); setPreviewZoom(1); }} className="shrink-0 w-6 h-6 rounded-lg bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition" title="View">
                   <Eye className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -850,13 +850,13 @@ export default function ConsultationsView({ appointments, patients, doctors, con
                         />
                         <p className="text-xs text-slate-400 mt-1.5">You can upload multiple images. They will be embedded into the report and included in the PDF.</p>
                       </div>
-                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label><RichTextEditor editorRef={detoxProcedureEditorRef} content={detoxProcedure} setContent={setDetoxProcedure} placeholder="Enter detox procedure notes..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Detox Procedure Note</label><RichTextEditor editorRef={detoxProcedureEditorRef} content={detoxProcedure} setContent={setDetoxProcedure} placeholder="Enter detox procedure notes..." extraTools={uploadTool('detoxProcedure', detoxProcedureEditorRef, setDetoxProcedure)} grid={<ImageCardGrid images={uploadedBySection['detoxProcedure'] || []} allowRemove onRemove={(url) => handleRemoveGridImage('detoxProcedure', url)} />} /></div>
                     </div>
 
                     {/* 2. Diet Plan Note */}
                     <div className="p-5 space-y-4">
                       <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><ClipboardList className="w-4 h-4 text-emerald-600" /> 2. Diet Plan Note</h3>
-                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Diet Plan Note</label><RichTextEditor editorRef={dietPlanEditorRef} content={dietPlanNote} setContent={setDietPlanNote} placeholder="Enter diet plan notes..." /></div>
+                      <div><label className="block text-xs font-semibold text-slate-600 mb-1">Diet Plan Note</label><RichTextEditor editorRef={dietPlanEditorRef} content={dietPlanNote} setContent={setDietPlanNote} placeholder="Enter diet plan notes..." extraTools={uploadTool('dietPlan', dietPlanEditorRef, setDietPlanNote)} grid={<ImageCardGrid images={uploadedBySection['dietPlan'] || []} allowRemove onRemove={(url) => handleRemoveGridImage('dietPlan', url)} />} /></div>
                       <div><label className="block text-xs font-semibold text-slate-600 mb-1">Home Care Guidelines</label><input type="text" value={homeCare} onChange={e => setHomeCare(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" /></div>
                     </div>
 
