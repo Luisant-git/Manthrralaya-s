@@ -36,7 +36,8 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const [dietPlanNote, setDietPlanNote] = useState('');
   const [homeCare, setHomeCare] = useState('');
   const [uploadingEditor, setUploadingEditor] = useState('');
-  const [previewImageSrc, setPreviewImageSrc] = useState('');
+  const [previewImages, setPreviewImages] = useState([]);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
   const previewZoomRef = useRef(null);
   const [uploadedBySection, setUploadedBySection] = useState({ medicalHistory: [], consultationNotes: [], medicalReports: [], detoxProcedure: [], dietPlan: [] });
@@ -214,7 +215,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
               </div>
               <div className="px-2 pt-1.5 pb-2 flex items-center justify-between gap-1">
                 <p className="text-[11px] font-semibold text-slate-700 truncate" title={img.name}>{img.name}</p>
-                <button type="button" onClick={() => { setPreviewImageSrc(img.url); setPreviewZoom(1); }} className="shrink-0 w-6 h-6 rounded-lg bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition" title="View">
+                <button type="button" onClick={() => { setPreviewImages(uploadedBySection[key].map(i => ({url: i.url}))); setPreviewImageIndex(idx); setPreviewZoom(1); }} className="shrink-0 w-6 h-6 rounded-lg bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition" title="View">
                   <Eye className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -276,14 +277,14 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
   useEffect(() => {
     const el = previewZoomRef.current;
-    if (!el || !previewImageSrc) return;
+    if (!el || previewImages.length === 0) return;
     const onWheel = (e) => {
       e.preventDefault();
       setPreviewZoom(z => Math.min(5, Math.max(0.5, +(z + (e.deltaY < 0 ? 0.2 : -0.2)).toFixed(2))));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [previewImageSrc]);
+  }, [previewImages]);
 
   useEffect(() => {
     const next = {};
@@ -620,11 +621,21 @@ export default function ConsultationsView({ appointments, patients, doctors, con
     }
   };
 
-  const handleHistoryImageClick = (e) => {
+  const handlePreviewImage = (e) => {
     const target = e.target;
     if (!target || !target.closest) return;
+    if (target.closest('[contenteditable="true"]')) return;
     const img = target.tagName === 'IMG' ? target : target.closest('img');
-    if (img) setPreviewImageSrc(img.src);
+    if (img && img.src) {
+      const container = e.currentTarget;
+      const allImgs = Array.from(container.querySelectorAll('img')).map(i => i.src);
+      const uniqueImgs = [...new Set(allImgs)];
+      let index = uniqueImgs.indexOf(img.src);
+      if (index === -1) index = 0;
+      setPreviewImages(uniqueImgs.map(url => ({ url })));
+      setPreviewImageIndex(index);
+      setPreviewZoom(1);
+    }
   };
 
   // Reusable Editor Component
@@ -664,7 +675,14 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
       const img = target.tagName === 'IMG' ? target : target.closest('img');
       if (img) {
-        setPreviewImageSrc(img.src);
+        const container = e.currentTarget;
+        const allImgs = Array.from(container.querySelectorAll('img')).map(i => i.src);
+        const uniqueImgs = [...new Set(allImgs)];
+        let index = uniqueImgs.indexOf(img.src);
+        if (index === -1) index = 0;
+        setPreviewImages(uniqueImgs.map(url => ({ url })));
+        setPreviewImageIndex(index);
+        setPreviewZoom(1);
       }
     };
 
@@ -1035,32 +1053,86 @@ export default function ConsultationsView({ appointments, patients, doctors, con
         </div>
       </div>
 
-      {previewImageSrc && (
-        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => { setPreviewImageSrc(''); setPreviewZoom(1); }}>
+      {/* Image Zoom Preview Modal */}
+      {previewImages.length > 0 && (
+        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => { setPreviewImages([]); setPreviewImageIndex(0); setPreviewZoom(1); }}>
+          
+          {previewImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreviewImageIndex(i => (i > 0 ? i - 1 : previewImages.length - 1)); setPreviewZoom(1); }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-50 backdrop-blur"
+              title="Previous image"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            </button>
+          )}
+
           <div ref={previewZoomRef} className="flex items-center justify-center w-full h-full" onClick={(e) => e.stopPropagation()}>
             <img
-              src={previewImageSrc}
-              alt="Zoomed preview"
+              src={previewImages[previewImageIndex]?.url}
+              alt={`Zoomed preview ${previewImageIndex + 1} of ${previewImages.length}`}
               className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain select-none"
               style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.2s ease' }}
             />
           </div>
+
+          {previewImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreviewImageIndex(i => (i < previewImages.length - 1 ? i + 1 : 0)); setPreviewZoom(1); }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-50 backdrop-blur"
+              title="Next image"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() => { setPreviewImageSrc(''); setPreviewZoom(1); }}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition-colors"
+            onClick={() => { setPreviewImages([]); setPreviewImageIndex(0); setPreviewZoom(1); }}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition-colors z-50"
             title="Close"
           >
             ✕
           </button>
-          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-2" onClick={(e) => e.stopPropagation()}>
-            <button type="button" onClick={() => setPreviewZoom(z => Math.max(0.5, +(z - 0.2).toFixed(2)))} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors" title="Zoom out">−</button>
+          
+          {previewImages.length > 1 && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-4 py-1.5 rounded-full text-sm font-semibold tracking-wide backdrop-blur z-50">
+              {previewImageIndex + 1} / {previewImages.length}
+            </div>
+          )}
+
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-2 z-50" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom(z => Math.max(0.5, +(z - 0.2).toFixed(2)))}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors"
+              title="Zoom out"
+            >
+              −
+            </button>
             <span className="text-white text-xs font-medium min-w-[48px] text-center">{Math.round(previewZoom * 100)}%</span>
-            <button type="button" onClick={() => setPreviewZoom(z => Math.min(5, +(z + 0.2).toFixed(2)))} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors" title="Zoom in">＋</button>
-            <button type="button" onClick={() => setPreviewZoom(1)} className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-xs font-bold flex items-center justify-center transition-colors" title="Reset zoom to 100%">1:1</button>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom(z => Math.min(5, +(z + 0.2).toFixed(2)))}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors"
+              title="Zoom in"
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom(1)}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-xs font-bold flex items-center justify-center transition-colors"
+              title="Reset zoom to 100%"
+            >
+              1:1
+            </button>
           </div>
-          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 mb-14 text-white/50 text-xs">Scroll (mouse wheel) to zoom · Click outside or ✕ to close</span>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 mb-14 text-white/50 text-xs z-50">Scroll (mouse wheel) to zoom · Click outside or ✕ to close</span>
         </div>
       )}
-    </>);
+    </>
+  );
 }

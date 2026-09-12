@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp, Download } from 'lucide-react';
+import { Droplets, Activity, ClipboardList, Save, CheckCircle, Calendar, User, Stethoscope, MessageSquare, Clock, FileText, Sun, Moon, SunMoon, TrendingUp, Download, ImagePlus, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { createDetoxSession, getAllDetoxSessions } from '../api/detoxSessionApi';
-import { getAllConsultations } from '../api/consultationApi';
+import { getAllConsultations, uploadReportImages } from '../api/consultationApi';
 import { toast } from 'react-toastify';
 import { generateDetoxPDF, generateConsultationPDF, generateSingleTopicPDF } from '../utils/pdfGenerator';
 import PatientHistoryModal from './PatientHistoryModal';
+import config from '../config.js';
+
+const toAbsoluteUrl = (src) => {
+  if (!src) return '';
+  if (/^(https?:)?\/\//.test(src) || src.startsWith('data:')) return src;
+  return `${config.API_BASE_URL}${src.startsWith('/') ? '' : '/'}${src}`;
+};
 
 export default function DetoxView({ 
   appointments = [], 
@@ -25,9 +32,35 @@ export default function DetoxView({
   const [isSaving, setIsSaving] = useState(false);
   const [localDetoxSessions, setLocalDetoxSessions] = useState([]);
   const [localConsultations, setLocalConsultations] = useState([]);
+  const [uploadingEditor, setUploadingEditor] = useState('');
+
+  // Admission Recommended flag
+  const [admissionRecommended, setAdmissionRecommended] = useState(false);
+  const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [admissionDoctorId, setAdmissionDoctorId] = useState('');
+  const [admissionDoctorName, setAdmissionDoctorName] = useState('');
+  const [admissionRemarks, setAdmissionRemarks] = useState('');
+  
+  // Image Preview Modal State
+  const [previewImages, setPreviewImages] = useState([]);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const previewZoomRef = useRef(null);
+
+  useEffect(() => {
+    const el = previewZoomRef.current;
+    if (!el || previewImages.length === 0) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      setPreviewZoom(z => Math.min(5, Math.max(0.5, +(z + (e.deltaY < 0 ? 0.2 : -0.2)).toFixed(2))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [previewImages]);
   
   // Detox Notes state
   const [detoxNotes, setDetoxNotes] = useState('');
+  const [uploadedDetoxImages, setUploadedDetoxImages] = useState([]);
   
   // Session Type state
   const [sessionType, setSessionType] = useState('morning');
@@ -43,15 +76,98 @@ export default function DetoxView({
   const getPatientSessionCount = (patientId) => {
     const sessions = localDetoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
     return {
-      completed: sessions.length,
-      total: 3,
-      remaining: 3 - sessions.length
+      completed: sessions.length
     };
   };
 
   const getCompletedSessionTypes = (patientId) => {
     const sessions = localDetoxSessions.filter(d => String(d.patientId || d.patient_id) === String(patientId));
     return sessions.map(d => String(d.sessionType || '').toLowerCase());
+  };
+
+  const wrapImgHtml = (url) => `
+    <span class="img-wrap" contenteditable="false">
+      <img src="${url}" alt="Uploaded Image"/>
+      <button type="button" class="img-remove-btn" onmousedown="event.preventDefault()" title="Remove image">&times;</button>
+    </span>`;
+
+  const handleUploadImages = async (e, editorKey, editorRef, setter) => {
+    const files = Array.from(e.target.files || [])
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+    if (!files.length) return;
+    if (!editorRef.current) return;
+
+    setUploadingEditor(editorKey);
+    try {
+      const res = await uploadReportImages(files);
+      const urls = (res && res.urls) || [];
+      if (!urls.length) throw new Error('No image URLs returned');
+
+      const editor = editorRef.current;
+      editor.focus();
+
+      const newImgs = urls.map(u => ({ url: toAbsoluteUrl(u), name: u.split('/').pop() || 'image.jpg' }));
+      setUploadedDetoxImages(prev => [...prev, ...newImgs]);
+
+      toast.success(`${urls.length} image${urls.length > 1 ? 's' : ''} uploaded.`);
+    } catch (err) {
+      console.error('Image upload error:', err);
+      toast.error(err.message || 'Failed to upload images.');
+    } finally {
+      setUploadingEditor('');
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleRemoveGridImage = (urlToRemove) => {
+    setUploadedDetoxImages(prev => prev.filter(img => img.url !== urlToRemove));
+  };
+
+  const uploadTool = (editorKey, editorRef, setter) => {
+    const isUploading = uploadingEditor === editorKey;
+    return (
+      <label className={`cursor-pointer rounded px-3 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 flex items-center gap-1.5 ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+        {isUploading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading...</> : <><ImagePlus className="w-3.5 h-3.5 text-emerald-600" /> Upload Images</>}
+        <input type="file" accept="image/*" multiple className="hidden" onChange={e => handleUploadImages(e, editorKey, editorRef, setter)} disabled={isUploading} />
+      </label>
+    );
+  };
+
+  const ImageCardGrid = ({ images, allowRemove, onRemove }) => {
+    if (!images || images.length === 0) return null;
+    return (
+      <div className="mt-3">
+        <div className="flex items-center gap-2 mb-2">
+          <ImagePlus className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Uploaded Images ({images.length})</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {images.map((img, idx) => (
+            <div key={`${img.url}-${idx}`} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden group/upload relative">
+              {allowRemove && (
+                <button
+                  type="button"
+                  onClick={() => onRemove && onRemove(img.url)}
+                  className="absolute top-2 right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover/upload:opacity-100 transition-opacity hover:bg-rose-600 z-10"
+                  title="Remove"
+                >
+                  &times;
+                </button>
+              )}
+              <div className="relative aspect-square bg-slate-100">
+                <img src={img.url} alt={img.name || 'Uploaded image'} className="w-full h-full object-contain p-1" />
+              </div>
+              <div className="px-2 pt-1.5 pb-2 flex items-center justify-between gap-1">
+                <p className="text-[11px] font-semibold text-slate-700 truncate" title={img.name}>{img.name}</p>
+                <button type="button" onClick={() => { setPreviewImages(images.map(i => ({url: i.url}))); setPreviewImageIndex(idx); setPreviewZoom(1); }} className="shrink-0 w-6 h-6 rounded-lg bg-slate-100 hover:bg-emerald-100 hover:text-emerald-700 text-slate-500 flex items-center justify-center transition" title="View">
+                  <Eye className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   // Editor functions
@@ -118,7 +234,7 @@ export default function DetoxView({
     { label: '32px', value: '32px' },
   ];
 
-  const RichTextEditor = ({ editorRef, content, setContent, placeholder }) => {
+  const RichTextEditor = ({ editorKey = 'default', editorRef, content, setContent, placeholder }) => {
     const placeholderRef = useRef(null);
 
     useEffect(() => {
@@ -202,7 +318,6 @@ export default function DetoxView({
                 <line x1="3" y1="12" x2="15" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
-              Left
             </button>
             <button 
               type="button" 
@@ -215,7 +330,6 @@ export default function DetoxView({
                 <line x1="6" y1="12" x2="18" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
-              Center
             </button>
             <button 
               type="button" 
@@ -228,9 +342,9 @@ export default function DetoxView({
                 <line x1="9" y1="12" x2="21" y2="12" />
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
-              Right
             </button>
           </div>
+          {uploadTool(editorKey, editorRef, setContent)}
         </div> 
         
         <div className="relative">
@@ -247,6 +361,7 @@ export default function DetoxView({
           <div ref={placeholderRef} className="absolute top-3 left-3 text-slate-400 text-sm pointer-events-none" style={{ display: 'none' }}>
             {placeholder}
           </div>
+          <ImageCardGrid images={uploadedDetoxImages} allowRemove onRemove={handleRemoveGridImage} />
         </div>
       </div>
     );
@@ -277,9 +392,18 @@ export default function DetoxView({
           <div className="mt-3">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {imgSrcs.map((src, idx) => (
-                <a key={idx} href={src} target="_blank" rel="noopener noreferrer" className="block bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative aspect-square bg-slate-100 hover:ring-2 hover:ring-emerald-400 transition-all cursor-zoom-in">
+                <button 
+                  key={idx} 
+                  type="button" 
+                  onClick={() => {
+                    setPreviewImages(imgSrcs.map(url => ({ url })));
+                    setPreviewImageIndex(idx);
+                    setPreviewZoom(1);
+                  }}
+                  className="block bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative aspect-square bg-slate-100 hover:ring-2 hover:ring-emerald-400 transition-all cursor-zoom-in w-full text-left"
+                >
                   <img src={src} alt="Uploaded image" className="w-full h-full object-contain p-1" />
-                </a>
+                </button>
               ))}
             </div>
           </div>
@@ -486,7 +610,8 @@ export default function DetoxView({
   };
 
   const hasCompletedThreeDetoxSessions = (patientId) => {
-    return getPatientSessionCount(patientId).completed >= 3;
+    // We no longer limit to 3 sessions per appointment
+    return false;
   };
 
   const getConsultationFollowupRecommendation = (record, patientId) => {
@@ -546,6 +671,8 @@ export default function DetoxView({
       const doctorId = Number(activeAppt.doctor_id || activeAppt.doctorId || currentDoctorId || 0);
       const sessionTypeDisplay = getSessionTypeDisplay(sessionType);
       
+      const selectedAdmissionDoctor = doctors.find(d => String(d.id) === String(admissionDoctorId));
+
       const detoxData = {
         patientId: activePt.id,
         doctorId: doctorId || null,
@@ -553,9 +680,14 @@ export default function DetoxView({
         sessionNumber: detoxHistory.length + 1, // Increment session number
         sessionType: sessionType,
         sessionDate: new Date().toISOString(),
-        detoxNotes: detoxNotes,
+        detoxNotes: `${detoxNotes || ''}${uploadedDetoxImages.length > 0 ? '<br/>' + uploadedDetoxImages.map(img => `<span class="img-wrap" contenteditable="false"><img src="${img.url}" alt="Uploaded Image"/></span>`).join('<br/>') : ''}`,
         followupDate: followupDate,
-        followupRemarks: followupRemarks
+        followupRemarks: followupRemarks,
+        admission_recommended: admissionRecommended,
+        admission_date: admissionRecommended ? admissionDate : null,
+        admission_doctor_id: admissionRecommended && admissionDoctorId ? parseInt(admissionDoctorId) : null,
+        admission_doctor_name: admissionRecommended && selectedAdmissionDoctor ? selectedAdmissionDoctor.name : null,
+        admission_remarks: admissionRecommended ? admissionRemarks : null
       };
       
       console.log('💾 Saving detox session:', detoxData);
@@ -598,11 +730,15 @@ export default function DetoxView({
       
       setSelectedApptId('');
       setDetoxNotes('');
+      setUploadedDetoxImages([]);
       setSessionType('morning');
       setFollowupDate(new Date().toISOString().split('T')[0]);
       setFollowupRemarks('Call patient later to confirm detox preparation and next steps.');
+      if (detoxEditorRef.current) {
+        detoxEditorRef.current.innerHTML = '';
+      }
       
-      toast.success(`Detox ${sessionTypeDisplay} (Session ${detoxHistory.length + 1}/3) completed successfully!`);
+      toast.success(`Detox ${sessionTypeDisplay} (Session ${detoxHistory.length + 1}) completed successfully!`);
     } catch (error) {
       console.error('❌ Error saving detox session:', error);
       toast.error(error.message || 'Failed to save detox session. Please try again.');
@@ -649,7 +785,7 @@ export default function DetoxView({
               Detox Therapy Sessions
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              Manage detox procedures for patients. Each patient can complete up to 3 sessions.
+              Manage detox procedures for patients. Add and track detox sessions.
             </p>
           </div>
         </div>
@@ -687,19 +823,9 @@ export default function DetoxView({
                           <div className="text-xs text-slate-500 mt-1">{pt.age ?? '--'} yrs, {pt.gender ?? '--'}</div>
                         </div>
                         {/* Session Progress Capsule - Same location as Detox badge */}
-<div className={`text-[13px] font-bold px-2 py-1 rounded-full flex items-center gap-1 ${
-  sessionCount.completed === 3 
-    ? 'bg-emerald-100 text-emerald-700'
-    : sessionCount.completed === 2
-    ? 'bg-amber-100 text-amber-700'
-    : 'bg-blue-100 text-blue-700'
-}`}>
-  {sessionCount.completed === 3 ? (
-    <CheckCircle className="w-3 h-3" />
-  ) : (
-    <Activity className="w-3 h-3" />
-  )}
-  <span>{sessionCount.completed}/{sessionCount.total}</span>
+<div className={`text-[13px] font-bold px-2 py-1 rounded-full flex items-center gap-1 bg-emerald-100 text-emerald-700`}>
+  <Activity className="w-3 h-3" />
+  <span>{sessionCount.completed} Sessions</span>
 </div>
                       </div>
                       
@@ -747,9 +873,7 @@ export default function DetoxView({
                       <div className="flex items-center gap-2 text-xs">
                         <TrendingUp className="w-3 h-3 text-emerald-600" />
                         <span className="text-slate-600">Progress:</span>
-                        <span className="font-bold text-emerald-700">
-                          {getPatientSessionCount(activePt.id).completed}/3 Sessions
-                        </span>
+                          {getPatientSessionCount(activePt.id).completed} Sessions Completed
                       </div>
                     </div>
                   </div>
@@ -803,9 +927,7 @@ export default function DetoxView({
                             <Activity className="w-4 h-4 text-blue-600" />
                             <span className="text-sm font-semibold text-blue-800">Current Session</span>
                           </div>
-                          <span className="text-sm font-bold text-blue-800">
-                            Session {getPatientSessionCount(activePt.id).completed + 1}/3
-                          </span>
+                            Session {getPatientSessionCount(activePt.id).completed + 1}
                         </div>
                       </div>
                     </div>
@@ -818,11 +940,6 @@ export default function DetoxView({
                       </h3>
                       
                       {(() => {
-                        const completedTypes = getCompletedSessionTypes(activePt.id);
-                        const isMorningCompleted = completedTypes.includes('morning');
-                        const isEveningCompleted = completedTypes.includes('evening');
-                        const isFullDayCompleted = completedTypes.includes('fullday');
-                        
                         return (
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <button
@@ -839,11 +956,6 @@ export default function DetoxView({
                                 Morning Session
                               </span>
                               <span className="text-xs text-slate-500">8:00 AM - 12:00 PM</span>
-                              {isMorningCompleted && (
-                                <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" /> Done
-                                </div>
-                              )}
                             </button>
                             
                             <button
@@ -860,11 +972,6 @@ export default function DetoxView({
                                 Evening Session
                               </span>
                               <span className="text-xs text-slate-500">4:00 PM - 8:00 PM</span>
-                              {isEveningCompleted && (
-                                <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" /> Done
-                                </div>
-                              )}
                             </button>
                             
                             <button
@@ -881,11 +988,6 @@ export default function DetoxView({
                                 Full Day Session
                               </span>
                               <span className="text-xs text-slate-500">8:00 AM - 8:00 PM</span>
-                              {isFullDayCompleted && (
-                                <div className="absolute top-2 right-2 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                                  <CheckCircle className="w-3 h-3" /> Done
-                                </div>
-                              )}
                             </button>
                           </div>
                         );
@@ -899,17 +1001,7 @@ export default function DetoxView({
                         Detox Session Notes
                       </h3>
                       
-                      {getPatientSessionCount(activePt.id).completed >= 3 ? (
-                        <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
-                          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                          <div className="text-green-700 font-semibold mb-2">
-                            Treatment Complete!
-                          </div>
-                          <p className="text-sm text-green-600">
-                            This patient has completed all 3 detox sessions. No more sessions can be added.
-                          </p>
-                        </div>
-                      ) : !canAddSession ? (
+                      {!canAddSession ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
                           <div className="text-amber-700 font-semibold mb-2">
                             This appointment already has a completed session.
@@ -923,13 +1015,13 @@ export default function DetoxView({
                           editorRef={detoxEditorRef}
                           content={detoxNotes}
                           setContent={setDetoxNotes}
-                          placeholder={`Enter detox procedure notes for Session ${getPatientSessionCount(activePt.id).completed + 1}/3...`}
+                          placeholder={`Enter detox procedure notes for Session ${getPatientSessionCount(activePt.id).completed + 1}...`}
                         />
                       )}
                     </div>
 
                     {/* Followup Section */}
-                    {canAddSession && getPatientSessionCount(activePt.id).completed < 3 && (
+                    {canAddSession && (
                       <div className="p-5 bg-emerald-50 border-y border-emerald-100">
                         <div className="flex items-center gap-3">
                           <Calendar className="w-5 h-5 text-emerald-600" />
@@ -969,27 +1061,72 @@ export default function DetoxView({
                       </div>
                     )}
 
+                    {/* Admission Recommendation */}
+                    {canAddSession && (
+                      <div className={`p-5 border-b ${admissionRecommended ? 'bg-sky-50 border-sky-100' : 'bg-slate-50 border-slate-100'}`}>
+                        <div className="flex items-center gap-2 mb-4">
+                          <input 
+                            type="checkbox" 
+                            id="admissionCheckDetox" 
+                            checked={admissionRecommended}
+                            onChange={e => setAdmissionRecommended(e.target.checked)}
+                            className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
+                          />
+                          <label htmlFor="admissionCheckDetox" className="font-bold text-slate-800 text-sm">Recommend for Admission</label>
+                        </div>
+                        {admissionRecommended && (
+                          <div className="ml-6 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-600"><User className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Admission Doctor</label>
+                                <select value={admissionDoctorId} onChange={e => setAdmissionDoctorId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500">
+                                  <option value="">Select Admission Doctor</option>
+                                  {doctors.map(d => (
+                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-600"><Calendar className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Admission Date</label>
+                                <input type="date" value={admissionDate} onChange={e => setAdmissionDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-600"><MessageSquare className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Remarks for Receptionist</label>
+                              <textarea 
+                                rows={2} 
+                                placeholder="Enter remarks for admission..." 
+                                value={admissionRemarks}
+                                onChange={e => setAdmissionRemarks(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                              />
+                            </div>
+                            <p className="text-xs text-sky-700 mt-1.5 font-medium">The patient will be scheduled for admission under the selected doctor.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Save Button */}
                     <div className="p-5 bg-slate-50 flex justify-end gap-3">
 
                       <button
                         onClick={handleSaveDetoxSession}
-                        disabled={!canAddSession || !detoxNotes.trim() || isSaving || getPatientSessionCount(activePt.id).completed >= 3}
-                        className={`bg-emerald-600 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm ${
-                          (!canAddSession || !detoxNotes.trim() || isSaving || getPatientSessionCount(activePt.id).completed >= 3) 
-                            ? 'opacity-50 cursor-not-allowed' 
-                            : 'hover:bg-emerald-700'
+                        disabled={!canAddSession || !detoxNotes.trim() || isSaving}
+                        className={`font-bold py-3 px-8 rounded-xl flex items-center justify-center gap-2 transition-all shadow-sm ${
+                          (!canAddSession || !detoxNotes.trim() || isSaving) 
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow hover:-translate-y-0.5 active:translate-y-0'
                         }`}
                       >
                         {isSaving ? (
                           <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                            Saving...
+                            <Loader2 className="w-5 h-5 animate-spin" /> Saving...
                           </>
                         ) : (
                           <>
-                            <Save className="w-4 h-4" /> 
-                            Save Session {getPatientSessionCount(activePt.id).completed + 1}/3
+                            <Save className="w-5 h-5" /> 
+                            Save Session {getPatientSessionCount(activePt.id).completed + 1}
                           </>
                         )}
                       </button>
@@ -1006,6 +1143,81 @@ export default function DetoxView({
           </div>
         </div>
       </div>
+
+      {/* Image Zoom Preview Modal */}
+      {previewImages.length > 0 && (
+        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => { setPreviewImages([]); setPreviewImageIndex(0); setPreviewZoom(1); }}>
+          {previewImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreviewImageIndex(i => (i > 0 ? i - 1 : previewImages.length - 1)); setPreviewZoom(1); }}
+              className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-10"
+              title="Previous Image"
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+          )}
+          <div ref={previewZoomRef} className="flex items-center justify-center w-full h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewImages[previewImageIndex]?.url}
+              alt="Zoomed preview"
+              className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain select-none"
+              style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.2s ease' }}
+            />
+          </div>
+          {previewImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreviewImageIndex(i => (i < previewImages.length - 1 ? i + 1 : 0)); setPreviewZoom(1); }}
+              className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-10"
+              title="Next Image"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => { setPreviewImages([]); setPreviewImageIndex(0); setPreviewZoom(1); }}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition-colors"
+            title="Close"
+          >
+            ✕
+          </button>
+          {previewImages.length > 1 && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white font-semibold text-sm bg-black/40 px-3 py-1 rounded-full">
+              {previewImageIndex + 1} of {previewImages.length}
+            </div>
+          )}
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom(z => Math.max(0.5, +(z - 0.2).toFixed(2)))}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors"
+              title="Zoom out"
+            >
+              −
+            </button>
+            <span className="text-white text-xs font-medium min-w-[48px] text-center">{Math.round(previewZoom * 100)}%</span>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom(z => Math.min(5, +(z + 0.2).toFixed(2)))}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-lg font-bold flex items-center justify-center transition-colors"
+              title="Zoom in"
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreviewZoom(1)}
+              className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/30 text-white text-xs font-bold flex items-center justify-center transition-colors"
+              title="Reset zoom to 100%"
+            >
+              1:1
+            </button>
+          </div>
+          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 mb-14 text-white/50 text-xs">Scroll (mouse wheel) to zoom · Click outside or ✕ to close</span>
+        </div>
+      )}
     </>
   );
 }

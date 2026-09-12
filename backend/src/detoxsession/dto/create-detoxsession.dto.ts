@@ -21,10 +21,9 @@ export class CreateDetoxsessionDto {
   @IsInt()
   consultationId?: number;
 
-  @ApiProperty({ example: 1, description: 'Session number (1, 2, or 3)' })
+  @ApiProperty({ example: 1, description: 'Session number' })
   @IsInt()
   @Min(1)
-  @Max(3)
   sessionNumber: number;
 
   @ApiProperty({ example: 'morning', description: 'morning, evening, or fullDay' })

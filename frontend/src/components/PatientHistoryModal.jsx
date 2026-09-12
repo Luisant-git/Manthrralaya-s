@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, Eye, MessageSquare, Share2, Edit3, Save, Plus, ImagePlus, Loader2 } from 'lucide-react';
+import { Stethoscope, Activity, Bed, RefreshCw, ClipboardList, ChevronLeft, ChevronRight, Star, FileText, X, User, Phone, Mail, Calendar as CalendarIcon, Droplets, Download, Eye, MessageSquare, Share2, Edit3, Save, Plus, ImagePlus, Loader2, Clock, CheckCircle } from 'lucide-react';
 import { Sun, Moon, SunMoon, Utensils } from 'lucide-react';
 import { toast } from 'react-toastify';
 import FoodChartTab from './FoodChartTab';
 import { generateConsultationPDF, generateDetoxPDF, buildConsultationPdfBlob } from '../utils/pdfGenerator';
 import { uploadConsultationPdf, updateConsultation, createConsultation, uploadReportImages, toAbsoluteUrl } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
+import { createDetoxSession } from '../api/detoxSessionApi';
 import { createShare } from '../api/shareApi';
 
 const wrapNewImgHtml = (url) =>
@@ -35,7 +36,9 @@ export default function PatientHistoryModal({
   const [isShareFocused, setIsShareFocused] = useState(false);
   const [sharesFromMe, setSharesFromMe] = useState([]);
   const [showAddCons, setShowAddCons] = useState(false);
-  const [previewImageSrc, setPreviewImageSrc] = useState('');
+  const [showAddDetox, setShowAddDetox] = useState(false);
+  const [previewImages, setPreviewImages] = useState([]);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
   const previewZoomRef = useRef(null);
   const [isSavingNewCons, setIsSavingNewCons] = useState(false);
@@ -51,13 +54,13 @@ export default function PatientHistoryModal({
   const [homeCare, setHomeCare] = useState('');
   const [detoxRecommended, setDetoxRecommended] = useState(false);
   const [detoxDoctorId, setDetoxDoctorId] = useState('');
-  const [detoxFollowupDate, setDetoxFollowupDate] = useState(new Date().toISOString().split('T')[0]);
+  const [detoxFollowupDate, setDetoxFollowupDate] = useState('');
   const [detoxFollowupRemarks, setDetoxFollowupRemarks] = useState('');
   const [detoxMorningSessions, setDetoxMorningSessions] = useState('');
   const [detoxEveningSessions, setDetoxEveningSessions] = useState('');
   const [reviewRecommended, setReviewRecommended] = useState(false);
   const [admissionRecommended, setAdmissionRecommended] = useState(false);
-  const [admissionDate, setAdmissionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [admissionDate, setAdmissionDate] = useState('');
   const [admissionDoctorId, setAdmissionDoctorId] = useState('');
   const [admissionRemarks, setAdmissionRemarks] = useState('');
   const [addedConsultations, setAddedConsultations] = useState([]);
@@ -66,6 +69,11 @@ export default function PatientHistoryModal({
   const newConsReportsRef = useRef(null);
   const detoxProcedureEditorRef = useRef(null);
   const dietPlanEditorRef = useRef(null);
+  const newDetoxNotesRef = useRef(null);
+  const [sessionType, setSessionType] = useState('morning');
+  const [detoxSessionDate, setDetoxSessionDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newDetoxNotes, setNewDetoxNotes] = useState('');
+  const [isSavingNewDetox, setIsSavingNewDetox] = useState(false);
   const newConsSessionCountOptions = ['', ...Array.from({ length: 10 }, (_, i) => i + 1)];
   const newConsFontSizeOptions = [
     { label: '12px', value: '12px' },
@@ -341,7 +349,7 @@ export default function PatientHistoryModal({
                 {/* Thumbnail */}
                 <div
                   className="relative h-28 bg-slate-100 flex items-center justify-center overflow-hidden cursor-pointer"
-                  onClick={() => onPreview && onPreview(img.url)}
+                  onClick={() => onPreview && onPreview(img.url, images, idx)}
                 >
                   <img
                     src={img.url}
@@ -382,23 +390,11 @@ export default function PatientHistoryModal({
                   <button
                     type="button"
                     onClick={() => onPreview && onPreview(img.url)}
-                    className={`${hideSave ? 'w-full' : 'flex-1'} flex items-center justify-center gap-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold transition`}
+                    className="w-full flex items-center justify-center gap-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold transition"
                     title="View"
                   >
                     <Eye className="w-3 h-3" /> View
                   </button>
-                  {!hideSave && (
-                    <a
-                      href={img.url}
-                      download={name}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex-1 flex items-center justify-center gap-1 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold transition"
-                      title="Download"
-                    >
-                      <Download className="w-3 h-3" /> Save
-                    </a>
-                  )}
                 </div>
               </div>
             );
@@ -436,6 +432,62 @@ export default function PatientHistoryModal({
       </label>
     </div>
   );
+
+  const handleCreateDetoxSession = async () => {
+    if (!detoxDoctorId) {
+      toast.error('Please select an Assigned Doctor.');
+      return;
+    }
+    if (!detoxSessionDate) {
+      toast.error('Please select a Session Date.');
+      return;
+    }
+    const activeAppt = appointments.length > 0 ? appointments[0] : null;
+
+    const detoxImages = uploadedImagesMap['detoxNotes'] || [];
+    if (!newDetoxNotes.trim() && detoxImages.length === 0) {
+      toast.warning('Please enter detox procedure notes or upload images');
+      return;
+    }
+    
+    setIsSavingNewDetox(true);
+    
+    try {
+      const detoxData = {
+        patientId: Number(patient.id ?? patient.patientId),
+        doctorId: null,
+        doctorId: detoxDoctorId ? parseInt(detoxDoctorId, 10) : null,
+        appointmentId: activeAppt?.id ? parseInt(String(activeAppt.id).replace(/^\D+/g, ''), 10) : null,
+        sessionNumber: detoxSessions.length + 1,
+        sessionType: sessionType,
+        sessionDate: detoxSessionDate,
+        detoxNotes: `${newDetoxNotes || ''}${detoxImages.length > 0 ? '<br/>' + detoxImages.map(img => `<span class="img-wrap" contenteditable="false"><img src="${img.url}" alt="Uploaded Image"/></span>`).join('<br/>') : ''}`,
+        followupDate: reviewRecommended && detoxFollowupDate ? detoxFollowupDate : null,
+        followupRemarks: reviewRecommended && detoxFollowupRemarks ? detoxFollowupRemarks : null,
+        admission_recommended: admissionRecommended,
+        admission_date: admissionRecommended ? admissionDate : null,
+        admission_doctor_id: admissionRecommended && admissionDoctorId ? parseInt(admissionDoctorId, 10) : null,
+        admission_doctor_name: admissionRecommended && doctors.find(d => String(d.id) === String(admissionDoctorId))?.name || null,
+        admission_remarks: admissionRecommended ? admissionRemarks : null
+      };
+      
+      const savedSession = await createDetoxSession(detoxData);
+      
+      toast.success('Detox Session created successfully!');
+      setShowAddDetox(false);
+      setNewDetoxNotes('');
+      setUploadedImagesMap(prev => ({ ...prev, detoxNotes: [] }));
+      
+      if (onRefresh) {
+        onRefresh();
+      }
+    } catch (error) {
+      console.error('Error creating detox session:', error);
+      toast.error('Failed to create detox session. Please try again.');
+    } finally {
+      setIsSavingNewDetox(false);
+    }
+  };
 
   const handleCreateConsultation = async () => {
     if (!consForm.doctorId) {
@@ -541,14 +593,14 @@ export default function PatientHistoryModal({
 
   useEffect(() => {
     const el = previewZoomRef.current;
-    if (!el || !previewImageSrc) return;
+    if (!el || previewImages.length === 0) return;
     const onWheel = (e) => {
       e.preventDefault();
       setPreviewZoom(z => Math.min(5, Math.max(0.5, +(z + (e.deltaY < 0 ? 0.2 : -0.2)).toFixed(2))));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [previewImageSrc]);
+  }, [previewImages]);
   const historyItemsPerPage = 1;
 
   if (!patient) return null;
@@ -811,7 +863,7 @@ export default function PatientHistoryModal({
   const EditModeImageGrid = () => (
     <ImageCardGrid
       images={editModeImages}
-      onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+      onPreview={(src, all, idx) => { setPreviewImages(all); setPreviewImageIndex(idx); setPreviewZoom(1); }}
       allowRemove
       onRemove={removeEditImage}
     />
@@ -853,7 +905,16 @@ export default function PatientHistoryModal({
     if (target.closest('[contenteditable="true"]')) return;
     const img = target.tagName === 'IMG' ? target : target.closest('img');
     if (img && img.src) {
-      setPreviewImageSrc(img.src);
+      const container = img.closest('.record-content-wrapper') || img.closest('.p-5') || document;
+      const allImgs = Array.from(container.querySelectorAll('img')).filter(i => !i.closest('[contenteditable="true"]'));
+      const idx = allImgs.indexOf(img);
+      if (allImgs.length > 0) {
+        setPreviewImages(allImgs.map(i => ({ url: i.src })));
+        setPreviewImageIndex(idx >= 0 ? idx : 0);
+      } else {
+        setPreviewImages([{ url: img.src }]);
+        setPreviewImageIndex(0);
+      }
       setPreviewZoom(1);
     }
   };
@@ -1007,6 +1068,17 @@ export default function PatientHistoryModal({
                     Add Consultation
                   </button>
                 )}
+                {historySubTab === 'detox' && (
+                  <button
+                    onClick={() => setShowAddDetox(true)}
+                    className="pb-3 flex items-center gap-2 text-sm font-bold text-emerald-700 hover:text-emerald-800 transition-colors"
+                  >
+                    <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                      <Plus className="w-4 h-4" />
+                    </span>
+                    Add Detox
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1145,7 +1217,7 @@ export default function PatientHistoryModal({
                                 {imgSrcs.length > 0 && (
                                   <ImageCardGrid
                                     images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
-                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    onPreview={(src, all, idx) => { setPreviewImages(all); setPreviewImageIndex(idx); setPreviewZoom(1); }}
                                     noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
                                   />
                                 )}
@@ -1210,7 +1282,7 @@ export default function PatientHistoryModal({
                                 {imgSrcs.length > 0 && (
                                   <ImageCardGrid
                                     images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
-                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    onPreview={(src, all, idx) => { setPreviewImages(all); setPreviewImageIndex(idx); setPreviewZoom(1); }}
                                     noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
                                   />
                                 )}
@@ -1275,7 +1347,7 @@ export default function PatientHistoryModal({
                                 {imgSrcs.length > 0 && (
                                   <ImageCardGrid
                                     images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
-                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    onPreview={(src, all, idx) => { setPreviewImages(all); setPreviewImageIndex(idx); setPreviewZoom(1); }}
                                     noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
                                   />
                                 )}
@@ -1340,7 +1412,7 @@ export default function PatientHistoryModal({
                                 {imgSrcs.length > 0 && (
                                   <ImageCardGrid
                                     images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
-                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    onPreview={(src, all, idx) => { setPreviewImages(all); setPreviewImageIndex(idx); setPreviewZoom(1); }}
                                     noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
                                   />
                                 )}
@@ -1406,7 +1478,7 @@ export default function PatientHistoryModal({
                                 {imgSrcs.length > 0 && (
                                   <ImageCardGrid
                                     images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'report-image.jpg' }))}
-                                    onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }}
+                                    onPreview={(src, all, idx) => { setPreviewImages(all); setPreviewImageIndex(idx); setPreviewZoom(1); }}
                                     noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
                                   />
                                 )}
@@ -1572,17 +1644,33 @@ export default function PatientHistoryModal({
                           </div>
                         </div>
 
-                        {(currentDetoxSession.detoxNotes || currentDetoxSession.notes) && (
-                          <div>
-                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-                              <Activity className="w-3.5 h-3.5" /> Detox Procedure Notes
+                        {(currentDetoxSession.detoxNotes || currentDetoxSession.notes) && (() => {
+                          const rawHtml = currentDetoxSession.detoxNotes || currentDetoxSession.notes;
+                          const imgSrcs = extractImgSrcsFromHtml(rawHtml);
+                          const textOnlyHtml = rawHtml.replace(/<span class="img-wrap"[^>]*>[\s\S]*?<\/span>/gi, '').replace(/<img[^>]*>/gi, '').replace(/^(<br\s*\/?>)+|(<br\s*\/?>)+$/gi, '').trim();
+                          
+                          return (
+                            <div>
+                              <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                                <Activity className="w-3.5 h-3.5" /> Detox Procedure Notes
+                              </div>
+                              <div className={`bg-slate-50 rounded-xl border border-slate-100 ${textOnlyHtml && textOnlyHtml !== '<br>' ? 'p-4' : 'p-3'}`}>
+                                {textOnlyHtml && textOnlyHtml !== '<br>' ? (
+                                  <div className="consultation-notes-content mb-2" dangerouslySetInnerHTML={{ __html: textOnlyHtml }} />
+                                ) : (
+                                  !imgSrcs.length && <p className="text-slate-500 text-sm italic">No notes recorded.</p>
+                                )}
+                                {imgSrcs.length > 0 && (
+                                  <ImageCardGrid
+                                    images={imgSrcs.map(url => ({ url, name: url.split('/').pop() || 'image.jpg' }))}
+                                    onPreview={(src, allImages, idx) => { setPreviewImages(allImages || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }}
+                                    noSeparator={!(textOnlyHtml && textOnlyHtml !== '<br>')}
+                                  />
+                                )}
+                              </div>
                             </div>
-                            <div
-                              className="consultation-notes-content bg-slate-50 p-4 rounded-xl border border-slate-100"
-                              dangerouslySetInnerHTML={{ __html: currentDetoxSession.detoxNotes || currentDetoxSession.notes || '<p class="text-slate-500">No notes recorded.</p>' }}
-                            />
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {(currentDetoxSession.followupDate || currentDetoxSession.followup_date) && (
                           <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
@@ -1812,7 +1900,7 @@ export default function PatientHistoryModal({
                       <NewConsToolbar refEl={newConsMedHistoryRef} setter={setNewConsMedHistory} sectionKey="medHistory" />
                       <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <div ref={newConsMedHistoryRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsMedHistory(e.currentTarget.innerHTML)} className={newConsEditorClass('medHistory')} />
-                        <ImageCardGrid images={uploadedImagesMap['medHistory'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="medHistory" allowRemove noSeparator hideSave />
+                        <ImageCardGrid images={uploadedImagesMap['medHistory'] || []} onPreview={(src, all, idx) => { setPreviewImages(all || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }} sectionKey="medHistory" allowRemove noSeparator hideSave />
                       </div>
                     </div>
                   </div>
@@ -1822,7 +1910,7 @@ export default function PatientHistoryModal({
                       <NewConsToolbar refEl={newConsNotesRef} setter={setNewConsNotes} sectionKey="consNotes" />
                       <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <div ref={newConsNotesRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsNotes(e.currentTarget.innerHTML)} className={newConsEditorClass('consNotes')} />
-                        <ImageCardGrid images={uploadedImagesMap['consNotes'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="consNotes" allowRemove noSeparator hideSave />
+                        <ImageCardGrid images={uploadedImagesMap['consNotes'] || []} onPreview={(src, all, idx) => { setPreviewImages(all || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }} sectionKey="consNotes" allowRemove noSeparator hideSave />
                       </div>
                     </div>
                   </div>
@@ -1832,7 +1920,7 @@ export default function PatientHistoryModal({
                       <NewConsToolbar refEl={newConsReportsRef} setter={setNewConsReports} sectionKey="medReports" />
                       <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <div ref={newConsReportsRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setNewConsReports(e.currentTarget.innerHTML)} className={newConsEditorClass('medReports')} />
-                        <ImageCardGrid images={uploadedImagesMap['medReports'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="medReports" allowRemove noSeparator hideSave />
+                        <ImageCardGrid images={uploadedImagesMap['medReports'] || []} onPreview={(src, all, idx) => { setPreviewImages(all || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }} sectionKey="medReports" allowRemove noSeparator hideSave />
                       </div>
                     </div>
                   </div>
@@ -1842,7 +1930,7 @@ export default function PatientHistoryModal({
                       <NewConsToolbar refEl={detoxProcedureEditorRef} setter={setDetoxProcedureNote} sectionKey="detoxProc" />
                       <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <div ref={detoxProcedureEditorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setDetoxProcedureNote(e.currentTarget.innerHTML)} className={newConsEditorClass('detoxProc')} />
-                        <ImageCardGrid images={uploadedImagesMap['detoxProc'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="detoxProc" allowRemove noSeparator hideSave />
+                        <ImageCardGrid images={uploadedImagesMap['detoxProc'] || []} onPreview={(src, all, idx) => { setPreviewImages(all || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }} sectionKey="detoxProc" allowRemove noSeparator hideSave />
                       </div>
                     </div>
                   </div>
@@ -1857,7 +1945,7 @@ export default function PatientHistoryModal({
                       <NewConsToolbar refEl={dietPlanEditorRef} setter={setDietPlanNote} sectionKey="dietPlan" />
                       <div className="rounded-2xl border border-slate-200 bg-white p-3">
                         <div ref={dietPlanEditorRef} contentEditable tabIndex={0} suppressContentEditableWarning onBlur={e => setDietPlanNote(e.currentTarget.innerHTML)} className={newConsEditorClass('dietPlan')} />
-                        <ImageCardGrid images={uploadedImagesMap['dietPlan'] || []} onPreview={src => { setPreviewImageSrc(src); setPreviewZoom(1); }} sectionKey="dietPlan" allowRemove noSeparator hideSave />
+                        <ImageCardGrid images={uploadedImagesMap['dietPlan'] || []} onPreview={(src, all, idx) => { setPreviewImages(all || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }} sectionKey="dietPlan" allowRemove noSeparator hideSave />
                       </div>
                     </div>
                   </div>
@@ -2010,25 +2098,298 @@ export default function PatientHistoryModal({
         </div>
       )}
 
+      {/* Add Detox Modal */}
+      {showAddDetox && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto" onClick={() => setShowAddDetox(false)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"></div>
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl shadow-xl max-w-5xl w-full modal-animate overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              <style>{`
+                .editor-content ul, .editor-content ol { margin-top: 0.5rem; margin-bottom: 0.5rem; padding-left: 1.5rem; }
+                .editor-content ul { list-style-type: disc; }
+                .editor-content ol { list-style-type: decimal; }
+                .editor-content li { margin-bottom: 0.25rem; }
+                .editor-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; border: 1px solid #e2e8f0; }
+                .editor-content .img-wrap { position: relative; display: inline-block; margin: 8px 4px 8px 0; vertical-align: middle; max-width: 100%; }
+                .editor-content .img-wrap img { margin: 0; display: block; }
+              `}</style>
+              <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                    <Droplets className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">New Detox Session</h2>
+                    <p className="text-xs text-emerald-100">{patient.name}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAddDetox(false)} className="p-2 rounded-full hover:bg-white/10 transition text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="modal-content-scroll overflow-y-auto" style={{ maxHeight: 'calc(96vh - 90px)' }}>
+                {/* Header Info */}
+                <div className="p-5 bg-slate-50 flex justify-between items-center border-b border-slate-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">{patient.name}</h2>
+                    <span className="text-sm text-slate-500">ID: P-{patient.id || patient.patientId} • Phone: {patient.phone?.replace(/\D/g, '').slice(-10) || '--'}</span>
+                  </div>
+                  <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-sm font-bold border border-emerald-200">Session in Progress</div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> 1. Detox Session Details</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Assigned Doctor</label>
+                      <select value={detoxDoctorId} onChange={(e) => setDetoxDoctorId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                        <option value="">Select Doctor...</option>
+                        {doctorSelectOptions.map(d => (<option key={d.id} value={String(d.id)}>Dr. {d.name || d.user?.fullName} — {d.specialization || 'General'}</option>))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Session Date</label>
+                      <input type="date" value={detoxSessionDate} max={new Date().toISOString().split('T')[0]} onChange={(e) => setDetoxSessionDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                  </div>
+                  {/* Session Type */}
+                  <div className="mb-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Activity className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">Select Session Type</span>
+                    </div>
+                    {(() => {
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setSessionType('morning')}
+                            className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
+                              sessionType === 'morning'
+                                ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                : 'border-slate-200 bg-white hover:border-emerald-300'
+                            }`}
+                          >
+                            <Sun className={`w-6 h-6 ${sessionType === 'morning' ? 'text-emerald-600' : 'text-amber-500'}`} />
+                            <span className={`font-semibold text-sm ${sessionType === 'morning' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              Morning Session
+                            </span>
+                            <span className="text-xs text-slate-500">8:00 AM - 12:00 PM</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setSessionType('evening')}
+                            className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
+                              sessionType === 'evening'
+                                ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                : 'border-slate-200 bg-white hover:border-emerald-300'
+                            }`}
+                          >
+                            <Moon className={`w-6 h-6 ${sessionType === 'evening' ? 'text-emerald-600' : 'text-indigo-500'}`} />
+                            <span className={`font-semibold text-sm ${sessionType === 'evening' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              Evening Session
+                            </span>
+                            <span className="text-xs text-slate-500">4:00 PM - 8:00 PM</span>
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => setSessionType('fullDay')}
+                            className={`relative p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2 ${
+                              sessionType === 'fullDay'
+                                ? 'border-emerald-500 bg-emerald-50 shadow-md'
+                                : 'border-slate-200 bg-white hover:border-emerald-300'
+                            }`}
+                          >
+                            <SunMoon className={`w-6 h-6 ${sessionType === 'fullDay' ? 'text-emerald-600' : 'text-purple-500'}`} />
+                            <span className={`font-semibold text-sm ${sessionType === 'fullDay' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                              Full Day Session
+                            </span>
+                            <span className="text-xs text-slate-500">8:00 AM - 8:00 PM</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Detox Notes */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-bold text-slate-700 uppercase tracking-wider">Detox Session Notes <span className="text-rose-500">*</span></span>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 mb-3 transition-all focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500">
+                      <NewConsToolbar refEl={newDetoxNotesRef} setter={setNewDetoxNotes} sectionKey="detoxNotes" />
+                      <div className="relative bg-white rounded-xl border border-slate-200 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all mt-3">
+                        <div ref={newDetoxNotesRef} contentEditable tabIndex={0} suppressContentEditableWarning onInput={e => setNewDetoxNotes(e.currentTarget.innerHTML)} className="editor-content min-h-[120px] p-4 text-sm leading-6 text-slate-800 focus:outline-none" />
+                        {!newDetoxNotes && <div className="absolute top-4 left-4 text-slate-400 text-sm pointer-events-none">Enter detox procedure notes for Session {detoxSessions.length + 1}...</div>}
+                        {(uploadedImagesMap['detoxNotes'] || []).length > 0 && (
+                          <div className="px-4 pb-4">
+                            <ImageCardGrid
+                              images={uploadedImagesMap['detoxNotes'] || []}
+                              allowRemove
+                              onRemove={(url) => setUploadedImagesMap(prev => ({ ...prev, detoxNotes: (prev.detoxNotes || []).filter(i => i.url !== url) }))}
+                              onPreview={(src, all, idx) => { setPreviewImages(all || [{url: src}]); setPreviewImageIndex(idx || 0); setPreviewZoom(1); }}
+                              noSeparator
+                              hideSave
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recommendations */}
+                  <div className={`p-5 mb-6 border border-slate-100 rounded-xl ${reviewRecommended ? 'bg-amber-50 border-amber-200' : 'bg-slate-50'}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <input 
+                        type="checkbox" 
+                        id="followupCheckDetox" 
+                        checked={reviewRecommended}
+                        onChange={e => setReviewRecommended(e.target.checked)}
+                        className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <label htmlFor="followupCheckDetox" className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <CalendarIcon className="w-4 h-4 text-amber-600" />
+                        Recommend Follow-up
+                      </label>
+                    </div>
+                    {reviewRecommended && (
+                      <div className="ml-6 mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="block text-xs font-semibold text-slate-600 flex items-center gap-1">
+                              <CalendarIcon className="w-3 h-3" /> Follow-up Date
+                            </label>
+                            <input
+                              type="date"
+                              value={detoxFollowupDate}
+                              onChange={e => setDetoxFollowupDate(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-slate-600 flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3" /> Remarks for Receptionist
+                          </label>
+                          <textarea
+                            value={detoxFollowupRemarks}
+                            onChange={e => setDetoxFollowupRemarks(e.target.value)}
+                            rows={3}
+                            placeholder="Enter follow-up instructions for the receptionist..."
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Admission Recommendation */}
+                  <div className={`p-5 mb-6 border border-slate-100 rounded-xl ${admissionRecommended ? 'bg-sky-50 border-sky-200' : 'bg-slate-50'}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <input 
+                        type="checkbox" 
+                        id="admissionCheckDetox" 
+                        checked={admissionRecommended}
+                        onChange={e => setAdmissionRecommended(e.target.checked)}
+                        className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500 cursor-pointer"
+                      />
+                      <label htmlFor="admissionCheckDetox" className="font-bold text-slate-800 text-sm">Recommend for Admission</label>
+                    </div>
+                    {admissionRecommended && (
+                      <div className="ml-6 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-600"><User className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Admission Doctor</label>
+                            <select value={admissionDoctorId} onChange={e => setAdmissionDoctorId(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500">
+                              <option value="">Select Admission Doctor</option>
+                              {doctorSelectOptions.map(d => (
+                                <option key={d.id} value={d.id}>{d.name || d.user?.fullName}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-600"><CalendarIcon className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Admission Date</label>
+                            <input type="date" value={admissionDate} onChange={e => setAdmissionDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-600"><MessageSquare className="inline w-3.5 h-3.5 mr-1 text-sky-600" />Remarks for Receptionist</label>
+                          <textarea 
+                            rows={2} 
+                            placeholder="Enter remarks for admission..." 
+                            value={admissionRemarks}
+                            onChange={e => setAdmissionRemarks(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
+                          />
+                        </div>
+                        <p className="text-xs text-sky-700 mt-1.5 font-medium">The patient will be scheduled for admission under the selected doctor.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Save Actions */}
+                <div className="p-5 bg-slate-50 flex flex-wrap justify-end gap-3 border-t border-slate-100">
+                  <button onClick={() => setShowAddDetox(false)} disabled={isSavingNewDetox} className="bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold py-2.5 px-6 rounded-lg text-sm transition-colors shadow-sm disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button onClick={handleCreateDetoxSession} disabled={isSavingNewDetox} className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 rounded-lg text-sm flex items-center gap-2 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSavingNewDetox ? (<><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>) : (<><Save className="w-4 h-4" /> Save Detox Session</>)}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Image Zoom Preview Modal */}
-      {previewImageSrc && (
-        <div className="fixed inset-0 z-[80] bg-black/85 flex items-center justify-center p-6" onClick={() => { setPreviewImageSrc(''); setPreviewZoom(1); }}>
+      {previewImages?.length > 0 && (
+        <div className="fixed inset-0 z-[999] bg-black/85 flex items-center justify-center p-6" onClick={() => { setPreviewImages([]); setPreviewImageIndex(0); setPreviewZoom(1); }}>
+          {previewImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreviewImageIndex(i => (i > 0 ? i - 1 : previewImages.length - 1)); setPreviewZoom(1); }}
+              className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-10"
+              title="Previous Image"
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+          )}
           <div ref={previewZoomRef} className="flex items-center justify-center w-full h-full" onClick={(e) => e.stopPropagation()}>
             <img
-              src={previewImageSrc}
+              src={previewImages[previewImageIndex]?.url}
               alt="Zoomed preview"
               className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain select-none"
               style={{ transform: `scale(${previewZoom})`, transition: 'transform 0.2s ease' }}
             />
           </div>
+          {previewImages.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setPreviewImageIndex(i => (i < previewImages.length - 1 ? i + 1 : 0)); setPreviewZoom(1); }}
+              className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/30 text-white flex items-center justify-center transition-colors z-10"
+              title="Next Image"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => { setPreviewImageSrc(''); setPreviewZoom(1); }}
+            onClick={() => { setPreviewImages([]); setPreviewImageIndex(0); setPreviewZoom(1); }}
             className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition-colors"
             title="Close"
           >
             ✕
           </button>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white font-semibold text-sm bg-black/40 px-3 py-1 rounded-full">
+            {previewImageIndex + 1} of {previewImages.length}
+          </div>
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/40 backdrop-blur rounded-full px-4 py-2" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
