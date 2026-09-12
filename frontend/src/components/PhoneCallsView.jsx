@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PhoneCall, CalendarPlus, CheckCircle, Search } from 'lucide-react';
+import { formatDateDisplay } from '../utils/dateFormatter';
 
 export default function PhoneCallsView({ phoneCalls, onAddCall, onBookFromCall }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -92,7 +93,7 @@ export default function PhoneCallsView({ phoneCalls, onAddCall, onBookFromCall }
                 {filteredCalls.map(call => (
                   <tr key={call.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-4">
-                      <span className="font-medium text-slate-800 block">{call.date}</span>
+                      <span className="font-medium text-slate-800 block">{formatDateDisplay(call.date)}</span>
                       <span className="text-slate-500 text-xs">{call.time}</span>
                     </td>
                     <td className="py-3 px-4">

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, ShieldAlert, Users } from 'lucide-react';
+import { formatDateDisplay } from '../utils/dateFormatter';
 
 export default function ReportsView({
   patients,
@@ -111,7 +112,7 @@ export default function ReportsView({
                     <div key={c.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 mb-2">
                       <div className="flex justify-between font-bold text-slate-800">
                         <span>Doctor: {c.doctor_name}</span>
-                        <span className="text-slate-500">Date: {c.date}</span>
+                        <span className="text-slate-500">Date: {formatDateDisplay(c.date)}</span>
                       </div>
                       <p className="text-slate-600"><strong className="text-slate-700">Diagnosis:</strong> {c.diagnosis}</p>
                       <p className="text-slate-600"><strong className="text-slate-700">Vitals:</strong> BP: {c.vitals?.bp} | Weight: {c.vitals?.weight} | Pulse: {c.vitals?.pulse}</p>

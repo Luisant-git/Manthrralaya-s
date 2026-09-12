@@ -607,7 +607,10 @@ export default function PatientHistoryModal({
     if (!dateStr) return 'Not scheduled';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
-    return date.toISOString().split('T')[0];
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const getSessionTypeDisplay = (type) => {
@@ -1081,7 +1084,7 @@ export default function PatientHistoryModal({
                           </div>
                           <div className="text-right">
                             <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
-                              {currentConsultation.date}
+                              {formatDate(currentConsultation.date)}
                             </div>
                             <div className="text-[10px] text-slate-400 mt-1">Visit Date</div>
                           </div>

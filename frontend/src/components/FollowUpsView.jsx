@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { updateReceptionistFollowup, sendFollowupReminder } from '../api/consultationApi';
 import { toast } from 'react-toastify';
+import { formatDateDisplay } from '../utils/dateFormatter';
 
 export default function FollowUpsView({ patients = [], consultations = [], appointments = [], followups = [], detoxSessions = [], onRefresh }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -457,7 +458,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                     <td className="py-4 px-4 whitespace-nowrap">
                       <div className="flex flex-col">
                         <span className={`font-bold ${isOverdue ? 'text-rose-600' : isToday ? 'text-blue-600' : isTomorrow ? 'text-amber-600' : 'text-slate-800'}`}>
-                          {new Date(fup.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          {formatDateDisplay(fup.actionDate)}
                         </span>
                         {isToday && <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Call Today</span>}
                         {isTomorrow && <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Call Tomorrow</span>}
@@ -488,7 +489,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                         <div className="flex items-center gap-1.5">
                           <CalendarIcon className="w-3.5 h-3.5 text-emerald-500" />
                           <span className="font-semibold text-emerald-700">
-                            {new Date(fup.doctorDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {formatDateDisplay(fup.doctorDate)}
                           </span>
                         </div>
                       ) : (
@@ -501,7 +502,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                           <div className="flex items-center gap-1.5">
                              <CalendarIcon className="w-3.5 h-3.5 text-blue-500" />
                             <span className="font-semibold text-blue-700">
-                              {new Date(fup.receptionistDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              {formatDateDisplay(fup.receptionistDate)}
                             </span>
                           </div>
                          
@@ -680,7 +681,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Doctor's Date</p>
             {viewingFup.doctorDate ? (
               <p className="text-base font-bold text-emerald-800">
-                {new Date(viewingFup.doctorDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {formatDateDisplay(viewingFup.doctorDate)}
               </p>
             ) : (
               <p className="text-sm text-slate-400 italic">Not set</p>
@@ -696,7 +697,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
             <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2">Reception Update</p>
             {viewingFup.receptionistDate ? (
               <p className="text-base font-bold text-blue-800">
-                {new Date(viewingFup.receptionistDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {formatDateDisplay(viewingFup.receptionistDate)}
               </p>
             ) : (
               <p className="text-sm text-slate-400 italic">No update</p>
@@ -715,7 +716,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
           <div>
             <p className="text-xs font-bold text-amber-600 uppercase tracking-wider">Call Patient On</p>
             <p className="text-base font-bold text-amber-800 mt-0.5">
-              {new Date(viewingFup.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              {formatDateDisplay(viewingFup.actionDate)}
             </p>
           </div>
         </div>
@@ -757,7 +758,7 @@ export default function FollowUpsView({ patients = [], consultations = [], appoi
                 {editingFup.doctorDate && (
                   <div className="text-sm font-semibold text-emerald-800 mt-1 flex items-center gap-1.5">
                     <CalendarIcon className="w-4 h-4 text-emerald-500" />
-                    {new Date(editingFup.doctorDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {formatDateDisplay(editingFup.doctorDate)}
                   </div>
                 )}
                 <p className="text-sm text-emerald-900 mt-2 leading-relaxed">

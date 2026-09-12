@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets, Filter } from 'lucide-react';
 import PatientHistoryModal from './PatientHistoryModal';
 import { updateAppointmentStatus } from '../api/appointmentApi';
+import { formatDateDisplay } from '../utils/dateFormatter';
 
 export default function DashboardView({ 
   patients, 
@@ -668,7 +669,7 @@ const allPendingFollowUps = React.useMemo(() => {
           <Calendar className="w-16 h-16 text-blue-400 mx-auto mb-4" />
           <h3 className="text-lg font-bold text-blue-800 mb-2">No Appointments Today</h3>
           <p className="text-blue-700">
-            You don't have any appointments scheduled for today ({todayDate.split('-').reverse().join('/')}).
+            You don't have any appointments scheduled for today ({formatDateDisplay(todayDate)}).
           </p>
           <p className="text-sm text-blue-600 mt-2">
             Check with the receptionist to schedule appointments or view other days in the appointments tab.
@@ -1109,7 +1110,7 @@ const allPendingFollowUps = React.useMemo(() => {
                           <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                             <div>
                               <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Date</span>
-                              <span className="font-semibold text-slate-700">{appt.date || todayDate}</span>
+                              <span className="font-semibold text-slate-700">{formatDateDisplay(appt.date || todayDate)}</span>
                             </div>
                             <div>
                               <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Session</span>
@@ -1199,7 +1200,7 @@ const allPendingFollowUps = React.useMemo(() => {
                               ) : null}
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">
-                              <strong className="text-slate-800 block">{appt.date || todayDate}</strong>
+                              <strong className="text-slate-800 block">{formatDateDisplay(appt.date || todayDate)}</strong>
                               <span className="text-slate-500 block text-[11px] font-medium mt-0.5">Session: {appt.session || 'FN'}</span>
                             </td>
                             <td className="py-3 px-4 min-w-[180px]">
@@ -1278,10 +1279,10 @@ const allPendingFollowUps = React.useMemo(() => {
                       </div>
                       <div className="text-left sm:text-right">
                         <span className={`font-bold ${isOverdue ? 'text-rose-600' : isToday ? 'text-blue-600' : 'text-slate-800'}`}>
-                          Call: {new Date(item.actionDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                          Call: {formatDateDisplay(item.actionDate)}
                         </span>
                         <span className="text-[11px] font-medium text-slate-500 ml-1.5 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                          Appt: {new Date(item.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                          Appt: {formatDateDisplay(item.date)}
                         </span>
                       </div>
                     </div>

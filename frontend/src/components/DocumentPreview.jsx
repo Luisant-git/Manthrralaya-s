@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, Printer } from 'lucide-react';
+import { formatDateDisplay } from '../utils/dateFormatter';
 
 export default function DocumentPreview({
   prescriptions,
@@ -123,7 +124,7 @@ export default function DocumentPreview({
             </div>
             <div className="text-right">
               <span className="text-slate-500 text-[10px] block font-bold uppercase mb-0.5">Date Issued:</span>
-              <strong className="text-slate-800">{activePrescription.date || new Date().toISOString().split('T')[0]}</strong>
+              <strong className="text-slate-800">{formatDateDisplay(activePrescription.date || new Date().toISOString())}</strong>
             </div>
           </div>
 

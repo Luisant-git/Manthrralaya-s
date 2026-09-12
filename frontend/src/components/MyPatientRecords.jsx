@@ -519,7 +519,10 @@ export default function UnifiedPatientRecords({
     if (!dateStr) return 'Not scheduled';
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
-    return date.toISOString().split('T')[0];
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const handlePhoneChange = (e) => {
@@ -931,7 +934,7 @@ export default function UnifiedPatientRecords({
                         <td className="py-4 px-4 align-top text-slate-600 text-sm">
                           {latestAppointment ? (
                             <>
-                              <div>{latestAppointment.date}</div>
+                              <div>{formatDate(latestAppointment.date)}</div>
                               {latestAppointment.time && <div className="text-xs text-slate-500">{latestAppointment.time}</div>}
                               {latestAppointment.status === 'Started Detox' && (
                                 <div className="mt-1.5 inline-flex px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200 text-[10px] font-bold uppercase tracking-wider items-center gap-1 w-fit"><Droplets className="w-2.5 h-2.5"/>In Detox</div>

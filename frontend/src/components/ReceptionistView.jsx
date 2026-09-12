@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getPatientByPhone, createPatient, updatePatient } from '../api/patientApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
 import { toast } from 'react-toastify';
+import { formatDateDisplay } from '../utils/dateFormatter';
 import { 
   UserPlus, 
   Clock, 
@@ -1326,7 +1327,7 @@ export default function ReceptionistView({
                             {fDate ? (
                               <div className="mt-1.5 p-1.5 bg-indigo-50 rounded-lg border border-indigo-100">
                                 <span className="text-indigo-600 text-[9px] font-bold block uppercase">Recommended Follow-up:</span>
-                                <span className="text-slate-700 text-[10px] font-bold block">{new Date(fDate).toLocaleDateString()}</span>
+                                <span className="text-slate-700 text-[10px] font-bold block">{formatDateDisplay(fDate)}</span>
                                 {fDocName && (
                                   <span className="text-slate-500 text-[9px] block">With: Dr. {fDocName}</span>
                                 )}
@@ -1483,7 +1484,7 @@ export default function ReceptionistView({
                             {isCancelled && <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-700 px-3 py-1 text-xs font-semibold"><X className="w-3.5 h-3.5" /> Cancelled</span>}
                            </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
-                            <strong className="text-slate-800 block">{getAppointmentDateOnly(appt)}</strong>
+                            <strong className="text-slate-800 block">{formatDateDisplay(getAppointmentDateOnly(appt))}</strong>
                             <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
                            </td>
                           <td className="py-3 px-4 align-top min-w-0">

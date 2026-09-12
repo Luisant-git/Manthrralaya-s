@@ -1,5 +1,21 @@
 import React, { useState } from 'react';
-import { Star, Download, Calendar, ShieldCheck, User, ClipboardList, PenTool } from 'lucide-react';
+import { 
+  User, 
+  MapPin, 
+  Phone, 
+  Droplets, 
+  Activity, 
+  Calendar,
+  ChevronRight,
+  LogOut,
+  Stethoscope,
+  ClipboardList,
+  Star,
+  Download,
+  ShieldCheck,
+  PenTool
+} from 'lucide-react';
+import { formatDateDisplay } from '../utils/dateFormatter';
 import { toast } from 'react-toastify';
 
 export default function PatientPortalView({
@@ -100,7 +116,7 @@ export default function PatientPortalView({
               {ptAppointments.map(appt => (
                 <div key={appt.id} className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex justify-between items-center text-sm">
                   <div>
-                    <span className="font-bold text-slate-800 block">{appt.date} • {appt.time}</span>
+                    <span className="font-bold text-slate-800 block">{formatDateDisplay(appt.date)} • {appt.time}</span>
                     <span className="text-slate-500 text-xs">Method: {appt.source}</span>
                   </div>
                   <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${

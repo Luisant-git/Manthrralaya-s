@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Plus, UserPlus, Activity, FileText, Eye, X, Loader2, RefreshCw, Pencil } from 'lucide-react';
-import { getAllPatients, createPatient, updatePatient } from '../api/patientApi';
+import { getAllPatients, createPatient, updatePatient, deletePatient } from '../api/patientApi';
 import { getSharesForDoctor } from '../api/shareApi';
 import { toast } from 'react-toastify';
+import { formatDateDisplay } from '../utils/dateFormatter';
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
 export default function PatientsView({ appointments = [], followups = [], consultations = [], detoxSessions = [], onAddPatient, onSelectPatient, onRefreshConsultations, activeRole = '', currentUser = '', doctors = [] }) {
@@ -671,7 +672,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
             <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-lg">{viewingPatient.name?.charAt(0) || 'P'}</div>
-                <div><h2 className="text-xl font-bold text-slate-800">{viewingPatient.name}</h2><p className="text-slate-500 text-sm font-medium">P-{viewingPatient.id} • Registered {viewingPatient.createdAt ? new Date(viewingPatient.createdAt).toISOString().split('T')[0] : 'N/A'}</p></div>
+                <div><h2 className="text-xl font-bold text-slate-800">{viewingPatient.name}</h2><p className="text-slate-500 text-sm font-medium">P-{viewingPatient.id} • Registered {viewingPatient.createdAt ? formatDateDisplay(viewingPatient.createdAt) : 'N/A'}</p></div>
               </div>
               <button onClick={() => setViewingPatient(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
             </div>
@@ -688,7 +689,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2 pb-1 border-b border-slate-100">Clinical Details</h3>
               <ul className="mb-4">
                 <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50"><span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Appointment Type</span><span className="font-medium text-slate-800 text-sm">{getLatestAppointmentType(viewingPatient.id)}</span></li>
-                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50"><span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Next Follow-up Date</span><span className="font-medium text-slate-800 text-sm">{(() => { const info = getFollowupInfo(viewingPatient.id); if (!info || !info.date) return 'No follow-up'; return `${new Date(info.date).toLocaleDateString('en-GB')} (${info.status})`; })()}</span></li>
+                <li className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-1 border-b border-slate-50"><span className="text-xs font-semibold text-slate-400 uppercase mb-1 sm:mb-0">Next Follow-up Date</span><span className="font-medium text-slate-800 text-sm">{(() => { const info = getFollowupInfo(viewingPatient.id); if (!info || !info.date) return 'No follow-up'; return `${formatDateDisplay(info.date)} (${info.status})`; })()}</span></li>
               </ul>
               <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                 <span className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Primary Medical Conditions / Notes</span>

@@ -16,6 +16,7 @@ import MyPatientRecords from './components/MyPatientRecords';
 import PatientTimeline from './components/PatientTimeline';
 import DocumentPreview from './components/DocumentPreview';
 import LoginView from './components/LoginView';
+import { formatDateDisplay } from './utils/dateFormatter';
 import ReceptionistView from './components/ReceptionistView';
 import DoctorMasterView from './components/DoctorMasterView';
 import UserManagementView from './components/UserManagementView';
@@ -449,7 +450,7 @@ export default function App() {
       const docName = doctorObj ? doctorObj.name : 'our specialist';
       const waLog = {
         id: `WA-${900 + whatsappLogs.length + 1}`, patient_id: patientObj.id, patient_name: patientObj.name, phone: patientObj.phone,
-        type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${newAppt.date} at ${newAppt.time}. - Manthrralaya's Wellness`,
+        type: 'Booking Confirmation', message_text: `Dear ${patientObj.name}, your appointment with ${docName} is confirmed for ${formatDateDisplay(newAppt.date)} at ${newAppt.time}. - Manthrralaya's Wellness`,
         sent_at: new Date().toISOString().replace('T', ' ').substring(0, 16), status: 'Delivered', template_name: 'appointment_confirm'
       };
       setWhatsappLogs(prev => [...prev, waLog]);
@@ -820,7 +821,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 font-inter">
+    <div className="h-screen flex flex-col bg-slate-50 font-inter">
       <Header
         activeRole={activeRole}
         currentUser={currentUser}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Star, Heart } from 'lucide-react';
+import { formatDateDisplay } from '../utils/dateFormatter';
 
 export default function ReviewsView({ reviews }) {
   const avgRating = reviews.length > 0
@@ -29,7 +30,7 @@ export default function ReviewsView({ reviews }) {
             <div>
               <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                 <span className="font-bold text-slate-800 text-sm">{rev.patient_name}</span>
-                <span className="text-xs text-slate-400 font-medium">{rev.date}</span>
+                <span className="text-xs text-slate-400 font-medium">{formatDateDisplay(rev.date)}</span>
               </div>
               
               <div className="flex space-x-1 mt-3">
