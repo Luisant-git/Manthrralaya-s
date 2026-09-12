@@ -22,7 +22,7 @@ export default function AppointmentsView({
   // Server-side pagination for the schedule log (Patient Records UI style)
   const [serverPage, setServerPage] = useState(1);
   const serverPageSize = 8;
-  const appointmentTypeOptions = ['New consultation', 'Detox', 'Review', 'Follow-up'];
+  const appointmentTypeOptions = ['New consultation', 'Detox (FN)', 'Detox (AN)', 'Admission', 'Dorn', 'Review', 'Others'];
   const [serverItems, setServerItems] = useState([]);
   const [totalBooked, setTotalBooked] = useState(0);
   const [loadingAppointments, setLoadingAppointments] = useState(false);
@@ -134,15 +134,15 @@ export default function AppointmentsView({
   };
 
   const getFinalFollowupType = (patientId, defaultType) => {
-    if (hasCompletedThreeDetoxSessions(patientId)) return 'Review';
     const type = normalizeString(defaultType);
+    if (hasCompletedThreeDetoxSessions(patientId) && type.toLowerCase().includes('detox')) return 'Review';
     return type || 'Review';
   };
 
   const getFinalAppointmentType = (patientId, rawType) => {
-    if (hasCompletedThreeDetoxSessions(patientId)) return 'Review';
     const type = normalizeString(rawType);
-    return type || 'Review';
+    if (hasCompletedThreeDetoxSessions(patientId) && type.toLowerCase().includes('detox')) return 'Review';
+    return type || rawType || 'General';
   };
 
   const getNextDetoxSessionValue = (patientId) => {

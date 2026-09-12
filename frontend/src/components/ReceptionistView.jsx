@@ -585,7 +585,7 @@ export default function ReceptionistView({
         patientId: Number(patientObj.id),
         doctorId: formData.doctor_id ? parseInt(formData.doctor_id) : null,
         appointmentDate: formData.date,
-        appointmentType: formData.appointmentType?.startsWith('Detox') ? 'Detox' : formData.appointmentType,
+        appointmentType: formData.appointmentType,
         session: formData.session,
         notes: formData.notes,
         status: type === 'waiting' ? 'Waiting' : 'Scheduled'
@@ -644,7 +644,7 @@ export default function ReceptionistView({
         await updateAppointment(waitingAppt.id, {
           doctorId: doctorIdValue,
           appointmentDate: modalBookingData.date || waitingAppt.appointmentDate || waitingAppt.date,
-          appointmentType: (modalBookingData.appointmentType || waitingAppt.appointmentType)?.startsWith('Detox') ? 'Detox' : (modalBookingData.appointmentType || waitingAppt.appointmentType),
+          appointmentType: modalBookingData.appointmentType || waitingAppt.appointmentType,
           session: modalBookingData.session || waitingAppt.session,
           notes: modalBookingData.notes || waitingAppt.notes
         });
@@ -1234,18 +1234,23 @@ export default function ReceptionistView({
                 }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
                   {availableDoctors.find(d => String(d.id) === String(formData.doctor_id))?.role === 'THERAPIST' ? (
                     <>
+                      <option value="New consultation">New consultation</option>
                       <option value="Detox (FN)">Detox (FN)</option>
                       <option value="Detox (AN)">Detox (AN)</option>
-                      <option value="Detox (Full Day)">Detox (Full Day)</option>
+                      <option value="Admission">Admission</option>
+                      <option value="Dorn">Dorn</option>
                       <option value="Review">Review</option>
+                      <option value="Others">Others</option>
                     </>
                   ) : (
                     <>
-                      <option value="New consultation">New Consultation</option>
+                      <option value="New consultation">New consultation</option>
                       <option value="Detox (FN)">Detox (FN)</option>
                       <option value="Detox (AN)">Detox (AN)</option>
-                      <option value="Detox (Full Day)">Detox (Full Day)</option>
+                      <option value="Admission">Admission</option>
+                      <option value="Dorn">Dorn</option>
                       <option value="Review">Review</option>
+                      <option value="Others">Others</option>
                     </>
                   )}
                 </select>
@@ -1424,8 +1429,12 @@ export default function ReceptionistView({
                     <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-8 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all appearance-none cursor-pointer">
                       <option value="all">All Types</option>
                       <option value="New consultation">New Consultation</option>
-                      <option value="Detox">Detox</option>
+                      <option value="Detox">Detox (FN)</option>
+                      <option value="Detox (AN)">Detox (AN)</option>
+                      <option value="Admission">Admission</option>
+                      <option value="Dorn">Dorn</option>
                       <option value="Review">Review</option>
+                      <option value="Others">Others</option>
                     </select>
                   </div>
                   <div className="relative">
@@ -1623,18 +1632,23 @@ export default function ReceptionistView({
                   }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500">
                     {doctors.find(d => String(d.id) === String(modalBookingData.doctor_id))?.role === 'THERAPIST' ? (
                       <>
+                        <option value="New consultation">New consultation</option>
                         <option value="Detox (FN)">Detox (FN)</option>
                         <option value="Detox (AN)">Detox (AN)</option>
-                        <option value="Detox (Full Day)">Detox (Full Day)</option>
+                        <option value="Admission">Admission</option>
+                        <option value="Dorn">Dorn</option>
                         <option value="Review">Review</option>
+                        <option value="Others">Others</option>
                       </>
                     ) : (
                       <>
-                        <option value="New consultation">New Consultation</option>
+                        <option value="New consultation">New consultation</option>
                         <option value="Detox (FN)">Detox (FN)</option>
                         <option value="Detox (AN)">Detox (AN)</option>
-                        <option value="Detox (Full Day)">Detox (Full Day)</option>
+                        <option value="Admission">Admission</option>
+                        <option value="Dorn">Dorn</option>
                         <option value="Review">Review</option>
+                        <option value="Others">Others</option>
                       </>
                     )}
                   </select>

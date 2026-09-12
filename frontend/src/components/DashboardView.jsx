@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets, Filter } from 'lucide-react';
+import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets, Filter, XCircle, CalendarDays, CheckCircle2 } from 'lucide-react';
 import PatientHistoryModal from './PatientHistoryModal';
 import { updateAppointmentStatus } from '../api/appointmentApi';
 import { formatDateDisplay } from '../utils/dateFormatter';
@@ -87,6 +87,39 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   const totalPatients = patients?.length ?? 0;
   const todaysAppts = appointments?.filter(a => a.date === todayDate).length ?? 0;
   const activeStays = stayManagement?.filter(s => s.status === 'Admitted').length ?? 0;
+
+  // ── Admin Dashboard: Today-only stat cards ──
+  const adminTodayAppts = (appointments || []).filter(a => a.date === todayDate);
+  const getApptTypeLabel = (appt) => {
+    const t = String(appt?.appointmentType || '').toLowerCase();
+    const session = String(appt?.session || '').toUpperCase();
+    if (t === 'detox' && session === 'FN') return 'detoxFN';
+    if (t === 'detox' && session === 'AN') return 'detoxAN';
+    if (t.includes('detox') && t.includes('fn')) return 'detoxFN';
+    if (t.includes('detox') && t.includes('an')) return 'detoxAN';
+    if (t.includes('detox')) return 'detoxFN';
+    if (t.includes('admission')) return 'admission';
+    if (t.includes('dorn')) return 'dorn';
+    if (t.includes('review')) return 'review';
+    if (t.includes('new') || t.includes('consultation')) return 'newConsultation';
+    return 'others';
+  };
+  const adminTypeCount = (subset) => {
+    const acc = { newConsultation: 0, detoxFN: 0, detoxAN: 0, admission: 0, dorn: 0, review: 0, others: 0 };
+    subset.forEach(a => { acc[getApptTypeLabel(a)]++; });
+    return acc;
+  };
+  const adminTotalBooked = adminTodayAppts.length;
+  const adminBookedTypes = adminTypeCount(adminTodayAppts);
+  const adminCheckedIn = adminTodayAppts.filter(a => a.status === 'Checked-in').length;
+  const adminArrived = adminTodayAppts.filter(a => a.status === 'Arrived').length;
+  const adminDetoxGoingOn = adminTodayAppts.filter(a => a.status === 'Started Detox').length;
+  const adminDetoxCompleted = (detoxSessions || []).filter(s => {
+    const sDate = String(s.sessionDate || s.session_date || s.created_at || '').split('T')[0];
+    return sDate === todayDate;
+  }).length;
+  const adminCancelled = adminTodayAppts.filter(a => { const s = String(a.status || '').toLowerCase(); return s === 'cancelled' || s === 'canceled'; }).length;
+  const adminPending = adminTodayAppts.filter(a => { const s = String(a.status || '').toLowerCase(); return s === 'booked' || s === 'pending' || s === 'scheduled'; }).length;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -786,43 +819,114 @@ const allPendingFollowUps = React.useMemo(() => {
 
       {!isDoctorView && (
         <>
-          {/* KPI Cards Grid */}
+          {/* Row 1: Appointment type cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
-                <span className="text-sm font-semibold text-slate-500 block">Total Patients</span>
+                <span className="text-sm font-semibold text-slate-500 block">Today's Total</span>
                 <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-3xl font-extrabold text-slate-800">{totalPatients}</span>
-                  <span className="text-sm font-bold text-emerald-500 flex items-center"><TrendingUp className="w-4 h-4 mr-1"/> 12%</span>
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
-                <Users className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow cursor-pointer" onClick={() => onNavigateToTab('appointments')}>
-              <div>
-                <span className="text-sm font-semibold text-slate-500 block">Today's Appointments</span>
-                <div className="flex items-baseline space-x-2 mt-1">
-                  <span className="text-3xl font-extrabold text-slate-800">{todaysAppts}</span>
+                  <span className="text-3xl font-extrabold text-slate-800">{adminTotalBooked}</span>
+                  <span className="text-xs text-slate-400">appointments</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
-                <Calendar className="w-6 h-6" />
+                <CalendarDays className="w-6 h-6" />
               </div>
             </div>
-
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Checked-in</span>
+                <div className="flex items-baseline space-x-2 mt-1">
+                  <span className="text-3xl font-extrabold text-emerald-600">{adminCheckedIn}</span>
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
+                <CheckCircle className="w-6 h-6" />
+              </div>
+            </div>
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Arrived</span>
+                <div className="flex items-baseline space-x-2 mt-1">
+                  <span className="text-3xl font-extrabold text-amber-600">{adminArrived}</span>
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
+                <Clock className="w-6 h-6" />
+              </div>
+            </div>
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Pending Follow-ups</span>
                 <div className="flex items-baseline space-x-2 mt-1">
-                <span className="text-3xl font-extrabold text-slate-800">{allPendingFollowUps.length}</span>
+                  <span className="text-3xl font-extrabold text-slate-800">{allPendingFollowUps.length}</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
-                <Clock className="w-6 h-6" />
+                <PhoneCall className="w-6 h-6" />
               </div>
+            </div>
+          </div>
+          {/* Row 2: Appointment type breakdown + status */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">New Consult</p>
+              <p className="text-2xl font-extrabold text-blue-800">{adminBookedTypes.newConsultation}</p>
+            </div>
+            <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-teal-600 mb-0.5">Detox Morning</p>
+              <p className="text-2xl font-extrabold text-teal-800">{adminBookedTypes.detoxFN}</p>
+            </div>
+            <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-600 mb-0.5">Detox Evening</p>
+              <p className="text-2xl font-extrabold text-cyan-800">{adminBookedTypes.detoxAN}</p>
+            </div>
+            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-600 mb-0.5">Admission</p>
+              <p className="text-2xl font-extrabold text-purple-800">{adminBookedTypes.admission}</p>
+            </div>
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-orange-600 mb-0.5">Dorn</p>
+              <p className="text-2xl font-extrabold text-orange-800">{adminBookedTypes.dorn}</p>
+            </div>
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 mb-0.5">Review</p>
+              <p className="text-2xl font-extrabold text-indigo-800">{adminBookedTypes.review}</p>
+            </div>
+            <div className="bg-slate-100 border border-slate-300 rounded-xl p-3 text-center">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-0.5">Others</p>
+              <p className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.others}</p>
+            </div>
+          </div>
+          {/* Row 3: Status cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Detox Going On</span>
+                <span className="text-3xl font-extrabold text-teal-600">{adminDetoxGoingOn}</span>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center text-teal-600"><Droplets className="w-6 h-6" /></div>
+            </div>
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Detox Completed</span>
+                <span className="text-3xl font-extrabold text-violet-600">{adminDetoxCompleted}</span>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center text-violet-600"><CheckCircle className="w-6 h-6" /></div>
+            </div>
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Cancelled</span>
+                <span className="text-3xl font-extrabold text-rose-600">{adminCancelled}</span>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600"><XCircle className="w-6 h-6" /></div>
+            </div>
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Pending</span>
+                <span className="text-3xl font-extrabold text-slate-600">{adminPending}</span>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600"><Clock className="w-6 h-6" /></div>
             </div>
           </div>
         </>
@@ -879,8 +983,10 @@ const allPendingFollowUps = React.useMemo(() => {
                       <option value="New consultation">New Consultation</option>
                       <option value="Detox (FN)">Detox (FN)</option>
                       <option value="Detox (AN)">Detox (AN)</option>
-                      <option value="Detox (Full Day)">Detox (Full Day)</option>
+                      <option value="Admission">Admission</option>
+                      <option value="Dorn">Dorn</option>
                       <option value="Review">Review</option>
+                      <option value="Others">Others</option>
                     </select>
                   </div>
                 </div>
@@ -1070,8 +1176,12 @@ const allPendingFollowUps = React.useMemo(() => {
                   >
                     <option value="all">All Types</option>
                     <option value="New consultation">New Consultation</option>
-                    <option value="Detox">Detox</option>
+                    <option value="Detox">Detox (FN)</option>
+                    <option value="Detox (AN)">Detox (AN)</option>
+                    <option value="Admission">Admission</option>
+                    <option value="Dorn">Dorn</option>
                     <option value="Review">Review</option>
+                    <option value="Others">Others</option>
                   </select>
                 </div>
               </div>

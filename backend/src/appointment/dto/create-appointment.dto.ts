@@ -12,7 +12,7 @@ export class CreateAppointmentDto {
   appointmentDate: string;
 
   @IsString()
-  @IsIn(['New consultation', 'Detox', 'Review'])
+  @IsIn(['New consultation', 'Detox', 'Detox (FN)', 'Detox (AN)', 'Admission', 'Dorn', 'Review', 'Others'])
   appointmentType: string;
 
   @IsOptional()
