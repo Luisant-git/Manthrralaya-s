@@ -483,10 +483,6 @@ export default function ConsultationsView({ appointments, patients, doctors, con
   const handleCompleteConsultation = async () => {
     if (!activeAppt || !activePt) return;
 
-    if (!detoxRecommended && !reviewRecommended && !admissionRecommended) {
-      toast.warn('Please select either "Recommend Detox", "Recommend Review" or "Recommend for Admission" before finalizing.');
-      return;
-    }
 
     setIsSaving(true);
     

@@ -448,10 +448,6 @@ export default function PatientHistoryModal({
     const detoxText = (detoxProcedureEditorRef.current?.innerHTML || '').trim();
     const dietText = (dietPlanEditorRef.current?.innerHTML || '').trim();
 
-    if (!detoxRecommended && !reviewRecommended && !admissionRecommended) {
-      toast.warn('Please select either "Recommend Detox", "Recommend Review" or "Recommend for Admission" before finalizing.');
-      return;
-    }
 
     const todayStr = new Date().toISOString().split('T')[0];
     const chosenDate = consForm.date || todayStr;
