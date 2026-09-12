@@ -1224,15 +1224,24 @@ export default function ReceptionistView({
                 <select value={formData.appointmentType} onChange={e => {
                     const newType = e.target.value;
                     const update = { appointmentType: newType };
-                    if (newType === 'Detox') update.session = getNextDetoxSessionValue(foundPatient?.id || formData.patient_id);
+                    if (newType === 'Detox (FN)') update.session = 'FN';
+                    else if (newType === 'Detox (AN)') update.session = 'AN';
+                    else if (newType === 'Detox (Full Day)') update.session = 'Full Day';
                     setFormData({ ...formData, ...update });
                 }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium">
                   {availableDoctors.find(d => String(d.id) === String(formData.doctor_id))?.role === 'THERAPIST' ? (
-                    <option value="Detox">{getNextDetoxSessionLabel(foundPatient?.id)}</option>
+                    <>
+                      <option value="Detox (FN)">Detox (FN)</option>
+                      <option value="Detox (AN)">Detox (AN)</option>
+                      <option value="Detox (Full Day)">Detox (Full Day)</option>
+                      <option value="Review">Review</option>
+                    </>
                   ) : (
                     <>
                       <option value="New consultation">New Consultation</option>
-                      <option value="Detox">{getNextDetoxSessionLabel(foundPatient?.id)}</option>
+                      <option value="Detox (FN)">Detox (FN)</option>
+                      <option value="Detox (AN)">Detox (AN)</option>
+                      <option value="Detox (Full Day)">Detox (Full Day)</option>
                       <option value="Review">Review</option>
                     </>
                   )}
@@ -1598,17 +1607,27 @@ export default function ReceptionistView({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Appointment Type</label>
-                  <select required value={modalBookingData.appointmentType} onChange={e => setModalBookingData({ ...modalBookingData, appointmentType: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500">
+                  <select required value={modalBookingData.appointmentType} onChange={e => {
+                    const newType = e.target.value;
+                    const update = { appointmentType: newType };
+                    if (newType === 'Detox (FN)') update.session = 'FN';
+                    else if (newType === 'Detox (AN)') update.session = 'AN';
+                    else if (newType === 'Detox (Full Day)') update.session = 'Full Day';
+                    setModalBookingData({ ...modalBookingData, ...update });
+                  }} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500">
                     {doctors.find(d => String(d.id) === String(modalBookingData.doctor_id))?.role === 'THERAPIST' ? (
-                      hasCompletedThreeDetoxSessions(bookingModalPatient?.id) ? (
+                      <>
+                        <option value="Detox (FN)">Detox (FN)</option>
+                        <option value="Detox (AN)">Detox (AN)</option>
+                        <option value="Detox (Full Day)">Detox (Full Day)</option>
                         <option value="Review">Review</option>
-                      ) : (
-                        <option value="Detox">{getNextDetoxSessionLabel(bookingModalPatient?.id)}</option>
-                      )
+                      </>
                     ) : (
                       <>
                         <option value="New consultation">New Consultation</option>
-                        <option value="Detox">{getNextDetoxSessionLabel(bookingModalPatient?.id)}</option>
+                        <option value="Detox (FN)">Detox (FN)</option>
+                        <option value="Detox (AN)">Detox (AN)</option>
+                        <option value="Detox (Full Day)">Detox (Full Day)</option>
                         <option value="Review">Review</option>
                       </>
                     )}
