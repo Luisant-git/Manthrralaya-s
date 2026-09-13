@@ -818,8 +818,8 @@ const allPendingFollowUps = React.useMemo(() => {
       )}
 
       {!isDoctorView && (
-        <>
-          {/* Row 1: Appointment type cards */}
+        <div className="space-y-6 mb-8">
+          {/* Row 1: Main Overview Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
@@ -838,6 +838,7 @@ const allPendingFollowUps = React.useMemo(() => {
                 <span className="text-sm font-semibold text-slate-500 block">Checked-in</span>
                 <div className="flex items-baseline space-x-2 mt-1">
                   <span className="text-3xl font-extrabold text-emerald-600">{adminCheckedIn}</span>
+                  <span className="text-xs text-slate-400">waiting</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600">
@@ -849,6 +850,7 @@ const allPendingFollowUps = React.useMemo(() => {
                 <span className="text-sm font-semibold text-slate-500 block">Arrived</span>
                 <div className="flex items-baseline space-x-2 mt-1">
                   <span className="text-3xl font-extrabold text-amber-600">{adminArrived}</span>
+                  <span className="text-xs text-slate-400">in lobby</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
@@ -860,6 +862,7 @@ const allPendingFollowUps = React.useMemo(() => {
                 <span className="text-sm font-semibold text-slate-500 block">Pending Follow-ups</span>
                 <div className="flex items-baseline space-x-2 mt-1">
                   <span className="text-3xl font-extrabold text-slate-800">{allPendingFollowUps.length}</span>
+                  <span className="text-xs text-slate-400">action needed</span>
                 </div>
               </div>
               <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
@@ -867,69 +870,132 @@ const allPendingFollowUps = React.useMemo(() => {
               </div>
             </div>
           </div>
-          {/* Row 2: Appointment type breakdown + status */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-blue-600 mb-0.5">New Consult</p>
-              <p className="text-2xl font-extrabold text-blue-800">{adminBookedTypes.newConsultation}</p>
-            </div>
-            <div className="bg-teal-50 border border-teal-200 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-teal-600 mb-0.5">Detox Morning</p>
-              <p className="text-2xl font-extrabold text-teal-800">{adminBookedTypes.detoxFN}</p>
-            </div>
-            <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-600 mb-0.5">Detox Evening</p>
-              <p className="text-2xl font-extrabold text-cyan-800">{adminBookedTypes.detoxAN}</p>
-            </div>
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-purple-600 mb-0.5">Admission</p>
-              <p className="text-2xl font-extrabold text-purple-800">{adminBookedTypes.admission}</p>
-            </div>
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-orange-600 mb-0.5">Dorn</p>
-              <p className="text-2xl font-extrabold text-orange-800">{adminBookedTypes.dorn}</p>
-            </div>
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 mb-0.5">Review</p>
-              <p className="text-2xl font-extrabold text-indigo-800">{adminBookedTypes.review}</p>
-            </div>
-            <div className="bg-slate-100 border border-slate-300 rounded-xl p-3 text-center">
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-0.5">Others</p>
-              <p className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.others}</p>
+          
+          {/* Row 2: Appointment type breakdown */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 mb-3">Appointment Types Breakdown</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">New Consult</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.newConsultation}</span>
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                    <Stethoscope className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Detox Morning</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.detoxFN}</span>
+                  <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                    <Droplets className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Detox Evening</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.detoxAN}</span>
+                  <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center text-cyan-600">
+                    <Droplets className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Admission</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.admission}</span>
+                  <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Dorn</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.dorn}</span>
+                  <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-orange-600">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Review</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.review}</span>
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <Search className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Others</span>
+                <div className="flex items-end justify-between">
+                  <span className="text-2xl font-extrabold text-slate-800">{adminBookedTypes.others}</span>
+                  <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-600">
+                    <Users className="w-4 h-4" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          {/* Row 3: Status cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-              <div>
-                <span className="text-sm font-semibold text-slate-500 block">Detox Going On</span>
-                <span className="text-3xl font-extrabold text-teal-600">{adminDetoxGoingOn}</span>
+          
+          {/* Row 3: Status Summary */}
+          <div>
+            <h3 className="text-sm font-bold text-slate-800 mb-3">Status Overview</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div>
+                  <span className="text-sm font-semibold text-slate-500 block">Detox Going On</span>
+                  <div className="flex items-baseline space-x-2 mt-1">
+                    <span className="text-3xl font-extrabold text-teal-600">{adminDetoxGoingOn}</span>
+                    <span className="text-xs text-slate-400">in progress</span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center text-teal-600">
+                  <Droplets className="w-6 h-6" />
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-teal-100 flex items-center justify-center text-teal-600"><Droplets className="w-6 h-6" /></div>
-            </div>
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-              <div>
-                <span className="text-sm font-semibold text-slate-500 block">Detox Completed</span>
-                <span className="text-3xl font-extrabold text-violet-600">{adminDetoxCompleted}</span>
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div>
+                  <span className="text-sm font-semibold text-slate-500 block">Detox Completed</span>
+                  <div className="flex items-baseline space-x-2 mt-1">
+                    <span className="text-3xl font-extrabold text-violet-600">{adminDetoxCompleted}</span>
+                    <span className="text-xs text-slate-400">sessions done</span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center text-violet-600">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center text-violet-600"><CheckCircle className="w-6 h-6" /></div>
-            </div>
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-              <div>
-                <span className="text-sm font-semibold text-slate-500 block">Cancelled</span>
-                <span className="text-3xl font-extrabold text-rose-600">{adminCancelled}</span>
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div>
+                  <span className="text-sm font-semibold text-slate-500 block">Cancelled</span>
+                  <div className="flex items-baseline space-x-2 mt-1">
+                    <span className="text-3xl font-extrabold text-rose-600">{adminCancelled}</span>
+                    <span className="text-xs text-slate-400">appointments</span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600">
+                  <XCircle className="w-6 h-6" />
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600"><XCircle className="w-6 h-6" /></div>
-            </div>
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
-              <div>
-                <span className="text-sm font-semibold text-slate-500 block">Pending</span>
-                <span className="text-3xl font-extrabold text-slate-600">{adminPending}</span>
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+                <div>
+                  <span className="text-sm font-semibold text-slate-500 block">Pending</span>
+                  <div className="flex items-baseline space-x-2 mt-1">
+                    <span className="text-3xl font-extrabold text-slate-600">{adminPending}</span>
+                    <span className="text-xs text-slate-400">action needed</span>
+                  </div>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600">
+                  <Clock className="w-6 h-6" />
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-slate-200 flex items-center justify-center text-slate-600"><Clock className="w-6 h-6" /></div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Main Content Area */}
