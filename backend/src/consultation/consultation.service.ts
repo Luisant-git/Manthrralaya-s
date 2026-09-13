@@ -75,11 +75,26 @@ async create(createConsultationDto: CreateConsultationDto) {
     }
   }
 
+  let finalAppointmentId = createConsultationDto.appointmentId;
+  if (!finalAppointmentId && createConsultationDto.appointmentType) {
+    const newAppt = await this.prisma.appointment.create({
+      data: {
+        patientId: createConsultationDto.patientId,
+        doctorId: createConsultationDto.doctorId,
+        appointmentDate: createConsultationDto.consultationDate ? new Date(createConsultationDto.consultationDate) : new Date(),
+        appointmentType: createConsultationDto.appointmentType,
+        status: 'Completed',
+        notes: 'Auto-created from manual consultation entry'
+      }
+    });
+    finalAppointmentId = newAppt.id;
+  }
+
   const consultation = await this.prisma.consultation.create({
     data: {
       patientId: createConsultationDto.patientId,
       doctorId: createConsultationDto.doctorId,
-      appointmentId: createConsultationDto.appointmentId,
+      appointmentId: finalAppointmentId,
       consultationDate: createConsultationDto.consultationDate
         ? new Date(createConsultationDto.consultationDate)
         : undefined,
@@ -155,7 +170,7 @@ async create(createConsultationDto: CreateConsultationDto) {
       [
         consultation.patient.name,
         consultationDate,
-        'Consultation',
+        consultation.appointment?.appointmentType || 'Consultation',
         doctorName
       ],
       'en',
@@ -174,7 +189,7 @@ async create(createConsultationDto: CreateConsultationDto) {
 async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: string) {
   const consultation = await this.prisma.consultation.findUnique({
     where: { id: consultationId },
-    include: { patient: true, doctor: { include: { user: true } } }
+    include: { patient: true, doctor: { include: { user: true } }, appointment: true }
   });
   
   if (!consultation) {
@@ -214,7 +229,7 @@ async sendPdfForConsultation(consultationId: number, buffer: Buffer, filename: s
     const result = await sendWhatsappTemplateMessage(
       consultation.patient.whatsapp || consultation.patient.phone,
       'manthrayala_consultation_summary',
-      [consultation.patient.name, consultationDate, 'Consultation', doctorName],
+      [consultation.patient.name, consultationDate, consultation.appointment?.appointmentType || 'Consultation', doctorName],
       'en',
       uploadSuccess ? mediaId : undefined,
       filename

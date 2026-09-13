@@ -20,6 +20,11 @@ export class CreateConsultationDto {
   @IsInt()
   appointmentId?: number;
 
+  @ApiPropertyOptional({ example: 'Consultation', description: 'Type of appointment (creates one if appointmentId is missing)' })
+  @IsOptional()
+  @IsString()
+  appointmentType?: string;
+
   @ApiPropertyOptional({ example: 'Patient presented with cough and fever for 3 days' })
   @IsOptional()
   @IsString()

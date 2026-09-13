@@ -29,6 +29,19 @@ export default function PatientHistoryModal({
   const [isSendingWA, setIsSendingWA] = useState(false);
   const [showWhatsappConfirmModal, setShowWhatsappConfirmModal] = useState(false);
   const [whatsappConsultationToSend, setWhatsappConsultationToSend] = useState(null);
+  const [whatsappTopicToSend, setWhatsappTopicToSend] = useState(null);
+  const [downloadingTopic, setDownloadingTopic] = useState(null);
+
+  const handleDownloadPDF = async (consultation, topic) => {
+    try {
+      setDownloadingTopic(topic || 'All');
+      await generateConsultationPDF(consultation, topic, topic ? [] : []);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+    } finally {
+      setDownloadingTopic(null);
+    }
+  };
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedShareDoctor, setSelectedShareDoctor] = useState('');
   const [isSharing, setIsSharing] = useState(false);
@@ -44,7 +57,7 @@ export default function PatientHistoryModal({
   const [isSavingNewCons, setIsSavingNewCons] = useState(false);
   const [isUploadingNewImg, setIsUploadingNewImg] = useState('');
   const [uploadedImagesMap, setUploadedImagesMap] = useState({});
-  const [consForm, setConsForm] = useState({ doctorId: '', date: '' });
+  const [consForm, setConsForm] = useState({ doctorId: '', date: '', appointmentType: 'New consultation' });
   const newConsEditorClass = (key) => `editor-content ${(uploadedImagesMap[key] || []).length ? 'min-h-[60px]' : 'min-h-[100px]'} text-sm leading-6 text-slate-800 focus:outline-none`;
   const [newConsNotes, setNewConsNotes] = useState('');
   const [newConsMedHistory, setNewConsMedHistory] = useState('');
@@ -389,7 +402,7 @@ export default function PatientHistoryModal({
                 <div className="flex items-center gap-1 px-2 pb-2">
                   <button
                     type="button"
-                    onClick={() => onPreview && onPreview(img.url)}
+                    onClick={(e) => { e.stopPropagation(); onPreview && onPreview(img.url, images, idx); }}
                     className="w-full flex items-center justify-center gap-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold transition"
                     title="View"
                   >
@@ -520,6 +533,7 @@ export default function PatientHistoryModal({
       detoxProcedureNotes: appendImagesHtml(detoxText, 'detoxProc') || '',
       dietPlanNotes: appendImagesHtml(dietText, 'dietPlan') || '',
       homecareGuideliness: homeCare || '',
+      appointmentType: consForm.appointmentType,
       detoxRecommended: detoxRecommended || false,
       detoxDoctorId: detoxRecommended && detoxDoctorId ? parseInt(detoxDoctorId) : null,
       detoxMorningSessions: detoxRecommended && detoxMorningSessions ? parseInt(detoxMorningSessions) : 0,
@@ -882,12 +896,12 @@ export default function PatientHistoryModal({
     setIsSendingWA(true);
     try {
       const consData = { ...whatsappConsultationToSend, patient_name: patient.name };
-      const { blob, fileName } = await buildConsultationPdfBlob(consData, null, ['Medical History', 'Detox Procedure']);
+      const { blob, fileName } = await buildConsultationPdfBlob(consData, whatsappTopicToSend, whatsappTopicToSend ? [] : ['Medical History', 'Detox Procedure']);
       const formData = new FormData();
       formData.append('file', blob, fileName);
       if (whatsappConsultationToSend.id) {
         await uploadConsultationPdf(whatsappConsultationToSend.id, formData);
-        toast.success('Consultation PDF sent via WhatsApp successfully!');
+        toast.success(`${whatsappTopicToSend || 'Consultation'} PDF sent via WhatsApp successfully!`);
       } else {
         toast.error('Consultation record ID not found.');
       }
@@ -1107,21 +1121,31 @@ export default function PatientHistoryModal({
                   <div className="flex items-center gap-3">
                     {historySubTab === 'consultations' && currentConsultation && (
                       <>
-                        <button
-                          onClick={() => {
-                            setWhatsappConsultationToSend(currentConsultation);
-                            setShowWhatsappConfirmModal(true);
-                          }}
-                          disabled={isSendingWA}
+                          <button
+                            onClick={() => {
+                              setWhatsappTopicToSend(null);
+                              setWhatsappConsultationToSend(currentConsultation);
+                              setShowWhatsappConfirmModal(true);
+                            }}
+                            disabled={isSendingWA && whatsappTopicToSend === null}
                           className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
+                          {isSendingWA && whatsappTopicToSend === null ? (
+                            <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Sending...</>
+                          ) : (
+                            <><MessageSquare className="w-3.5 h-3.5" /> WhatsApp</>
+                          )}
                         </button>
                         <button
-                          onClick={() => generateConsultationPDF(currentConsultation, null, [])}
-                          className="bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm"
+                          onClick={() => handleDownloadPDF(currentConsultation, null)}
+                          disabled={downloadingTopic === 'All'}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm disabled:opacity-50"
                         >
-                          <Download className="w-3.5 h-3.5" /> Full PDF
+                          {downloadingTopic === 'All' ? (
+                            <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Downloading...</>
+                          ) : (
+                            <><Download className="w-3.5 h-3.5" /> Full PDF</>
+                          )}
                         </button>
                       </>
                     )}
@@ -1155,10 +1179,13 @@ export default function PatientHistoryModal({
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg">
+                            <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg mb-1 inline-block">
                               {formatDate(currentConsultation.date)}
                             </div>
-                            <div className="text-[10px] text-slate-400 mt-1">Visit Date</div>
+                            <div className="text-[10px] text-slate-400 mb-2">Visit Date</div>
+                            <div className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 inline-block">
+                              {currentConsultation.appointment?.appointmentType || 'Consultation'}
+                            </div>
                           </div>
                         </div>
 
@@ -1184,11 +1211,26 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
+                                    <button onClick={() => {
+                                      setWhatsappTopicToSend('Consultation Notes');
+                                      setWhatsappConsultationToSend(currentConsultation);
+                                      setShowWhatsappConfirmModal(true);
+                                    }} disabled={isSendingWA && whatsappTopicToSend === 'Consultation Notes'} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm disabled:opacity-50">
+                                      {isSendingWA && whatsappTopicToSend === 'Consultation Notes' ? (
+                                        <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Sending...</>
+                                      ) : (
+                                        <><MessageSquare className="w-3 h-3" /> WhatsApp</>
+                                      )}
+                                    </button>
                                     <button onClick={() => startEditing('consultationNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
-                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Consultation Notes')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                      <Download className="w-3 h-3" /> Download
+                                    <button onClick={() => handleDownloadPDF(currentConsultation, 'Consultation Notes')} disabled={downloadingTopic === 'Consultation Notes'} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-50">
+                                      {downloadingTopic === 'Consultation Notes' ? (
+                                        <><span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span> Downloading...</>
+                                      ) : (
+                                        <><Download className="w-3 h-3" /> Download</>
+                                      )}
                                     </button>
                                   </>
                                 )}
@@ -1249,11 +1291,26 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
+                                    <button onClick={() => {
+                                      setWhatsappTopicToSend('Medical History');
+                                      setWhatsappConsultationToSend(currentConsultation);
+                                      setShowWhatsappConfirmModal(true);
+                                    }} disabled={isSendingWA && whatsappTopicToSend === 'Medical History'} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm disabled:opacity-50">
+                                      {isSendingWA && whatsappTopicToSend === 'Medical History' ? (
+                                        <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Sending...</>
+                                      ) : (
+                                        <><MessageSquare className="w-3 h-3" /> WhatsApp</>
+                                      )}
+                                    </button>
                                     <button onClick={() => startEditing('medicalHistoryNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
-                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical History')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                      <Download className="w-3 h-3" /> Download
+                                    <button onClick={() => handleDownloadPDF(currentConsultation, 'Medical History')} disabled={downloadingTopic === 'Medical History'} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-50">
+                                      {downloadingTopic === 'Medical History' ? (
+                                        <><span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span> Downloading...</>
+                                      ) : (
+                                        <><Download className="w-3 h-3" /> Download</>
+                                      )}
                                     </button>
                                   </>
                                 )}
@@ -1314,11 +1371,26 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
+                                    <button onClick={() => {
+                                      setWhatsappTopicToSend('Diet Plan');
+                                      setWhatsappConsultationToSend(currentConsultation);
+                                      setShowWhatsappConfirmModal(true);
+                                    }} disabled={isSendingWA && whatsappTopicToSend === 'Diet Plan'} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm disabled:opacity-50">
+                                      {isSendingWA && whatsappTopicToSend === 'Diet Plan' ? (
+                                        <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Sending...</>
+                                      ) : (
+                                        <><MessageSquare className="w-3 h-3" /> WhatsApp</>
+                                      )}
+                                    </button>
                                     <button onClick={() => startEditing('dietPlanNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
-                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Diet Plan')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                      <Download className="w-3 h-3" /> Download
+                                    <button onClick={() => handleDownloadPDF(currentConsultation, 'Diet Plan')} disabled={downloadingTopic === 'Diet Plan'} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-50">
+                                      {downloadingTopic === 'Diet Plan' ? (
+                                        <><span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span> Downloading...</>
+                                      ) : (
+                                        <><Download className="w-3 h-3" /> Download</>
+                                      )}
                                     </button>
                                   </>
                                 )}
@@ -1379,11 +1451,26 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
+                                    <button onClick={() => {
+                                      setWhatsappTopicToSend('Detox Procedure');
+                                      setWhatsappConsultationToSend(currentConsultation);
+                                      setShowWhatsappConfirmModal(true);
+                                    }} disabled={isSendingWA && whatsappTopicToSend === 'Detox Procedure'} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm disabled:opacity-50">
+                                      {isSendingWA && whatsappTopicToSend === 'Detox Procedure' ? (
+                                        <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Sending...</>
+                                      ) : (
+                                        <><MessageSquare className="w-3 h-3" /> WhatsApp</>
+                                      )}
+                                    </button>
                                     <button onClick={() => startEditing('detoxProcedureNotes', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
-                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Detox Procedure')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                      <Download className="w-3 h-3" /> Download
+                                    <button onClick={() => handleDownloadPDF(currentConsultation, 'Detox Procedure')} disabled={downloadingTopic === 'Detox Procedure'} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-50">
+                                      {downloadingTopic === 'Detox Procedure' ? (
+                                        <><span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span> Downloading...</>
+                                      ) : (
+                                        <><Download className="w-3 h-3" /> Download</>
+                                      )}
                                     </button>
                                   </>
                                 )}
@@ -1445,11 +1532,26 @@ export default function PatientHistoryModal({
                                   </>
                                 ) : (
                                   <>
+                                    <button onClick={() => {
+                                      setWhatsappTopicToSend('Medical Reports');
+                                      setWhatsappConsultationToSend(currentConsultation);
+                                      setShowWhatsappConfirmModal(true);
+                                    }} disabled={isSendingWA && whatsappTopicToSend === 'Medical Reports'} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm disabled:opacity-50">
+                                      {isSendingWA && whatsappTopicToSend === 'Medical Reports' ? (
+                                        <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></span> Sending...</>
+                                      ) : (
+                                        <><MessageSquare className="w-3 h-3" /> WhatsApp</>
+                                      )}
+                                    </button>
                                     <button onClick={() => startEditing('medicalReports', rawHtml)} className="text-blue-600 hover:text-blue-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
                                       <Edit3 className="w-3 h-3" /> Edit
                                     </button>
-                                    <button onClick={() => generateConsultationPDF(currentConsultation, 'Medical Reports')} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
-                                      <Download className="w-3 h-3" /> Download
+                                    <button onClick={() => handleDownloadPDF(currentConsultation, 'Medical Reports')} disabled={downloadingTopic === 'Medical Reports'} className="text-emerald-600 hover:text-emerald-700 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 disabled:opacity-50">
+                                      {downloadingTopic === 'Medical Reports' ? (
+                                        <><span className="w-3 h-3 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></span> Downloading...</>
+                                      ) : (
+                                        <><Download className="w-3 h-3" /> Download</>
+                                      )}
                                     </button>
                                   </>
                                 )}
@@ -1762,7 +1864,7 @@ export default function PatientHistoryModal({
 
               <div className="p-6 space-y-4">
                 <p className="text-slate-700 text-sm">
-                  Do you want to send the consultation PDF for <strong className="text-slate-900">{patient.name}</strong> to their WhatsApp number ({(patient.whatsapp || patient.phone) ?? 'No number available'})?
+                  Do you want to send the {whatsappTopicToSend ? <strong className="text-indigo-600">{whatsappTopicToSend} PDF</strong> : 'consultation PDF'} for <strong className="text-slate-900">{patient.name}</strong> to their WhatsApp number ({(patient.whatsapp || patient.phone) ?? 'No number available'})?
                 </p>
               </div>
 
@@ -1881,7 +1983,7 @@ export default function PatientHistoryModal({
                 {/* 1. Clinical Consultation Notes */}
                 <div className="p-5 space-y-4">
                   <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2"><Activity className="w-4 h-4 text-emerald-600" /> 1. Clinical Consultation Notes</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Assigned Doctor</label>
                       <select value={consForm.doctorId} onChange={(e) => setConsForm({ ...consForm, doctorId: e.target.value })} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
@@ -1892,6 +1994,18 @@ export default function PatientHistoryModal({
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Consultation Date</label>
                       <input type="date" value={consForm.date} max={new Date().toISOString().split('T')[0]} onChange={(e) => setConsForm({ ...consForm, date: e.target.value })} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Appointment Type</label>
+                      <select value={consForm.appointmentType} onChange={(e) => setConsForm({ ...consForm, appointmentType: e.target.value })} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                        <option value="New consultation">New consultation</option>
+                        <option value="Detox (FN)">Detox (FN)</option>
+                        <option value="Detox (AN)">Detox (AN)</option>
+                        <option value="Admission">Admission</option>
+                        <option value="Dorn">Dorn</option>
+                        <option value="Review">Review</option>
+                        <option value="Others">Others</option>
+                      </select>
                     </div>
                   </div>
                   <div>

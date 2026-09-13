@@ -106,6 +106,8 @@ export default function App() {
         date: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         consultationDate: cons.consultationDate ? new Date(cons.consultationDate).toISOString().split('T')[0] : null,
         appointmentId: cons.appointmentId || cons.appointment_id || null,
+        appointment: cons.appointment || null,
+        appointmentType: cons.appointment?.appointmentType || null,
         followupDate: cons.followupDate ? cons.followupDate.split('T')[0] : null,
         consultation_notes: cons.consultationNotes,
         medical_history: cons.medicalHistoryNotes,
