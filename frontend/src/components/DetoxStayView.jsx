@@ -491,7 +491,8 @@ export default function DetoxView({
 
   // Check if appointment is detox type
   const isDetoxAppointment = (appt) => {
-    return String(appt?.appointmentType || '').toLowerCase().includes('detox');
+    const type = String(appt?.appointmentType || '').toLowerCase();
+    return type.includes('detox') || type.includes('admission');
   };
 
   // Find current doctor

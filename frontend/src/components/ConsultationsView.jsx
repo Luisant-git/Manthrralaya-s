@@ -337,7 +337,7 @@ export default function ConsultationsView({ appointments, patients, doctors, con
 
   const isDetoxAppointment = (appt) => {
     const type = String(appt?.appointmentType || appt?.appointment_type || '').toLowerCase();
-    return type.includes('detox');
+    return type.includes('detox') || type.includes('admission');
   };
 
   const isDoctorView = activeRole === 'doctor';

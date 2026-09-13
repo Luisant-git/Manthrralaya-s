@@ -447,7 +447,7 @@ const allPendingFollowUps = React.useMemo(() => {
       return;
     }
     const typeKey = getAppointmentTypeKey(appt);
-    if (typeKey.includes('detox')) {
+    if (typeKey.includes('detox') || typeKey.includes('admission')) {
       onNavigateToTab('detox');
     } else {
       onNavigateToTab('consultations');
@@ -456,8 +456,12 @@ const allPendingFollowUps = React.useMemo(() => {
 
   const handleDoctorCheckIn = async (appointmentId) => {
     const appt = todayAppointments.find(a => a.id === appointmentId);
-    const isDetox = String(appt?.appointmentType || '').toLowerCase().includes('detox');
-    await onCheckIn(appointmentId, !isDetox, true);
+    const typeKey = String(appt?.appointmentType || '').toLowerCase();
+    const isDetox = typeKey.includes('detox');
+    const isAdmission = typeKey.includes('admission');
+    // Navigate for everything EXCEPT Detox (Admissions should navigate to detox page)
+    const shouldNavigate = !isDetox || isAdmission;
+    await onCheckIn(appointmentId, shouldNavigate, true);
   };
 
   const handleBeginDetox = async (appointmentId) => {
@@ -1133,7 +1137,7 @@ const allPendingFollowUps = React.useMemo(() => {
                               View Detox Session
                             </button>
                           ) : item.status === 'Checked-in' ? (
-                            String(item.appointmentType || '').toLowerCase().includes('detox') ? (
+                            (String(item.appointmentType || '').toLowerCase().includes('detox') || String(item.appointmentType || '').toLowerCase().includes('admission')) ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleBeginDetox(item.id); }}
                                 className="px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
@@ -1147,7 +1151,7 @@ const allPendingFollowUps = React.useMemo(() => {
                                 className="px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
                               >
                                 <Stethoscope className="w-4 h-4" />
-                                Start Consultation
+                                {String(item.appointmentType || '').toLowerCase().includes('admission') ? 'Start Admission' : 'Start Consultation'}
                               </button>
                             )
                           ) : (
@@ -1284,6 +1288,7 @@ const allPendingFollowUps = React.useMemo(() => {
                       const isCheckedIn = appt.status === 'Checked-in';
                       const isCompleted = appt.status === 'Completed';
                       const isCancelled = appt.status === 'Cancelled';
+                      const isStartedDetox = appt.status === 'Started Detox';
 
                       return (
                         <div key={`card-${appt.id}`} className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:border-emerald-200 hover:shadow-md transition-all">
@@ -1319,7 +1324,7 @@ const allPendingFollowUps = React.useMemo(() => {
                           )}
 
                           <div className="pt-3 border-t border-slate-100 mt-auto flex items-center justify-between">
-                            {!isArrived && !isCheckedIn && !isCompleted && !isCancelled ? (
+                            {!isArrived && !isCheckedIn && !isCompleted && !isCancelled && !isStartedDetox ? (
                               <button
                                 onClick={() => onCheckIn(appt.id, false, false)}
                                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
@@ -1328,9 +1333,22 @@ const allPendingFollowUps = React.useMemo(() => {
                                 Mark as Arrived
                               </button>
                             ) : (isArrived || isCheckedIn) ? (
-                              <span className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-lg w-full justify-center border border-emerald-100">
-                                <CheckCircle className="w-4 h-4" />
-                                {isArrived ? 'Patient Arrived' : 'With Doctor'}
+                              (String(appt.appointmentType || '').toLowerCase().includes('detox') || String(appt.appointmentType || '').toLowerCase().includes('admission')) ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleBeginDetox(appt.id); }}
+                                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                                >
+                                  Begin Detox
+                                </button>
+                              ) : (
+                                <span className="text-emerald-600 text-xs font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-lg w-full justify-center border border-emerald-100">
+                                  <CheckCircle className="w-4 h-4" />
+                                  {isArrived ? 'Patient Arrived' : 'With Doctor'}
+                                </span>
+                              )
+                            ) : isStartedDetox ? (
+                              <span className="text-teal-600 text-xs font-bold flex items-center gap-1.5 bg-teal-50 px-3 py-1.5 rounded-lg w-full justify-center border border-teal-100">
+                                Detox In Progress
                               </span>
                             ) : isCompleted ? (
                               <span className="text-slate-500 text-xs font-bold w-full text-center bg-slate-50 py-1.5 rounded-lg border border-slate-100">Completed</span>
@@ -1365,11 +1383,12 @@ const allPendingFollowUps = React.useMemo(() => {
                         const isCheckedIn = appt.status === 'Checked-in';
                         const isCompleted = appt.status === 'Completed';
                         const isCancelled = appt.status === 'Cancelled';
+                        const isStartedDetox = appt.status === 'Started Detox';
                         
                         return (
                           <tr key={`row-${appt.id}`} className="hover:bg-slate-50 transition-colors align-middle group">
                             <td className="py-3 px-4 whitespace-nowrap w-[140px]">
-                              {!isArrived && !isCheckedIn && !isCompleted && !isCancelled ? (
+                              {!isArrived && !isCheckedIn && !isCompleted && !isCancelled && !isStartedDetox ? (
                                 <button
                                   onClick={() => onCheckIn(appt.id, false, false)}
                                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 shadow-sm"
@@ -1378,9 +1397,22 @@ const allPendingFollowUps = React.useMemo(() => {
                                   Check-in
                                 </button>
                               ) : (isArrived || isCheckedIn) ? (
-                                <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-md w-fit border border-emerald-100">
-                                  <CheckCircle className="w-3 h-3" />
-                                  {isArrived ? 'Arrived' : 'With Doctor'}
+                                (String(appt.appointmentType || '').toLowerCase().includes('detox') || String(appt.appointmentType || '').toLowerCase().includes('admission')) ? (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleBeginDetox(appt.id); }}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 shadow-sm"
+                                  >
+                                    Begin Detox
+                                  </button>
+                                ) : (
+                                  <span className="text-emerald-600 text-xs font-semibold flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-md w-fit border border-emerald-100">
+                                    <CheckCircle className="w-3 h-3" />
+                                    {isArrived ? 'Arrived' : 'With Doctor'}
+                                  </span>
+                                )
+                              ) : isStartedDetox ? (
+                                <span className="text-teal-600 text-xs font-semibold flex items-center gap-1 bg-teal-50 px-2.5 py-1 rounded-md w-fit border border-teal-100">
+                                  Detox In Progress
                                 </span>
                               ) : isCompleted ? (
                                 <span className="text-slate-400 text-xs font-medium bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">Completed</span>
