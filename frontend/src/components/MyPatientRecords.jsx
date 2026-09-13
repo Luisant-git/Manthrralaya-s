@@ -27,6 +27,7 @@ export default function UnifiedPatientRecords({
   , onRefresh
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [apptFilter, setApptFilter] = useState('All');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -388,6 +389,11 @@ export default function UnifiedPatientRecords({
     : allAvailablePatients;
 
   const filteredPatients = basePatients.filter(pt => {
+    if (apptFilter !== 'All') {
+      const clinicalType = getLatestClinicalType(pt.id) || '';
+      if (clinicalType !== apptFilter) return false;
+    }
+
     const normalized = searchTerm.trim().toLowerCase();
     if (!normalized) return true;
     const normalizedId = String(pt.id).toLowerCase();
@@ -881,9 +887,8 @@ export default function UnifiedPatientRecords({
           </div>
         ) : (
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col h-full">
-            {/* Search Bar - Directory Style */}
-            <div className="p-4 border-b border-slate-200 bg-slate-50">
-              <div className="relative max-w-md">
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4">
+              <div className="relative w-full max-w-md">
                 <Search className="absolute left-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
                   type="text"
@@ -895,6 +900,25 @@ export default function UnifiedPatientRecords({
                   }}
                   className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
                 />
+              </div>
+              <div>
+                <select
+                  value={apptFilter}
+                  onChange={(e) => {
+                    setApptFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer"
+                >
+                  <option value="All">All Appointments</option>
+                  <option value="New consultation">New consultation</option>
+                  <option value="Review">Review</option>
+                  <option value="Detox (FN)">Detox (FN)</option>
+                  <option value="Detox (AN)">Detox (AN)</option>
+                  <option value="Admission">Admission</option>
+                  <option value="Dorn">Dorn</option>
+                  <option value="Others">Others</option>
+                </select>
               </div>
             </div>
 

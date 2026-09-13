@@ -113,6 +113,7 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   const adminBookedTypes = adminTypeCount(adminTodayAppts);
   const adminCheckedIn = adminTodayAppts.filter(a => a.status === 'Checked-in').length;
   const adminArrived = adminTodayAppts.filter(a => a.status === 'Arrived').length;
+  const adminCompleted = adminTodayAppts.filter(a => a.status === 'Completed').length;
   const adminDetoxGoingOn = adminTodayAppts.filter(a => a.status === 'Started Detox').length;
   const adminDetoxCompleted = (detoxSessions || []).filter(s => {
     const sDate = String(s.sessionDate || s.session_date || s.created_at || '').split('T')[0];
@@ -820,7 +821,7 @@ const allPendingFollowUps = React.useMemo(() => {
       {!isDoctorView && (
         <div className="space-y-6 mb-8">
           {/* Row 1: Main Overview Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6">
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
                 <span className="text-sm font-semibold text-slate-500 block">Today's Total</span>
@@ -855,6 +856,18 @@ const allPendingFollowUps = React.useMemo(() => {
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600">
                 <Clock className="w-6 h-6" />
+              </div>
+            </div>
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+              <div>
+                <span className="text-sm font-semibold text-slate-500 block">Completed</span>
+                <div className="flex items-baseline space-x-2 mt-1">
+                  <span className="text-3xl font-extrabold text-indigo-600">{adminCompleted}</span>
+                  <span className="text-xs text-slate-400">done</span>
+                </div>
+              </div>
+              <div className="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                <CheckCircle className="w-6 h-6" />
               </div>
             </div>
             <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
