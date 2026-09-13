@@ -39,6 +39,7 @@ export default function App() {
   const [currentUserId, setCurrentUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Database States - Start with empty arrays
   const [patients, setPatients] = useState([]);
@@ -832,13 +833,24 @@ export default function App() {
         setSearchQuery={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
         onLogout={handleLogout}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
       />
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile Sidebar Overlay */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-slate-900/50 z-40 md:hidden" 
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           activeRole={activeRole}
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
         />
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-100">

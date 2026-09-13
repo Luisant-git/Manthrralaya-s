@@ -1029,8 +1029,8 @@ export default function PatientHistoryModal({
 
             {/* Sub Tabs */}
             <div className="border-b border-slate-200 px-6 pt-4">
-              <div className="flex items-center justify-between">
-                <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex gap-4 overflow-x-auto no-scrollbar w-full sm:w-auto pb-1">
                 <button
                   onClick={() => { setHistorySubTab('consultations'); setHistoryPage(1); }}
                   className={`pb-3 px-2 text-sm font-semibold transition-colors border-b-2 ${
@@ -1071,28 +1071,31 @@ export default function PatientHistoryModal({
                   </span>
                 </button>
                 </div>
-                {historySubTab === 'consultations' && canCreateConsultation && (
-                  <button
-                    onClick={prepareAddCons}
-                    className="pb-3 flex items-center gap-2 text-sm font-bold text-emerald-700 hover:text-emerald-800 transition-colors"
-                  >
-                    <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-                      <Plus className="w-4 h-4" />
-                    </span>
-                    Add Consultation
-                  </button>
-                )}
-                {historySubTab === 'detox' && (
-                  <button
-                    onClick={() => setShowAddDetox(true)}
-                    className="pb-3 flex items-center gap-2 text-sm font-bold text-emerald-700 hover:text-emerald-800 transition-colors"
-                  >
-                    <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-                      <Plus className="w-4 h-4" />
-                    </span>
-                    Add Detox
-                  </button>
-                )}
+                
+                <div className="flex-shrink-0 mb-3 sm:mb-0">
+                  {historySubTab === 'consultations' && canCreateConsultation && (
+                    <button
+                      onClick={prepareAddCons}
+                      className="flex items-center gap-2 text-sm font-bold text-emerald-700 hover:text-emerald-800 transition-colors"
+                    >
+                      <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                        <Plus className="w-4 h-4" />
+                      </span>
+                      Add Consultation
+                    </button>
+                  )}
+                  {historySubTab === 'detox' && (
+                    <button
+                      onClick={() => setShowAddDetox(true)}
+                      className="flex items-center gap-2 text-sm font-bold text-emerald-700 hover:text-emerald-800 transition-colors"
+                    >
+                      <span className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                        <Plus className="w-4 h-4" />
+                      </span>
+                      Add Detox
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

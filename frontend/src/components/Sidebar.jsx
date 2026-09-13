@@ -17,7 +17,7 @@ import {
   UserCheck
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
+export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebarOpen, setIsSidebarOpen }) {
   const navigationItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
     { id: 'user-management', name: 'Staff Management', icon: UserPlus, roles: ['admin'] },
@@ -39,7 +39,12 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 select-none shadow-sm">
+    <aside className={`
+      w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 select-none shadow-sm
+      fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out
+      ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      md:relative md:translate-x-0
+    `}>
       <div className="flex-1 py-6 overflow-y-auto px-4 space-y-6">
         
         <div>
@@ -57,7 +62,10 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole }) {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    if (setIsSidebarOpen) setIsSidebarOpen(false);
+                  }}
                   className={`w-full flex items-center justify-between px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
                     isActive
                       ? 'bg-emerald-50 text-emerald-700 font-bold'
