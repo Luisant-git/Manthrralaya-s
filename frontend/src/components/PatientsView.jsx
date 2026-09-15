@@ -3,7 +3,7 @@ import { Search, Plus, UserPlus, Activity, FileText, Eye, X, Loader2, RefreshCw,
 import { getAllPatients, createPatient, updatePatient, deletePatient } from '../api/patientApi';
 import { getSharesForDoctor } from '../api/shareApi';
 import { toast } from 'react-toastify';
-import { formatDateDisplay } from '../utils/dateFormatter';
+import { formatDateDisplay, formatTimeAMPM } from '../utils/dateFormatter';
 import { updateReceptionistFollowup } from '../api/consultationApi';
 
 export default function PatientsView({ appointments = [], followups = [], consultations = [], detoxSessions = [], onAddPatient, onSelectPatient, onRefreshConsultations, activeRole = '', currentUser = '', doctors = [] }) {
@@ -65,7 +65,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     const appt = sorted[0];
     if (!appt) return 'General';
     if (appt.appointmentType === 'Detox' && appt.session) {
-      return `Detox (${appt.session})`;
+      return `Detox (${formatTimeAMPM(appt.session)})`;
     }
     return appt.appointmentType || 'General';
   };

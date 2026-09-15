@@ -30,6 +30,20 @@ function formatDate(d) {
   return `${day}/${month}/${year}`;
 }
 
+const formatTimeAMPM = (timeStr) => {
+  if (!timeStr) return '';
+  if (timeStr === 'FN') return 'Morning';
+  if (timeStr === 'AN') return 'Afternoon';
+  if (!timeStr.includes(':')) return timeStr;
+  const [hours, minutes] = timeStr.split(':');
+  if (!hours || !minutes) return timeStr;
+  let h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  h = h ? h : 12;
+  return `${h}:${minutes} ${ampm}`;
+};
+
 const CARD_CHIP = {
   blue:   'bg-blue-100 text-blue-600',
   emerald:'bg-emerald-100 text-emerald-600',
@@ -310,7 +324,7 @@ onBack, initialFrom, initialTo, consultations = [], detoxSessions = [], doctors 
                                 <td className="px-4 py-3 text-center">
                                   {item.session ? (
                                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                                      {item.session === 'FN' ? 'Morning' : 'Afternoon'}
+                                      {formatTimeAMPM(item.session)}
                                     </span>
                                   ) : '-'}
                                 </td>

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Users, Calendar, Activity, CheckCircle, TrendingUp, TrendingDown, Clock, ShieldCheck, Stethoscope, ClipboardList, Search, PhoneCall, Eye, Droplets, Filter, XCircle, CalendarDays, CheckCircle2 } from 'lucide-react';
 import PatientHistoryModal from './PatientHistoryModal';
 import { updateAppointmentStatus } from '../api/appointmentApi';
-import { formatDateDisplay } from '../utils/dateFormatter';
+import { formatDateDisplay, formatTimeAMPM } from '../utils/dateFormatter';
 
 export default function DashboardView({ 
   patients, 
@@ -93,8 +93,9 @@ const currentDoctorId = currentDoctor && currentDoctor.id ? Number(currentDoctor
   const getApptTypeLabel = (appt) => {
     const t = String(appt?.appointmentType || '').toLowerCase();
     const session = String(appt?.session || '').toUpperCase();
-    if (t === 'detox' && session === 'FN') return 'detoxFN';
-    if (t === 'detox' && session === 'AN') return 'detoxAN';
+    const isMorning = session === 'FN' || (session.includes(':') && parseInt(session.split(':')[0], 10) < 12);
+    if (t === 'detox' && isMorning) return 'detoxFN';
+    if (t === 'detox' && !isMorning) return 'detoxAN';
     if (t.includes('detox') && t.includes('fn')) return 'detoxFN';
     if (t.includes('detox') && t.includes('an')) return 'detoxAN';
     if (t.includes('detox')) return 'detoxFN';
@@ -620,7 +621,8 @@ const allPendingFollowUps = React.useMemo(() => {
     if (!matchesFilter) {
       if (filterType.startsWith('Detox (')) {
         const expectedSession = filterType.replace('Detox (', '').replace(')', '');
-        matchesFilter = appt.appointmentType === 'Detox' && appt.session === expectedSession;
+        const isMorning = appt.session === 'FN' || (appt.session?.includes(':') && parseInt(appt.session.split(':')[0], 10) < 12);
+        matchesFilter = appt.appointmentType === 'Detox' && (expectedSession === 'FN' ? isMorning : !isMorning);
       } else {
         matchesFilter = appt.appointmentType === filterType;
       }
@@ -639,7 +641,8 @@ const allPendingFollowUps = React.useMemo(() => {
     if (!matchesFilter) {
       if (filterType.startsWith('Detox (')) {
         const expectedSession = filterType.replace('Detox (', '').replace(')', '');
-        matchesFilter = item.appointmentType === 'Detox' && item.session === expectedSession;
+        const isMorning = item.session === 'FN' || (item.session?.includes(':') && parseInt(item.session.split(':')[0], 10) < 12);
+        matchesFilter = item.appointmentType === 'Detox' && (expectedSession === 'FN' ? isMorning : !isMorning);
       } else {
         matchesFilter = item.appointmentType === filterType;
       }
@@ -1104,7 +1107,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             )}
                           </div>
                           <div className="text-xs text-slate-500 mt-1">
-                            {item.patient?.medical_conditions || item.appointmentType} • {item.session === 'FN' ? 'Forenoon' : 'Afternoon'}
+                            {item.patient?.medical_conditions || item.appointmentType} • {formatTimeAMPM(item.session)}
                           </div>
                           <div className="text-xs text-slate-500">
                             Total Visits: {item.historyCount}
@@ -1215,7 +1218,7 @@ const allPendingFollowUps = React.useMemo(() => {
                         )}
                       </div>
                       <div className="text-xs text-slate-400 mt-1">
-                        Time: {item.session === 'FN' ? '9:00 AM - 1:00 PM' : '2:00 PM - 6:00 PM'}
+                        Time: {formatTimeAMPM(item.session)}
                       </div>
                     </div>
                   ))
@@ -1308,11 +1311,11 @@ const allPendingFollowUps = React.useMemo(() => {
                             </div>
                             <div>
                               <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Session</span>
-                              <span className="font-semibold text-slate-700">{appt.session || 'FN'}</span>
+                              <span className="font-semibold text-slate-700">{formatTimeAMPM(appt.session)}</span>
                             </div>
                             <div className="col-span-2">
                               <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider">Type</span>
-                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>{String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session ? `Detox (${appt.session})` : (appt.appointmentType || 'General')}</span>
+                              <span className={getAppointmentTypeBadge(appt.appointmentType)}>{String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session ? `Detox (${formatTimeAMPM(appt.session)})` : (appt.appointmentType || 'General')}</span>
                             </div>
                           </div>
 
@@ -1422,7 +1425,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">
                               <strong className="text-slate-800 block">{formatDateDisplay(appt.date || todayDate)}</strong>
-                              <span className="text-slate-500 block text-[11px] font-medium mt-0.5">Session: {appt.session || 'FN'}</span>
+                              <span className="text-slate-500 block text-[11px] font-medium mt-0.5">Session: {formatTimeAMPM(appt.session)}</span>
                             </td>
                             <td className="py-3 px-4 min-w-[180px]">
                               <span className="font-bold text-slate-800 block text-sm truncate">{pt?.name || 'Unknown Patient'}</span>
@@ -1433,7 +1436,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">
                               <span className={getAppointmentTypeBadge(appt.appointmentType)}>
-                                {String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session ? `Detox (${appt.session})` : (appt.appointmentType || 'General')}
+                                {String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session ? `Detox (${formatTimeAMPM(appt.session)})` : (appt.appointmentType || 'General')}
                               </span>
                             </td>
                             <td className="py-3 px-4 whitespace-nowrap">

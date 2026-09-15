@@ -7,6 +7,7 @@ import { getSharesForDoctor, getSharesFromDoctor, deleteShare } from '../api/sha
 import { uploadConsultationPdf } from '../api/consultationApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
 import { createPatient } from '../api/patientApi';
+import { formatDateDisplay, formatTimeAMPM } from '../utils/dateFormatter';
 import PatientHistoryModal from './PatientHistoryModal';
 
 export default function UnifiedPatientRecords({
@@ -188,7 +189,7 @@ export default function UnifiedPatientRecords({
     const latestAppt = getLatestAppointment(patientId);
     if (latestAppt?.appointmentType && latestAppt.appointmentType !== 'General') {
       if (latestAppt.appointmentType === 'Detox' && latestAppt.session) {
-        return `Detox (${latestAppt.session})`;
+        return `Detox (${formatTimeAMPM(latestAppt.session)})`;
       }
       return latestAppt.appointmentType;
     }

@@ -1,6 +1,8 @@
 import React from 'react';
 import { Phone, Calendar, Stethoscope, Activity, Bed, Home, RefreshCw, Star, X } from 'lucide-react';
 
+import { formatTimeAMPM } from '../utils/dateFormatter';
+
 export default function PatientTimeline({
   patient,
   phoneCalls,
@@ -27,7 +29,7 @@ export default function PatientTimeline({
   phoneCalls.filter(c => c.phone === patient.phone || c.phone === patient.whatsapp).forEach(c => {
     timelineEvents.push({
       date: c.date, 
-      time: c.time, 
+      time: formatTimeAMPM(c.time || c.contactTime), 
       type: 'phone_call', 
       title: 'Phone Intake Call',
       icon: Phone, 
@@ -37,7 +39,7 @@ export default function PatientTimeline({
   });
 
   appointments.filter(a => String(a.patient_id || a.patientId) === String(patient.id)).forEach(a => {
-    const timeDisplay = a.time || (a.session === 'FN' ? 'Forenoon' : 'Afternoon');
+    const timeDisplay = formatTimeAMPM(a.time || a.session);
     const sourceDisplay = a.source || 'Clinic Walk-in';
     
     timelineEvents.push({
@@ -60,9 +62,12 @@ export default function PatientTimeline({
       `Detox assignment: ${c.detox_type || 'Recommended'} with ${docName}. Follow-up Remarks: ${fRemarks || 'No additional remarks.'}` :
       'No detox recommended';
 
+    const linkedAppt = appointments?.find(a => String(a.id) === String(c.appointmentId || c.appointment_id));
+    const consultTime = linkedAppt?.session ? formatTimeAMPM(linkedAppt.session) : 'Consult Time';
+
     timelineEvents.push({
       date: c.date || c.consultationDate?.split('T')[0] || 'Unknown Date', 
-      time: 'Consult Time', 
+      time: consultTime, 
       type: 'consultation', 
       title: 'Doctor Consultation',
       icon: Stethoscope, 
@@ -129,9 +134,11 @@ export default function PatientTimeline({
     const rawFDate = d.followupDate || d.followup_date || linkedCons?.followupDate || linkedCons?.followup_date;
     const fDate = rawFDate ? (typeof rawFDate === 'string' ? rawFDate.split('T')[0] : new Date(rawFDate).toISOString().split('T')[0]) : null;
 
+    const detoxTime = d.sessionType === 'morning' ? 'Forenoon' : (d.sessionType === 'evening' ? 'Afternoon' : 'Full Day');
+
     timelineEvents.push({
       date: d.scheduled_date || d.sessionDate?.split('T')[0] || 'Unknown Date', 
-      time: 'Session Date', 
+      time: detoxTime, 
       type: 'detox', 
       title: `Detox Therapy Session`,
       icon: Activity, 
@@ -156,7 +163,7 @@ export default function PatientTimeline({
     // Add admission event
     timelineEvents.push({
       date: s.check_in_time ? s.check_in_time.split(' ')[0] : s.check_in_date || 'Unknown',
-      time: s.check_in_time ? s.check_in_time.split(' ')[1] : 'Admission',
+      time: s.check_in_time && s.check_in_time.includes(' ') ? formatTimeAMPM(s.check_in_time.split(' ')[1]) : 'Admission Time',
       type: 'stay_in', 
       title: `Admitted for One-Day Stay`,
       icon: Bed, 
@@ -168,7 +175,7 @@ export default function PatientTimeline({
     if (s.status === 'Discharged' && s.check_out_time) {
       timelineEvents.push({
         date: s.check_out_time.split(' ')[0],
-        time: s.check_out_time.split(' ')[1],
+        time: s.check_out_time && s.check_out_time.includes(' ') ? formatTimeAMPM(s.check_out_time.split(' ')[1]) : 'Discharge Time',
         type: 'stay_out', 
         title: `Discharged from Stay Room`,
         icon: Home, 
@@ -181,7 +188,7 @@ export default function PatientTimeline({
   followups.filter(f => String(f.patient_id || f.patientId) === String(patient.id)).forEach(f => {
     timelineEvents.push({
       date: f.scheduled_date, 
-      time: 'Review Date', 
+      time: f.time ? formatTimeAMPM(f.time) : (f.session ? formatTimeAMPM(f.session) : 'Review Time'), 
       type: 'followup', 
       title: `Next Review Reminder`,
       icon: RefreshCw, 

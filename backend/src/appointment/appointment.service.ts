@@ -5,6 +5,21 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { sendWhatsappTemplateMessage } from '../common/whatsapp.util';
 
+const formatTimeAMPM = (timeStr: string): string => {
+  if (!timeStr) return '09:00 AM';
+  if (timeStr === 'FN') return 'Forenoon';
+  if (timeStr === 'AN') return 'Afternoon';
+  if (!timeStr.includes(':')) return timeStr;
+  const parts = timeStr.split(':');
+  const hours = parts[0];
+  const minutes = parts[1];
+  if (!hours || !minutes) return timeStr;
+  let h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  h = h ? h : 12;
+  return `${h}:${minutes} ${ampm}`;
+};
 
 @Injectable()
 export class AppointmentService {
@@ -159,7 +174,7 @@ export class AppointmentService {
         [
           appointment.patient.name,      // {{1}} Name
           appointmentDate,               // {{2}} Date
-          appointment.session || 'FN',   // {{3}} Time/Session
+          formatTimeAMPM(appointment.session),   // {{3}} Time/Session
           appointment.appointmentType || 'Consultation', // {{4}} Consultation Type
           doctorName                     // {{5}} Doctor
         ],
@@ -382,7 +397,7 @@ export class AppointmentService {
         [
           appointment.patient.name,
           appointmentDate,
-          appointment.session || 'FN',
+          formatTimeAMPM(appointment.session),
           appointment.appointmentType || 'Consultation',
           doctorName
         ],

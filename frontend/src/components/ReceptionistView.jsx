@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getPatientByPhone, createPatient, updatePatient } from '../api/patientApi';
 import { createAppointment, updateAppointment, updateAppointmentStatus, deleteAppointment } from '../api/appointmentApi';
 import { toast } from 'react-toastify';
-import { formatDateDisplay } from '../utils/dateFormatter';
+import { formatDateDisplay, formatTimeAMPM } from '../utils/dateFormatter';
 import { 
   UserPlus, 
   Clock, 
@@ -51,7 +51,7 @@ export default function ReceptionistView({
     doctor_id: '',
     date: new Date().toISOString().split('T')[0],
     appointmentType: 'New consultation',
-    session: 'FN',
+    session: '09:00',
     notes: ''
   });
 
@@ -60,7 +60,7 @@ export default function ReceptionistView({
     doctor_id: '',
     date: new Date().toISOString().split('T')[0],
     appointmentType: 'New consultation',
-    session: 'FN',
+    session: '09:00',
     notes: ''
   });
 
@@ -766,7 +766,7 @@ export default function ReceptionistView({
         index + 1,
         pt.name || '0',
         pt.phone ? String(pt.phone).replace(/\D/g, '').slice(-10) : '0',
-        appt.session || 'FN',
+        formatTimeAMPM(appt.session),
         appt.appointmentType || '-',
         appt.notes || '-',
         appt.status || '-',
@@ -871,7 +871,7 @@ export default function ReceptionistView({
 
   const getDisplayAppointmentType = (appt) => {
     if (String(appt.appointmentType || '').toLowerCase() === 'detox' && appt.session) {
-      return `Detox (${appt.session})`;
+      return `Detox (${formatTimeAMPM(appt.session)})`;
     }
     return appt.appointmentType || 'General';
   };
@@ -1259,16 +1259,7 @@ export default function ReceptionistView({
 
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Session Time</label>
-              <div className="flex gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" value="FN" checked={formData.session === 'FN'} onChange={e => setFormData({ ...formData, session: e.target.value })} className="w-4 h-4 text-emerald-600 focus:ring-emerald-500" />
-                  <span className="text-sm font-medium text-slate-700">Forenoon (FN)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" value="AN" checked={formData.session === 'AN'} onChange={e => setFormData({ ...formData, session: e.target.value })} className="w-4 h-4 text-emerald-600 focus:ring-emerald-500" />
-                  <span className="text-sm font-medium text-slate-700">Afternoon (AN)</span>
-                </label>
-              </div>
+              <input type="time" value={formData.session === 'FN' || formData.session === 'AN' ? '09:00' : formData.session} onChange={e => setFormData({ ...formData, session: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium" />
             </div>
 
             <div>
@@ -1495,7 +1486,7 @@ export default function ReceptionistView({
                            </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">
                             <strong className="text-slate-800 block">{formatDateDisplay(getAppointmentDateOnly(appt))}</strong>
-                            <span className="text-slate-500 block text-[11px]">Session: {appt.session || 'FN'}</span>
+                            <span className="text-slate-500 block text-[11px]">Session: {formatTimeAMPM(appt.session)}</span>
                            </td>
                           <td className="py-3 px-4 align-top min-w-0">
                             <span className="font-bold text-slate-800 block text-sm truncate">{pt.name || 'Unknown Patient'}</span>
@@ -1656,10 +1647,7 @@ export default function ReceptionistView({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Session Time</label>
-                <div className="flex gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer"><input type="radio" value="FN" checked={modalBookingData.session === 'FN'} onChange={e => setModalBookingData({ ...modalBookingData, session: e.target.value })} className="w-4 h-4 text-emerald-600 focus:ring-emerald-500" /><span className="text-sm font-medium text-slate-700">Forenoon (FN)</span></label>
-                  <label className="flex items-center gap-2 cursor-pointer"><input type="radio" value="AN" checked={modalBookingData.session === 'AN'} onChange={e => setModalBookingData({ ...modalBookingData, session: e.target.value })} className="w-4 h-4 text-emerald-600 focus:ring-emerald-500" /><span className="text-sm font-medium text-slate-700">Afternoon (AN)</span></label>
-                </div>
+                <input type="time" value={modalBookingData.session === 'FN' || modalBookingData.session === 'AN' ? '09:00' : modalBookingData.session} onChange={e => setModalBookingData({ ...modalBookingData, session: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 transition-all font-medium" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Scheduling Notes</label>

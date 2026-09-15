@@ -17,7 +17,6 @@ export class CreateAppointmentDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['FN', 'AN'])
   session?: string;
 
   @IsOptional()

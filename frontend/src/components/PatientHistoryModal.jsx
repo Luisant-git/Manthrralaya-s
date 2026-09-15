@@ -8,7 +8,7 @@ import { uploadConsultationPdf, updateConsultation, createConsultation, uploadRe
 import { createAppointment, updateAppointment, updateAppointmentStatus } from '../api/appointmentApi';
 import { createDetoxSession } from '../api/detoxSessionApi';
 import { createShare } from '../api/shareApi';
-
+import { formatTimeAMPM } from '../utils/dateFormatter';
 const wrapNewImgHtml = (url) =>
   `<span class="img-wrap" contenteditable="false"><img src="${url}" alt="Uploaded Image"/></span>`;
 export default function PatientHistoryModal({
@@ -1182,10 +1182,16 @@ export default function PatientHistoryModal({
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg mb-1 inline-block">
-                              {formatDate(currentConsultation.date)}
+                            <div className="text-sm font-mono font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg mb-1 inline-flex items-center gap-2">
+                              <span>{formatDate(currentConsultation.date)}</span>
+                              {currentConsultation.appointment?.session && (
+                                <>
+                                  <span className="text-slate-300">|</span>
+                                  <span className="text-emerald-600">{formatTimeAMPM(currentConsultation.appointment.session)}</span>
+                                </>
+                              )}
                             </div>
-                            <div className="text-[10px] text-slate-400 mb-2">Visit Date</div>
+                            <div className="text-[10px] text-slate-400 mb-2">Visit Date & Time</div>
                             <div className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-full px-2 py-0.5 inline-block">
                               {currentConsultation.appointment?.appointmentType || 'Consultation'}
                             </div>
