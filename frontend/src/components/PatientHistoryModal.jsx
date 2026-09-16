@@ -337,6 +337,26 @@ export default function PatientHistoryModal({
   };
 
   // Helper: extract image srcs from HTML string
+  const handleDownloadImage = async (src, name) => {
+    try {
+      const url = toAbsoluteUrl(src);
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` } });
+      if (!res.ok) throw new Error('Failed to download image');
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = name || src.split('/').pop() || 'image.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      console.error('Image download error:', err);
+      toast.error('Failed to download image');
+    }
+  };
+
   const extractImgSrcsFromHtml = (html) => {
     if (!html) return [];
     const div = document.createElement('div');
@@ -399,14 +419,22 @@ export default function PatientHistoryModal({
                   {img.size ? <p className="text-[10px] text-slate-400">{formatFileSize(img.size)}</p> : null}
                 </div>
                 {/* Actions */}
-                <div className="flex items-center gap-1 px-2 pb-2">
+                <div className="flex items-center gap-1.5 px-2 pb-2 pt-1 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); onPreview && onPreview(img.url, images, idx); }}
-                    className="w-full flex items-center justify-center gap-1 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold transition"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-slate-600 text-[10px] font-semibold transition"
                     title="View"
                   >
-                    <Eye className="w-3 h-3" /> View
+                    <Eye className="w-3.5 h-3.5" /> View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleDownloadImage(img.url, name); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300 text-emerald-600 text-[10px] font-semibold transition"
+                    title="Download image"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Download
                   </button>
                 </div>
               </div>
