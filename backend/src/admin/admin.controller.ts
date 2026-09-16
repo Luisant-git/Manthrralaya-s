@@ -125,7 +125,7 @@ export class AdminController {
 
   // Get all users by role
   @ApiOperation({ summary: 'Get all users by role' })
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.THERAPIST)
   @ApiParam({ name: 'role', enum: UserRole, description: 'User role' })
   @Get(':role')
   getUsersByRole(@Param('role') role: UserRole) {

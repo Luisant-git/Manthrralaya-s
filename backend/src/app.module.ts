@@ -11,12 +11,13 @@ import { ConsultationModule } from './consultation/consultation.module';
 import { DetoxsessionModule } from './detoxsession/detoxsession.module';
 import { DoctorScheduleModule } from './doctor-schedule/doctor-schedule.module';
 import { FoodChartModule } from './food-chart/food-chart.module';
+import { MenuPermissionModule } from './menu-permission/menu-permission.module';
 
 @Module({
    imports: [
     ConfigModule.forRoot({
       isGlobal: true, 
-    }), AuthModule, AdminModule, PatientModule, AppointmentModule, ConsultationModule, DetoxsessionModule, ShareModule, DoctorScheduleModule, FoodChartModule],
+    }), AuthModule, AdminModule, PatientModule, AppointmentModule, ConsultationModule, DetoxsessionModule, ShareModule, DoctorScheduleModule, FoodChartModule, MenuPermissionModule],
   controllers: [AppController],
   providers: [AppService],
 })

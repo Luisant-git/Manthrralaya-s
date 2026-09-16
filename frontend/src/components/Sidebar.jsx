@@ -14,10 +14,11 @@ import {
   ClipboardList,
   Key,
   Lock,
-  UserCheck
+  UserCheck,
+  Settings
 } from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebarOpen, setIsSidebarOpen }) {
+export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebarOpen, setIsSidebarOpen, menuPermissions }) {
   const navigationItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
     { id: 'user-management', name: 'Staff Management', icon: UserPlus, roles: ['admin'] },
@@ -33,6 +34,7 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebar
     { id: 'my-patient-records', name: 'My Patient Records', icon: ClipboardList, roles: ['doctor', 'admin', 'therapist'] },
     { id: 'detox', name: 'Detox Scheduling', icon: Activity, roles: ['admin', 'doctor', 'therapist'] },
     { id: 'admission-scheduling', name: 'Admission Scheduling', icon: BedDouble, roles: ['admin', 'doctor', 'therapist'] },
+    { id: 'settings', name: 'Settings', icon: Settings, roles: ['admin'] },
     // { id: 'whatsapp-hub', name: 'WhatsApp Hub', icon: MessageSquareCode, roles: ['admin', 'receptionist'] },
     // { id: 'reports', name: 'Reports & Analytics', icon: FileBarChart, roles: ['admin'] },
     // { id: 'reviews', name: 'Patient Feedback', icon: Star, roles: ['admin'] }
@@ -54,7 +56,16 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebar
           <nav className="space-y-1">
             {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isAllowed = item.roles.includes(activeRole);
+              // Critical menus that must always be visible (never lock users out)
+              const isAlwaysAllowed =
+                activeRole === 'admin' && (item.id === 'settings' || item.id === 'user-management') ||
+                item.id === 'dashboard';
+              // Strict mode: show ONLY the menus the admin enabled for this role
+              const isAllowed = isAlwaysAllowed
+                ? true
+                : menuPermissions
+                  ? !!menuPermissions[item.id]
+                  : false;
               const isActive = activeTab === item.id;
               
               if (!isAllowed) return null;

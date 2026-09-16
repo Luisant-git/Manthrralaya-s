@@ -25,6 +25,8 @@ import ChangeMyPin from './components/ChangeMyPin';
 import DoctorPatientView from './components/DoctorPatientView';
 import DoctorPatientDetailView from './components/DoctorPatientDetailView';
 import AdmissionSchedulingView from './components/AdmissionSchedulingView';
+import SettingsView from './components/SettingsView';
+import { menuPermissionApi } from './api/menuPermissionApi';
 import { getAllAppointments, createAppointment as apiCreateAppointment, updateAppointmentStatus as apiUpdateStatus, deleteAppointment as apiDeleteAppointment } from './api/appointmentApi';
 import { userApi } from './api/userApi';
 import { getPatientByPhone, createPatient as apiCreatePatient, getAllPatients } from './api/patientApi';
@@ -40,6 +42,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('activeTab') || 'dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [menuPermissions, setMenuPermissions] = useState(null);
 
   // Database States - Start with empty arrays
   const [patients, setPatients] = useState([]);
@@ -361,6 +364,22 @@ export default function App() {
       fetchAllData();
     }
   }, [isAuthenticated]);
+
+  // Fetch the logged-in user's role-wise menu permissions for sidebar gating
+  useEffect(() => {
+    if (!isAuthenticated || !activeRole) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const perms = await menuPermissionApi.getMyPermissions();
+        if (!cancelled) setMenuPermissions(perms?.menus || null);
+      } catch (error) {
+        console.warn('Failed to load menu permissions, using defaults:', error);
+        if (!cancelled) setMenuPermissions(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated, activeRole]);
 
   useEffect(() => {
     if (activeTab !== 'doctor-patients') {
@@ -825,6 +844,12 @@ export default function App() {
         ) : (
           <div className="text-center py-12 text-slate-500">Access Denied. Admin privileges required.</div>
         );
+      case 'settings':
+        return activeRole === 'admin' ? (
+          <SettingsView />
+        ) : (
+          <div className="text-center py-12 text-slate-500">Access Denied. Admin privileges required.</div>
+        );
       default:
         return <div className="text-center py-12 text-slate-500">Access Denied or Feature in Development.</div>;
     }
@@ -857,6 +882,7 @@ export default function App() {
           activeRole={activeRole}
           isSidebarOpen={isSidebarOpen}
           setIsSidebarOpen={setIsSidebarOpen}
+          menuPermissions={menuPermissions}
         />
 
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-100">

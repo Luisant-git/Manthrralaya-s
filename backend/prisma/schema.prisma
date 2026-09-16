@@ -15,6 +15,17 @@ enum UserRole {
   THERAPIST
 }
 
+// Role-wise menu permissions (managed from Admin > Settings > Menu Permission)
+model MenuPermission {
+  id          Int      @id @default(autoincrement())
+  role        UserRole @unique
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("menu_permissions")
+}
+
 // User model for authentication
 model User {
   id        Int       @id @default(autoincrement())
