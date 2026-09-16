@@ -2,7 +2,9 @@ import { Controller, Post, Body, UseGuards, Get, Param, Patch, Delete, Req, Quer
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { MenuPermissionGuard } from '../auth/guards/menu-permission.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequireMenu } from '../auth/decorators/require-menu.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -10,7 +12,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 @ApiTags('Admin')
 @ApiBearerAuth()
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, MenuPermissionGuard)
 export class AdminController {
   constructor(private adminService: AdminService) {}
 
@@ -49,7 +51,8 @@ export class AdminController {
 
   // Update user details
   @ApiOperation({ summary: 'Update staff details' })
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.THERAPIST)
+  @RequireMenu('doctor-master', 'user-management')
   @Patch('user/:id')
   updateUser(
     @Param('id') id: string,
@@ -60,7 +63,8 @@ export class AdminController {
 
   // Delete user
   @ApiOperation({ summary: 'Delete user' })
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.THERAPIST)
+  @RequireMenu('doctor-master', 'user-management')
   @Delete('user/:id')
   deleteUser(@Param('id') id: string) {
     return this.adminService.deleteUser(Number(id));
@@ -68,7 +72,8 @@ export class AdminController {
 
   // Update doctor status
   @ApiOperation({ summary: 'Update doctor availability status' })
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST, UserRole.THERAPIST)
+  @RequireMenu('doctor-master')
   @Patch('doctor/:id/status')
   updateDoctorStatus(
     @Param('id') id: string,
