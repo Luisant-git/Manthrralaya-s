@@ -50,6 +50,7 @@ model Doctor {
   sharesSent      Share[]   @relation("ShareFrom")
   sharesReceived  Share[]   @relation("ShareTo")
   doctorSchedules DoctorSchedule[]
+  createdPatients Patient[]
 
 
   createdAt      DateTime @default(now())
@@ -77,9 +78,11 @@ model Patient {
   whatsapp      String?
   location      String?
   address       String?
+  createdByDoctorId Int?
   createdAt     DateTime @default(now()) 
   updatedAt     DateTime @updatedAt 
 
+  createdByDoctor Doctor?  @relation(fields: [createdByDoctorId], references: [id])
   appointments  Appointment[]
   consultations Consultation[]
   receptionistFollowups ReceptionistFollowup[]
@@ -89,6 +92,7 @@ model Patient {
 
   @@map("patients")
   @@index([phone])
+  @@index([createdByDoctorId])
 }
 
 model Appointment {

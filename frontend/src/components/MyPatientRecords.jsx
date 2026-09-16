@@ -29,6 +29,7 @@ export default function UnifiedPatientRecords({
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [apptFilter, setApptFilter] = useState('All');
+  const [doctorFilter, setDoctorFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -99,15 +100,17 @@ export default function UnifiedPatientRecords({
   const [sharesForMe, setSharesForMe] = React.useState([]);
   const [sharesFromMe, setSharesFromMe] = React.useState([]);
 
+  const sharesDocId = isDoctor ? currentDocId : (doctorFilter ? Number(doctorFilter) : null);
+
   React.useEffect(() => {
     let mounted = true;
     const loadShares = async () => {
-      if (!currentDocId) return;
+      if (!sharesDocId) return;
       try {
-        const resForMe = await getSharesForDoctor(currentDocId);
+        const resForMe = await getSharesForDoctor(sharesDocId);
         if (mounted) setSharesForMe(Array.isArray(resForMe) ? resForMe : (resForMe.data || []));
 
-        const resFromMe = await getSharesFromDoctor(currentDocId);
+        const resFromMe = await getSharesFromDoctor(sharesDocId);
         if (mounted) setSharesFromMe(Array.isArray(resFromMe) ? resFromMe : (resFromMe.data || []));
       } catch (err) {
         console.debug('Failed to load shares for doctor', err);
@@ -115,7 +118,7 @@ export default function UnifiedPatientRecords({
     };
     loadShares();
     return () => { mounted = false; };
-  }, [currentDocId, appointments, consultations]);
+  }, [sharesDocId, appointments, consultations]);
 
   // Create a robust list of doctors for name lookups
   let availableDoctors = [...doctors];
@@ -133,17 +136,19 @@ export default function UnifiedPatientRecords({
     });
   }
 
-  const myPatientIds = isDoctor ? new Set([
+  const scopeDoctorId = isDoctor ? currentDocId : (doctorFilter ? Number(doctorFilter) : null);
+
+  const myPatientIds = scopeDoctorId ? new Set([
     ...appointments
-      .filter(a => currentDocId && Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(currentDocId))
+      .filter(a => Number(a.doctor_id ?? a.doctorId ?? a.doctor?.id) === Number(scopeDoctorId))
       .map(a => String(a.patient_id || a.patientId)),
     ...consultations
-      .filter(c => currentDocId && Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(currentDocId))
+      .filter(c => Number(c.doctor_id ?? c.doctorId ?? c.doctor?.id) === Number(scopeDoctorId))
       .map(c => String(c.patient_id || c.patientId))
   ]) : null;
 
     // Add shared patients to the set so they appear in the doctor's patient list
-    if (isDoctor && sharesForMe && sharesForMe.length > 0) {
+    if (scopeDoctorId && sharesForMe && sharesForMe.length > 0) {
       sharesForMe.forEach(s => myPatientIds.add(String(s.patientId)));
     }
 
@@ -385,8 +390,12 @@ export default function UnifiedPatientRecords({
     });
   }
 
-  const basePatients = isDoctor
-    ? allAvailablePatients.filter(p => myPatientIds.has(String(p.id)) || locallyAddedPatientIds.has(String(p.id)))
+  const basePatients = scopeDoctorId
+    ? allAvailablePatients.filter(p =>
+        myPatientIds.has(String(p.id)) ||
+        locallyAddedPatientIds.has(String(p.id)) ||
+        Number(p.createdByDoctorId) === Number(scopeDoctorId)
+      )
     : allAvailablePatients;
 
   const filteredPatients = basePatients.filter(pt => {
@@ -703,6 +712,21 @@ export default function UnifiedPatientRecords({
             <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation history.</p>
           </div>
           <div className="flex gap-3 items-center">
+            {activeRole?.toLowerCase() === 'admin' && (
+              <select
+                value={doctorFilter}
+                onChange={(e) => {
+                  setDoctorFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-medium cursor-pointer"
+              >
+                <option value="">All Doctors</option>
+                {availableDoctors.map(d => (
+                  <option key={d.id} value={d.id}>{d.name || d.user?.fullName || `Doctor ${d.id}`}</option>
+                ))}
+              </select>
+            )}
             {isDoctor && (
               <div className="px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2 shadow-sm">
                 <Droplets className="w-5 h-5 text-teal-600" />
@@ -712,7 +736,7 @@ export default function UnifiedPatientRecords({
                 </div>
               </div>
             )}
-            {activeRole?.toLowerCase() === 'admin' && (
+            {(activeRole?.toLowerCase() === 'admin' || isDoctor) && (
               <button
                 onClick={() => setIsAdding(!isAdding)}
                 className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-sm text-sm"

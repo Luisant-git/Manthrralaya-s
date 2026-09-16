@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
@@ -7,39 +11,79 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 export class PatientService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly patientInclude = {
+    appointments: {
+      include: {
+        doctor: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    },
+  };
+
+  // Resolve the Doctor record id for the logged-in user.
+  // Only DOCTOR and THERAPIST roles own patients; ADMIN/RECEPTIONIST return null (clinic-level).
+  private async resolveDoctorId(user: any): Promise<number | null> {
+    if (!user) return null;
+    const role = String(user.role || '').toUpperCase();
+    if (role !== 'DOCTOR' && role !== 'THERAPIST') return null;
+    if (!user.sub) return null;
+
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: Number(user.sub) },
+    });
+    return doctor ? doctor.id : null;
+  }
+
+  // Restrict discovery scope for doctors: only their own created patients plus
+  // patients linked via appointments, consultations, or shared to them.
+  private buildDoctorScope(doctorId: number | null): any {
+    if (!doctorId) return {};
+    return {
+      OR: [
+        { createdByDoctorId: doctorId },
+        { appointments: { some: { doctorId } } },
+        { consultations: { some: { doctorId } } },
+        { shares: { some: { toDoctorId: doctorId } } },
+      ],
+    };
+  }
+
   // ✅ CREATE (allow same phone, prevent exact duplicate)
-  async create(createPatientDto: CreatePatientDto) {
+  async create(createPatientDto: CreatePatientDto, currentUser?: any) {
     const existing = await this.prisma.patient.findFirst({
       where: {
         phone: createPatientDto.phone,
-        name: createPatientDto.name
-      }
+        name: createPatientDto.name,
+      },
     });
 
     if (existing) {
-      throw new ConflictException('Patient with same name and phone already exists');
+      throw new ConflictException(
+        'Patient with same name and phone already exists',
+      );
     }
 
+    const createdByDoctorId = await this.resolveDoctorId(currentUser);
+
     return this.prisma.patient.create({
-      data: createPatientDto
+      data: {
+        ...createPatientDto,
+        createdByDoctorId,
+      },
     });
   }
 
   // ✅ GET ALL
-  async findAll() {
+  async findAll(currentUser?: any) {
+    const doctorId = await this.resolveDoctorId(currentUser);
+
     return this.prisma.patient.findMany({
-      include: {
-        appointments: {
-          include: {
-            doctor: {
-              include: {
-                user: true
-              }
-            }
-          }
-        }
-      },
-      orderBy: { createdAt: 'desc' }
+      where: this.buildDoctorScope(doctorId),
+      include: this.patientInclude,
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -48,17 +92,18 @@ export class PatientService {
     const patient = await this.prisma.patient.findUnique({
       where: { id },
       include: {
+        ...this.patientInclude,
         appointments: {
           include: {
             doctor: {
               include: {
-                user: true
-              }
-            }
+                user: true,
+              },
+            },
           },
-          orderBy: { appointmentDate: 'desc' }
-        }
-      }
+          orderBy: { appointmentDate: 'desc' },
+        },
+      },
     });
 
     if (!patient) {
@@ -69,7 +114,7 @@ export class PatientService {
   }
 
   // ✅ FIND BY PHONE (MULTIPLE PATIENTS)
-  async findByPhone(phone: string) {
+  async findByPhone(phone: string, currentUser?: any) {
     // Normalize input and attempt flexible matching so searches succeed
     const cleaned = phone ? phone.toString().replace(/\D/g, '') : '';
     const last10 = cleaned.slice(-10);
@@ -77,7 +122,8 @@ export class PatientService {
     const candidates = new Set<string>();
     if (cleaned) candidates.add(cleaned);
     if (cleaned.length === 10) candidates.add('+91' + cleaned);
-    if (cleaned.length > 10 && cleaned.startsWith('91')) candidates.add('+' + cleaned);
+    if (cleaned.length > 10 && cleaned.startsWith('91'))
+      candidates.add('+' + cleaned);
     // also try bare '91' + last10
     if (last10) candidates.add('91' + last10);
 
@@ -88,21 +134,16 @@ export class PatientService {
     // also match any phone that ends with the last 10 digits
     if (last10) orClauses.push({ phone: { endsWith: last10 } });
 
+    const doctorId = await this.resolveDoctorId(currentUser);
+    const scope = this.buildDoctorScope(doctorId);
+
+    const where: any = {
+      AND: [{ OR: orClauses }, scope],
+    };
+
     const patients = await this.prisma.patient.findMany({
-      where: {
-        OR: orClauses
-      },
-      include: {
-        appointments: {
-          include: {
-            doctor: {
-              include: {
-                user: true
-              }
-            }
-          }
-        }
-      }
+      where,
+      include: this.patientInclude,
     });
 
     if (!patients.length) {
@@ -120,8 +161,8 @@ export class PatientService {
       where: { id },
       data: updatePatientDto,
       include: {
-        appointments: true
-      }
+        appointments: true,
+      },
     });
   }
 
@@ -130,7 +171,7 @@ export class PatientService {
     await this.findOne(id);
 
     return this.prisma.patient.delete({
-      where: { id }
+      where: { id },
     });
   }
 }

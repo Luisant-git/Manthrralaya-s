@@ -457,7 +457,7 @@ export default function PatientsView({ appointments = [], followups = [], consul
     sharesForMe.forEach(s => myPatientIds.add(String(s.patientId)));
   }
 
-  const basePatients = isDoctor ? patients.filter(p => myPatientIds.has(String(p.id))) : patients;
+  const basePatients = isDoctor ? patients.filter(p => myPatientIds.has(String(p.id)) || (currentDocId && Number(p.createdByDoctorId) === Number(currentDocId))) : patients;
 
   const filteredPatients = basePatients.filter(p => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -499,6 +499,15 @@ export default function PatientsView({ appointments = [], followups = [], consul
           <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Directory</h1>
           <p className="text-slate-500 text-sm mt-1">Manage patient intakes, demographics, and clinical records.</p>
         </div>
+        {(activeRole === 'admin' || activeRole === 'doctor' || activeRole === 'therapist') && (
+          <button
+            onClick={() => setIsAdding(!isAdding)}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-sm text-sm"
+          >
+            {isAdding ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+            {isAdding ? 'Cancel' : 'New Patient Registration'}
+          </button>
+        )}
       </div>
 
       {isAdding ? (
