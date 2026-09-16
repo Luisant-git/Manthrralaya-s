@@ -261,6 +261,47 @@ export const sendWhatsappTemplateMessageWithoutMedia = async (
   return data;
 };
 
+export const sendWhatsappTextMessage = async (toPhoneNumber: string, text: string) => {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+  if (!phoneNumberId || !accessToken) {
+    console.warn('WhatsApp configuration missing, cannot send OTP text');
+    return null;
+  }
+
+  let phone = toPhoneNumber.replace(/\D/g, '');
+  if (phone.length === 10) phone = '91' + phone;
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: phone,
+    type: 'text',
+    text: { body: text },
+  };
+
+  console.log('Sending WhatsApp text to', phone);
+
+  const response = await fetch(`https://graph.facebook.com/v17.0/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('WhatsApp text send error:', data);
+    return null;
+  }
+
+  console.log('WhatsApp text sent:', data.messages?.[0]?.id);
+  return data;
+};
+
 export const logTemplateToCRM = async (customerPhone: string, messageId: string, templateName: string, orderId: any, templateContent: string, templateParameters?: string[], mediaId?: string, fileName?: string) => {
   try {
     const crmApiUrl = 'https://whatsapp.api.luisant.cloud/whatsapp/external/log-message';

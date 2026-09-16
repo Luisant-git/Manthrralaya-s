@@ -21,4 +21,22 @@ export class AuthController {
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
+
+  @ApiOperation({ summary: 'Admin: Request OTP for PIN reset' })
+  @Post('admin-forgot-pin/request-otp')
+  requestOtp(@Body('phone') phone: string) {
+    return this.authService.requestAdminOtp(phone);
+  }
+
+  @ApiOperation({ summary: 'Admin: Verify OTP for PIN reset' })
+  @Post('admin-forgot-pin/verify-otp')
+  verifyOtp(@Body() dto: { phone: string; otp: string }) {
+    return this.authService.verifyAdminOtp(dto.phone, dto.otp);
+  }
+
+  @ApiOperation({ summary: 'Admin: Reset PIN with verified OTP' })
+  @Post('admin-forgot-pin/reset')
+  resetPin(@Body() dto: { phone: string; otp: string; newPin: string }) {
+    return this.authService.resetAdminPinWithOtp(dto.phone, dto.otp, dto.newPin);
+  }
 }

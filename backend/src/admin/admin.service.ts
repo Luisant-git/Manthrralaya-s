@@ -716,4 +716,20 @@ async resetUserPin(userId: number, newPin: string, requestingUserRole: UserRole,
     message: `Access PIN for ${user.fullName} has been updated and account activated.`
   };
 }
+
+// ========== RESET USER PIN (raw hashed) ==========
+async resetUserPinRaw(userId: number, hashedPin: string) {
+  const user = await this.prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new NotFoundException('User not found');
+
+  await this.prisma.user.update({
+    where: { id: userId },
+    data: { pin: hashedPin, isActive: true },
+  });
+
+  return {
+    success: true,
+    message: `Access PIN for ${user.fullName} has been updated.`,
+  };
+}
 }
