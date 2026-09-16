@@ -37,7 +37,8 @@ export default function ReceptionistView({
   whatsappLogs,
   setWhatsappLogs,
   consultations = [],
-  detoxSessions = []
+  detoxSessions = [],
+  currentUser = null
 }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -588,7 +589,12 @@ export default function ReceptionistView({
         appointmentType: formData.appointmentType,
         session: formData.session,
         notes: formData.notes,
-        status: type === 'waiting' ? 'Waiting' : 'Scheduled'
+        status: type === 'waiting' ? 'Waiting' : 'Scheduled',
+        bookedByUserId: (() => {
+          const rawId = currentUser?.id ?? currentUser?.userId ?? null;
+          const num = rawId != null ? Number(rawId) : null;
+          return num != null && !isNaN(num) ? num : null;
+        })()
       };
 
       const newAppt = await createAppointment(appointmentData);
@@ -604,6 +610,13 @@ export default function ReceptionistView({
         doctorId: formData.doctor_id ? parseInt(formData.doctor_id, 10) : newAppt.doctorId || newAppt.doctor_id,
         doctor_id: formData.doctor_id ? parseInt(formData.doctor_id, 10) : newAppt.doctorId || newAppt.doctor_id,
         doctor_name: doctorObj?.user?.fullName || doctorObj?.name || newAppt.doctor_name,
+        bookedByUserId: (() => {
+          const rawId = currentUser?.id ?? currentUser?.userId ?? null;
+          const num = rawId != null ? Number(rawId) : null;
+          return num != null && !isNaN(num) ? num : null;
+        })(),
+        bookedByUser: currentUser ? { fullName: currentReceptionistName } : newAppt.bookedByUser || null,
+        bookedByUserName: currentReceptionistName || newAppt.bookedByUserName,
         appointmentDate: appointmentDateValue,
         date: getAppointmentDateOnly({ appointmentDate: appointmentDateValue })
       };
@@ -669,6 +682,21 @@ export default function ReceptionistView({
     } catch (error) {
       toast.error(`Error: ${error.message}`);
     }
+  };
+
+  const getReceptionistName = (user) => {
+    if (!user) return '';
+    return user.fullName || user.username || user.email || user.id || '';
+  };
+
+  const currentReceptionistName = getReceptionistName(currentUser);
+
+  const getBookedByLabel = (appt) => {
+    return appt?.bookedByUser?.fullName ||
+      appt?.bookedByUser?.name ||
+      appt?.bookedByUser?.username ||
+      appt?.bookedByUserName ||
+      '—';
   };
 
   const handleCheckIn = async (apptId) => {
@@ -770,17 +798,17 @@ export default function ReceptionistView({
         appt.appointmentType || '-',
         appt.notes || '-',
         appt.status || '-',
-        ''
+        getBookedByLabel(appt)
       ];
     });
 
     if (tableData.length === 0) {
-       tableData.push(['-', '-', '-', '-', '-', '-', '-', '']);
+       tableData.push(['-', '-', '-', '-', '-', '-', '-', '-']);
     }
 
     autoTable(doc, {
       startY: 95,
-      head: [['S.No', 'Patient', 'Contact', 'Session', 'Type', 'Notes', 'Status', 'Attended']],
+      head: [['S.No', 'Patient', 'Contact', 'Session', 'Type', 'Notes', 'Status', 'Booked By']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [59, 63, 113] },
@@ -788,20 +816,7 @@ export default function ReceptionistView({
       columnStyles: {
         5: { cellWidth: 50 }
       },
-      margin: { bottom: 25 },
-      didDrawCell: function(data) {
-        if (data.column.index === 7 && data.section === 'body') {
-          doc.setDrawColor(100);
-          doc.setLineWidth(0.3);
-          const boxSize = 3;
-          doc.rect(
-            data.cell.x + data.cell.width / 2 - boxSize / 2, 
-            data.cell.y + data.cell.height / 2 - boxSize / 2, 
-            boxSize, 
-            boxSize
-          );
-        }
-      }
+      margin: { bottom: 25 }
     });
 
     doc.save(`Schedule_Report_${filterDate}.pdf`);
@@ -1455,6 +1470,7 @@ export default function ReceptionistView({
                       <th className="py-2.5 px-4">Patient Details</th>
                       <th className="py-2.5 px-4">Appointment Type</th>
                       <th className="py-2.5 px-4">Assigned Doctor</th>
+                      <th className="py-2.5 px-4">Booked By</th>
                       <th className="py-2.5 px-4">Status</th>
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
@@ -1505,6 +1521,15 @@ export default function ReceptionistView({
                                   return doctor?.user?.fullName || doctor?.name || '';
                                 })() ||
                                 'Not Assigned'}
+                            </span>
+                           </td>
+                          <td className="py-3 px-4 align-top min-w-0 whitespace-nowrap">
+                            <span className="text-slate-600 block truncate font-medium">
+                              {appt?.bookedByUser?.fullName ||
+                                appt?.bookedByUser?.name ||
+                                appt?.bookedByUser?.username ||
+                                appt?.bookedByUserName ||
+                                '—'}
                             </span>
                            </td>
                           <td className="py-3 px-4 align-top whitespace-nowrap">

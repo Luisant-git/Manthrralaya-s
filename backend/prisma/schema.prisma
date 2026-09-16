@@ -30,6 +30,7 @@ model User {
   updatedAt DateTime  @updatedAt
 
   doctor    Doctor?  
+  bookedAppointments Appointment[]
 
   @@map("users")
 }
@@ -94,6 +95,7 @@ model Appointment {
   id              Int       @id @default(autoincrement())
   patientId       Int       
   doctorId        Int?      
+  bookedByUserId  Int?      
   appointmentDate DateTime 
   appointmentType String    
   session         String    @default("FN")
@@ -104,11 +106,13 @@ model Appointment {
 
   patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor          Doctor?   @relation(fields: [doctorId], references: [id])
+  bookedByUser    User?     @relation(fields: [bookedByUserId], references: [id])
   consultation    Consultation?
   detoxSessions   DetoxSession[] 
 
   @@index([patientId])
   @@index([doctorId])
+  @@index([bookedByUserId])
   @@index([appointmentDate])
   @@index([status])
 }

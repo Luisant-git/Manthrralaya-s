@@ -275,7 +275,10 @@ export default function App() {
       status: apt.status,
       notes: apt.notes,
       date: dateStr,
-      doctor_name: apt.doctor?.user?.fullName || apt.doctor?.name || apt.doctor_name
+      doctor_name: apt.doctor?.user?.fullName || apt.doctor?.name || apt.doctor_name,
+      bookedByUserId: apt.bookedByUserId || apt.booked_by_user_id || apt.bookedByUser?.id || null,
+      bookedByUserName: apt.bookedByUser?.fullName || apt.bookedByUser?.name || apt.bookedByUser?.username || apt.booked_by,
+      bookedByUser: apt.bookedByUser || null
     };
   };
 
@@ -776,6 +779,7 @@ export default function App() {
             setWhatsappLogs={setWhatsappLogs}
             consultations={consultations}
              detoxSessions={detoxSessions} 
+            currentUser={currentUserObj}
           />
         );
       case 'doctor-master':
@@ -806,12 +810,14 @@ export default function App() {
           />
         );
       case 'admission-scheduling':
-        return (
+        return (activeRole === 'admin' || activeRole === 'doctor' || activeRole === 'therapist') ? (
           <AdmissionSchedulingView
             consultations={consultations}
             activeRole={activeRole}
             currentUserId={currentUserId}
           />
+        ) : (
+          <div className="text-center py-12 text-slate-500">Access Denied. Admin privileges required.</div>
         );
       case 'user-management':
         return activeRole === 'admin' ? (

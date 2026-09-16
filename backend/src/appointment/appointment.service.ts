@@ -25,6 +25,24 @@ const formatTimeAMPM = (timeStr: string): string => {
 export class AppointmentService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly appointmentInclude = {
+    patient: true,
+    doctor: {
+      include: {
+        user: true
+      }
+    },
+    bookedByUser: {
+      select: {
+        id: true,
+        fullName: true,
+        username: true,
+        email: true,
+        role: true
+      }
+    }
+  };
+
   private normalizeToDateOnly(value: Date | string): number {
     const date = new Date(value);
     date.setHours(0, 0, 0, 0);
@@ -101,7 +119,7 @@ export class AppointmentService {
     }
   }
 
-  async create(createAppointmentDto: CreateAppointmentDto) {
+  async create(createAppointmentDto: CreateAppointmentDto, authUser?: any) {
     // Check if patient exists
     const patient = await this.prisma.patient.findUnique({
       where: { id: createAppointmentDto.patientId }
@@ -134,24 +152,21 @@ export class AppointmentService {
       );
     }
 
+    const bookedByUserId = createAppointmentDto.bookedByUserId
+      || (authUser?.sub ? Number(authUser.sub) : null);
+
     const appointment = await this.prisma.appointment.create({
       data: {
         patientId: createAppointmentDto.patientId,
         doctorId: createAppointmentDto.doctorId,
+        bookedByUserId: bookedByUserId || undefined,
         appointmentDate: new Date(createAppointmentDto.appointmentDate),
         appointmentType: createAppointmentDto.appointmentType,
         session: createAppointmentDto.session || 'FN',
         status: createAppointmentDto.status || 'Scheduled',
         notes: createAppointmentDto.notes || ''
       },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      }
+      include: this.appointmentInclude
     });
 
     // Automatically close the latest pending receptionist follow-up
@@ -237,14 +252,7 @@ export class AppointmentService {
       };
     }
 
-    const include = {
-      patient: true,
-      doctor: {
-        include: {
-          user: true
-        }
-      }
-    };
+    const include = this.appointmentInclude;
 
     // Without pagination params, keep legacy behavior: return the full array
     if (page === undefined && pageSize === undefined) {
@@ -284,14 +292,7 @@ export class AppointmentService {
   async findOne(id: number) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      }
+      include: this.appointmentInclude
     });
 
     if (!appointment) {
@@ -304,14 +305,7 @@ export class AppointmentService {
   async findByPatient(patientId: number) {
     return this.prisma.appointment.findMany({
       where: { patientId },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      },
+      include: this.appointmentInclude,
       orderBy: { appointmentDate: 'desc' }
     });
   }
@@ -319,14 +313,7 @@ export class AppointmentService {
   async findByDoctor(doctorId: number) {
     return this.prisma.appointment.findMany({
       where: { doctorId },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      },
+      include: this.appointmentInclude,
       // Ensure appointments for a doctor are ordered FIFO for their queue
       orderBy: [
         { appointmentDate: 'asc' },
@@ -349,14 +336,7 @@ export class AppointmentService {
           lte: endOfDay
         }
       },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      },
+      include: this.appointmentInclude,
       // Return appointments in FIFO order: earliest created appointments first.
       // Session ordering is not FIFO for waiting lists, so we order by `createdAt`.
       orderBy: [
@@ -372,14 +352,7 @@ export class AppointmentService {
     const appointment = await this.prisma.appointment.update({
       where: { id },
       data: { status: updateStatusDto.status },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      }
+      include: this.appointmentInclude
     });
 
     // Send WhatsApp confirmation when a waiting appointment is confirmed (booked)
@@ -429,14 +402,7 @@ export class AppointmentService {
         session: updateAppointmentDto.session,
         notes: updateAppointmentDto.notes
       },
-      include: {
-        patient: true,
-        doctor: {
-          include: {
-            user: true
-          }
-        }
-      }
+      include: this.appointmentInclude
     });
   }
 

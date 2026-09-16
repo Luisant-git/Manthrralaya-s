@@ -1,11 +1,14 @@
 import { IsInt, IsString, IsOptional, IsDateString, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateAppointmentDto {
   @IsInt()
+  @Type(() => Number)
   patientId: number;
 
   @IsOptional()
   @IsInt()
+  @Type(() => Number)
   doctorId?: number;
 
   @IsDateString()
@@ -26,4 +29,9 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  bookedByUserId?: number;
 }

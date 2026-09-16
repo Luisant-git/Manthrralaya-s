@@ -68,7 +68,7 @@ export class AdminController {
 
   // Update doctor status
   @ApiOperation({ summary: 'Update doctor availability status' })
-  @Roles(UserRole.ADMIN, UserRole.DOCTOR)
+  @Roles(UserRole.ADMIN, UserRole.DOCTOR, UserRole.RECEPTIONIST)
   @Patch('doctor/:id/status')
   updateDoctorStatus(
     @Param('id') id: string,
