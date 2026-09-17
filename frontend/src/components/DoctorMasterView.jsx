@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { userApi } from '../api/userApi';
 import { getDoctorSchedule, saveDoctorSchedule } from '../api/doctorScheduleApi';
 
-export default function DoctorMasterView({ doctors = [], onRefresh }) {
+export default function DoctorMasterView({ doctors = [], onRefresh, activeRole }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [editingDoctor, setEditingDoctor] = useState(null); // Doctor object currently being edited
@@ -619,12 +619,14 @@ export default function DoctorMasterView({ doctors = [], onRefresh }) {
                               >
                                 <CalendarDays className="w-3.5 h-3.5" /> Schedule
                               </button>
-                              <button 
-                                onClick={() => setDeletingDoctor(doc)}
-                                className="text-rose-600 hover:text-rose-700 font-bold tracking-wider flex items-center gap-1 text-[11px]"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                              </button>
+                              {(activeRole === 'admin' || activeRole === 'developer') && (
+                                <button 
+                                  onClick={() => setDeletingDoctor(doc)}
+                                  className="text-rose-600 hover:text-rose-700 font-bold tracking-wider flex items-center gap-1 text-[11px]"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>

@@ -811,7 +811,7 @@ export default function App() {
           />
         );
       case 'doctor-master':
-        return <DoctorMasterView doctors={doctors} onRefresh={fetchAllData} />;
+        return <DoctorMasterView doctors={doctors} onRefresh={fetchAllData} activeRole={activeRole} />;
       case 'doctor-patients':
         if (selectedDoctorPatient) {
           return (
