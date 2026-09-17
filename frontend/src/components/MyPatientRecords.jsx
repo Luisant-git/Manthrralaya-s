@@ -727,15 +727,7 @@ export default function UnifiedPatientRecords({
                 ))}
               </select>
             )}
-            {isDoctor && (
-              <div className="px-4 py-2 bg-teal-50 border border-teal-200 rounded-xl flex items-center gap-2 shadow-sm">
-                <Droplets className="w-5 h-5 text-teal-600" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-600 leading-tight">Active Detox</span>
-                  <span className="text-lg font-extrabold text-teal-700 leading-none">{activeDetoxCount} patients</span>
-                </div>
-              </div>
-            )}
+
             {(activeRole?.toLowerCase() === 'admin' || isDoctor) && (
               <button
                 onClick={() => setIsAdding(!isAdding)}
