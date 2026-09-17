@@ -1128,7 +1128,7 @@ const allPendingFollowUps = React.useMemo(() => {
 
       {/* Main Content Area */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {false ? (
+        {isDoctorView ? (
           <>
             {/* Left Column: Today's Patient Queue */}
             <div ref={queueRef} className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit">
@@ -1194,12 +1194,12 @@ const allPendingFollowUps = React.useMemo(() => {
                   filteredTodayPatientList.map((item) => (
                     <div
                       key={item.id}
-                      className={`p-4 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}
+                      className={`p-5 rounded-2xl border transition-all ${item.isCheckedIn ? 'bg-emerald-50 border-emerald-200' : 'bg-[#fffaf0] border-[#fde68a]'}`}
                     >
                       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <div className="text-sm font-bold text-slate-900">{item.patient?.name || 'Unknown Patient'}</div>
+                            <div className="text-[17px] font-bold text-slate-900">{item.patient?.name || 'Unknown Patient'}</div>
                             {item.isCheckedIn && (
                               <span className="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-semibold">
                                 Checked-in
@@ -1211,27 +1211,27 @@ const allPendingFollowUps = React.useMemo(() => {
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 mt-1">
-                            {item.patient?.medical_conditions || item.appointmentType} • {formatTimeAMPM(item.session)}
+                          <div className="text-[13px] text-slate-500 mt-1">
+                            {item.appointmentType} • {formatTimeAMPM(item.session)}
                           </div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-[13px] text-slate-500 mt-0.5">
                             Total Visits: {item.historyCount}
                           </div>
                           {item.patient?.phone && (
-                            <div className="text-xs text-slate-400 mt-1">
-                              📞 {formatPhoneWithoutCountryCode(item.patient.phone)}
+                            <div className="text-[13px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+                              <span>📞</span> {formatPhoneWithoutCountryCode(item.patient.phone)}
                             </div>
                           )}
                         </div>
-                        <div className="flex flex-col items-end gap-2">
+                        <div className="flex flex-col items-end gap-2.5">
                           <div className="text-right">
-                            <div className="text-xs uppercase tracking-wide text-slate-500">Status</div>
-                            <div className="text-sm font-semibold text-slate-700">{item.status}</div>
+                            <div className="text-[11px] uppercase tracking-widest text-slate-500 mb-0.5">Status</div>
+                            <div className="text-[15px] font-semibold text-slate-800">{item.status}</div>
                           </div>
                           {item.status === 'Arrived' ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDoctorCheckIn(item.id); }}
-                              className="px-4 py-2 rounded-lg text-sm font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors whitespace-nowrap flex items-center gap-2"
+                              className="px-5 py-2.5 rounded-xl text-sm font-bold bg-[#f59e0b] hover:bg-amber-600 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
                             >
                               <ShieldCheck className="w-4 h-4" />
                               Doctor Check-in
@@ -1239,7 +1239,7 @@ const allPendingFollowUps = React.useMemo(() => {
                           ) : item.status === 'Started Detox' ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleStartAppointment(item); }}
-                              className="px-4 py-2 rounded-lg text-sm font-bold bg-teal-600 hover:bg-teal-700 text-white transition-colors whitespace-nowrap flex items-center gap-2"
+                              className="px-5 py-2.5 rounded-xl text-sm font-bold bg-teal-600 hover:bg-teal-700 text-white transition-colors whitespace-nowrap flex items-center gap-2"
                             >
                               <Droplets className="w-4 h-4" />
                               View Detox Session
@@ -1248,7 +1248,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             (String(item.appointmentType || '').toLowerCase().includes('detox') || String(item.appointmentType || '').toLowerCase().includes('admission')) ? (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleBeginDetox(item.id); }}
-                                className="px-4 py-2 rounded-lg text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
+                                className="px-5 py-2.5 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
                               >
                                 <Droplets className="w-4 h-4" />
                                 Begin Detox
@@ -1256,7 +1256,7 @@ const allPendingFollowUps = React.useMemo(() => {
                             ) : (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleStartAppointment(item); }}
-                                className="px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
+                                className="px-5 py-2.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors whitespace-nowrap flex items-center gap-2 shadow-sm"
                               >
                                 <Stethoscope className="w-4 h-4" />
                                 {String(item.appointmentType || '').toLowerCase().includes('admission') ? 'Start Admission' : 'Start Consultation'}
@@ -1265,31 +1265,31 @@ const allPendingFollowUps = React.useMemo(() => {
                           ) : (
                             <button
                               disabled
-                              className="px-4 py-2 rounded-lg text-sm font-bold bg-slate-200 text-slate-500 cursor-not-allowed whitespace-nowrap"
+                              className="px-5 py-2.5 rounded-xl text-sm font-bold bg-slate-200 text-slate-500 cursor-not-allowed whitespace-nowrap"
                             >
                               Waiting
                             </button>
                           )}
                         </div>
                       </div>
-                      <div className="mt-4 pt-3 border-t border-slate-200 text-sm text-slate-700">
-                        <span className="text-xs text-slate-500 block mb-1">Latest note:</span>
-                        <span className="font-medium text-slate-900 line-clamp-2">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 100)}{item.latestNote.length > 100 ? '…' : ''}</span>
+                      <div className="mt-5 pt-4 border-t border-[#e2e8f0]/80">
+                        <div className="text-[13px] text-slate-500 mb-1">Latest note:</div>
+                        <div className="text-[15px] font-semibold text-slate-900 line-clamp-2">{item.latestNote.replace(/<[^>]+>/g, '').slice(0, 100)}{item.latestNote.length > 100 ? '…' : ''}</div>
                       </div>
                       {item.patient && onSelectPatient && (
-                        <div className="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                        <div className="mt-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                           <button
                             type="button"
                             onClick={() => {
                               setSelectedHistoryPatient(item.patient);
                               setIsHistoryModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center gap-2 rounded-full px-5 py-2 text-[13px] font-bold transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4 text-slate-500" />
                             History
                           </button>
-                          <div className="text-xs text-slate-500">Patient ID: P-{item.patient.id || 'N/A'}</div>
+                          <div className="text-[13px] text-slate-500">Patient ID: P-{item.patient.id || 'N/A'}</div>
                         </div>
                       )}
                     </div>

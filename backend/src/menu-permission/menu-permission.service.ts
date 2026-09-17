@@ -7,6 +7,9 @@ export class MenuPermissionService {
   constructor(private prisma: PrismaService) {}
 
   async getByRole(role: UserRole) {
+    if ((role as string) === 'DEVELOPER') {
+      return null;
+    }
     const record = await this.prisma.menuPermission.findUnique({
       where: { role },
     });

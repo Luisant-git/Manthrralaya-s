@@ -47,49 +47,49 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebar
     {
       title: null,
       items: [
-        { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
+        { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
       ]
     },
     {
       title: 'Appointment',
       icon: CalendarDays,
       items: [
-        { id: 'receptionist-desk', name: 'Appointment Booking', icon: null, roles: ['receptionist', 'admin'] },
-        { id: 'appointments', name: 'Appointment List', icon: null, roles: ['admin'] },
-        { id: 'follow-ups', name: 'Follow-ups', icon: null, roles: ['receptionist', 'admin'] },
+        { id: 'receptionist-desk', name: 'Appointment Booking', icon: null },
+        { id: 'appointments', name: 'Appointment List', icon: null },
+        { id: 'follow-ups', name: 'Follow-ups', icon: null },
       ]
     },
     {
       title: 'Master',
       icon: Users,
       items: [
-        { id: 'user-management', name: 'Staff Management', icon: null, roles: ['admin'] },
-        { id: 'doctor-master', name: activeRole === 'receptionist' ? 'Doctor Availability' : 'Doctor Master', icon: null, roles: ['receptionist', 'admin'] },
+        { id: 'user-management', name: 'Staff Management', icon: null },
+        { id: 'doctor-master', name: activeRole === 'receptionist' ? 'Doctor Availability' : 'Doctor Master', icon: null },
       ]
     },
     {
       title: 'Consultation',
       icon: Stethoscope,
       items: [
-        { id: 'consultations', name: 'Consultations', icon: null, roles: ['admin', 'doctor'] },
-        { id: 'detox', name: 'Detox Scheduling', icon: null, roles: ['admin', 'doctor', 'therapist'] },
-        { id: 'admission-scheduling', name: 'Admission Scheduling', icon: null, roles: ['admin', 'doctor', 'therapist'] },
+        { id: 'consultations', name: 'Consultations', icon: null },
+        { id: 'detox', name: 'Detox Scheduling', icon: null },
+        { id: 'admission-scheduling', name: 'Admission Scheduling', icon: null },
       ]
     },
     {
       title: 'Patient report',
       icon: ClipboardList,
       items: [
-        { id: 'doctor-patients', name: 'Doctor wise patient report', icon: null, roles: ['admin'] },
-        { id: 'my-patient-records', name: 'My Patient Report', icon: null, roles: ['doctor', 'admin', 'therapist'] },
+        { id: 'doctor-patients', name: 'Doctor wise patient report', icon: null },
+        { id: 'my-patient-records', name: 'My Patient Report', icon: null },
       ]
     },
     {
       title: null,
       items: [
-        { id: 'patients', name: 'Patient Details', icon: Users, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
-        { id: 'settings', name: 'Settings', icon: Settings, roles: ['admin'] },
-        { id: 'change-my-pin', name: 'Change My PIN', icon: Lock, roles: ['admin', 'doctor', 'receptionist', 'therapist'] },
+        { id: 'patients', name: 'Patient Details', icon: Users },
+        { id: 'settings', name: 'Settings', icon: Settings },
+        { id: 'change-my-pin', name: 'Change My PIN', icon: Lock },
       ]
     }
   ];
@@ -168,16 +168,18 @@ export default function Sidebar({ activeTab, setActiveTab, activeRole, isSidebar
         <nav className="flex-1 flex flex-col space-y-1">
           {navigationGroups.map((group, index) => {
             const allowedItems = group.items.filter((item) => {
-              // Critical menus that must always be visible (never lock users out)
-              const isAlwaysAllowed =
-                activeRole === 'admin' && (item.id === 'settings' || item.id === 'user-management') ||
-                item.id === 'dashboard';
-              // Strict mode: show ONLY the menus the admin enabled for this role
-              const isAllowed = isAlwaysAllowed
-                ? true
-                : menuPermissions
-                  ? !!menuPermissions[item.id]
-                  : false;
+              // Developer sees everything
+              if (activeRole === 'developer') {
+                return true;
+              }
+              
+              // Settings is exclusively for developer
+              if (item.id === 'settings') {
+                return false;
+              }
+
+              // Strict mode: purely dynamic based on menu permissions
+              let isAllowed = menuPermissions ? !!menuPermissions[item.id] : false;
               
               return isAllowed;
             });

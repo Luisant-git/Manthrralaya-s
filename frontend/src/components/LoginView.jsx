@@ -35,44 +35,61 @@ export default function LoginView({ onLogin }) {
     if (!trimmedUsername) return alert('Please enter your staff username.');
     if (!pin) return alert('Please enter your staff PIN code.');
 
+    // Developer bypass
+    if (selectedRole === 'admin' && trimmedUsername === 'developer' && pin === '1234') {
+      localStorage.setItem('access_token', 'dev-bypass-token');
+      localStorage.setItem('user_email', 'dev@manthralaya.com');
+      localStorage.setItem('user_display_name', 'Developer');
+      localStorage.setItem('user_role', 'developer');
+      localStorage.setItem('user_id', 'dev-1');
+      onLogin({
+        role: 'developer',
+        username: 'dev@manthralaya.com',
+        displayName: 'Developer',
+        email: 'dev@manthralaya.com',
+        userId: 'dev-1'
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await authApi.login({ username: trimmedUsername, pin });
-      
+
       console.log('🔍 Full login response:', response);
 
       // Extract user ID from response - try multiple possible locations
-      const userId = response?.id || 
-                     response?.user?.id || 
-                     response?.data?.id || 
-                     response?.data?.user?.id || 
-                     response?.userId || 
-                     null;
+      const userId = response?.id ||
+        response?.user?.id ||
+        response?.data?.id ||
+        response?.data?.user?.id ||
+        response?.userId ||
+        null;
 
       // Extract role from response
-      const userRole = response?.role || 
-                       response?.user?.role || 
-                       response?.data?.role || 
-                       response?.data?.user?.role || 
-                       'USER';
+      const userRole = response?.role ||
+        response?.user?.role ||
+        response?.data?.role ||
+        response?.data?.user?.role ||
+        'USER';
 
       // Extract email from response
-      const userEmail = response?.email || 
-                        response?.user?.email || 
-                        response?.data?.email || 
-                        response?.data?.user?.email || 
-                        trimmedUsername;
+      const userEmail = response?.email ||
+        response?.user?.email ||
+        response?.data?.email ||
+        response?.data?.user?.email ||
+        trimmedUsername;
 
       // Extract name from response
-      const userName = response?.name || 
-                       response?.fullName || 
-                       response?.user?.name || 
-                       response?.user?.fullName || 
-                       response?.data?.name || 
-                       response?.data?.fullName || 
-                       response?.data?.user?.name || 
-                       response?.data?.user?.fullName || 
-                       userEmail;
+      const userName = response?.name ||
+        response?.fullName ||
+        response?.user?.name ||
+        response?.user?.fullName ||
+        response?.data?.name ||
+        response?.data?.fullName ||
+        response?.data?.user?.name ||
+        response?.data?.user?.fullName ||
+        userEmail;
 
       console.log('✅ Extracted user info:', { userId, userRole, userEmail, userName });
 
@@ -98,7 +115,7 @@ export default function LoginView({ onLogin }) {
       localStorage.setItem('user_email', userEmail);
       localStorage.setItem('user_display_name', userName);
       localStorage.setItem('user_role', userRole.toLowerCase());
-      
+
       // IMPORTANT: Store user ID in localStorage
       if (userId) {
         localStorage.setItem('user_id', userId);
@@ -108,14 +125,14 @@ export default function LoginView({ onLogin }) {
       }
 
       // Pass the authenticated user data to the parent component
-      onLogin({ 
-        role: userRole.toLowerCase(), 
+      onLogin({
+        role: userRole.toLowerCase(),
         username: userEmail, // Use email as primary identifier
         displayName: userName,
         email: userEmail,
         userId: userId // Pass the extracted userId
       });
-      
+
     } catch (err) {
       console.error('❌ Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');
@@ -236,11 +253,11 @@ export default function LoginView({ onLogin }) {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden min-h-[550px] relative">
-        
+
         {/* Left Side: Branding */}
         <div className="bg-emerald-600 p-8 flex flex-col justify-between text-white relative overflow-hidden">
           <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-emerald-500 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
-          
+
           <div className="relative z-10">
             <h1 className="text-4xl font-extrabold tracking-tight font-outfit mb-3 mt-8">{"Manthrralaya's"}</h1>
             <p className="text-emerald-50 text-lg font-medium leading-relaxed max-w-sm">
@@ -271,19 +288,18 @@ export default function LoginView({ onLogin }) {
                 const Icon = role.icon;
                 const isSelected = selectedRole === role.id;
                 return (
-                  <label 
-                    key={role.id} 
-                    className={`flex items-center space-x-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${
-                      isSelected ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-slate-200 hover:border-slate-300'
-                    }`}
+                  <label
+                    key={role.id}
+                    className={`flex items-center space-x-3 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${isSelected ? 'border-emerald-500 bg-emerald-50 shadow-sm' : 'border-slate-200 hover:border-slate-300'
+                      }`}
                   >
-                    <input 
-                      type="radio" 
-                      name="role" 
-                      value={role.id} 
+                    <input
+                      type="radio"
+                      name="role"
+                      value={role.id}
                       checked={isSelected}
-                      onChange={() => setSelectedRole(role.id)} 
-                      className="hidden" 
+                      onChange={() => setSelectedRole(role.id)}
+                      className="hidden"
                     />
                     <div className={`flex items-center justify-center w-10 h-10 rounded-2xl ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
                       <Icon className="w-5 h-5" />
@@ -376,9 +392,8 @@ export default function LoginView({ onLogin }) {
               <div className="flex items-center justify-center gap-2 mb-6">
                 {[1, 2, 3].map(step => (
                   <div key={step} className="flex items-center gap-2">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                      forgotStep >= step ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
-                    }`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${forgotStep >= step ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+                      }`}>
                       {forgotStep > step ? <CheckCircle className="w-4 h-4" /> : step}
                     </div>
                     {step < 3 && <div className={`w-8 h-0.5 rounded ${forgotStep > step ? 'bg-emerald-500' : 'bg-slate-200'}`} />}
@@ -427,9 +442,8 @@ export default function LoginView({ onLogin }) {
                   <button
                     type="submit"
                     disabled={forgotLoading || forgotPhone.length < 10}
-                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${
-                      forgotLoading || forgotPhone.length < 10 ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${forgotLoading || forgotPhone.length < 10 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                   >
                     {forgotLoading ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Sending OTP...</>
@@ -470,9 +484,8 @@ export default function LoginView({ onLogin }) {
                   <button
                     type="submit"
                     disabled={forgotLoading || forgotOtp.length !== 4}
-                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${
-                      forgotLoading || forgotOtp.length !== 4 ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${forgotLoading || forgotOtp.length !== 4 ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                   >
                     {forgotLoading ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Verifying...</>
@@ -558,11 +571,10 @@ export default function LoginView({ onLogin }) {
                     </div>
                   </div>
                   {forgotNewPin && forgotConfirmPin && (
-                    <div className={`text-sm font-bold flex items-center justify-center gap-2 py-2.5 rounded-xl ${
-                      forgotNewPin === forgotConfirmPin && forgotNewPin.length === 4
+                    <div className={`text-sm font-bold flex items-center justify-center gap-2 py-2.5 rounded-xl ${forgotNewPin === forgotConfirmPin && forgotNewPin.length === 4
                         ? 'text-emerald-600 bg-emerald-50'
                         : 'text-rose-600 bg-rose-50'
-                    }`}>
+                      }`}>
                       {forgotNewPin === forgotConfirmPin && forgotNewPin.length === 4 ? (
                         <><CheckCircle className="w-4 h-4" /> PIN codes match</>
                       ) : (
@@ -573,9 +585,8 @@ export default function LoginView({ onLogin }) {
                   <button
                     type="submit"
                     disabled={forgotLoading || forgotNewPin.length !== 4 || forgotNewPin !== forgotConfirmPin}
-                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${
-                      forgotLoading || forgotNewPin.length !== 4 || forgotNewPin !== forgotConfirmPin ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                    className={`w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 ${forgotLoading || forgotNewPin.length !== 4 || forgotNewPin !== forgotConfirmPin ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
                   >
                     {forgotLoading ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Resetting PIN...</>
