@@ -496,18 +496,9 @@ export default function PatientsView({ appointments = [], followups = [], consul
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Directory</h1>
+          <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Details</h1>
           <p className="text-slate-500 text-sm mt-1">Manage patient intakes, demographics, and clinical records.</p>
         </div>
-        {(activeRole === 'admin' || activeRole === 'doctor' || activeRole === 'therapist') && (
-          <button
-            onClick={() => setIsAdding(!isAdding)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-colors shadow-sm text-sm"
-          >
-            {isAdding ? <X className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-            {isAdding ? 'Cancel' : 'New Patient Registration'}
-          </button>
-        )}
       </div>
 
       {isAdding ? (

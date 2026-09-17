@@ -5,35 +5,47 @@ import { toast } from 'react-toastify';
 
 const MENU_GROUPS = [
   {
-    key: 'general',
-    label: 'General',
+    key: 'appointment',
+    label: 'Appointment',
     items: [
-      { id: 'dashboard', name: 'Dashboard' },
-      { id: 'patients', name: 'Patient Directory' },
+      { id: 'receptionist-desk', name: 'Appointment Booking' },
+      { id: 'appointments', name: 'Appointment List' },
       { id: 'follow-ups', name: 'Follow-ups' },
-      { id: 'change-my-pin', name: 'Change My PIN' },
     ],
   },
   {
-    key: 'scheduling',
-    label: 'Scheduling & Care',
+    key: 'master',
+    label: 'Master',
     items: [
-      { id: 'receptionist-desk', name: 'Appointment Booking' },
+      { id: 'user-management', name: 'Staff Management' },
       { id: 'doctor-master', name: 'Doctor Master' },
-      { id: 'doctor-patients', name: 'Doctor Patients' },
-      { id: 'appointments', name: 'Appointments' },
+    ],
+  },
+  {
+    key: 'consultation',
+    label: 'Consultation',
+    items: [
       { id: 'consultations', name: 'Consultations' },
-      { id: 'my-patient-records', name: 'My Patient Records' },
       { id: 'detox', name: 'Detox Scheduling' },
       { id: 'admission-scheduling', name: 'Admission Scheduling' },
     ],
   },
   {
-    key: 'admin',
-    label: 'Administration',
+    key: 'patient-report',
+    label: 'Patient report',
     items: [
-      { id: 'user-management', name: 'Staff Management' },
+      { id: 'doctor-patients', name: 'Doctor wise patient report' },
+      { id: 'my-patient-records', name: 'My Patient Report' },
+    ],
+  },
+  {
+    key: 'general',
+    label: 'General & Admin',
+    items: [
+      { id: 'dashboard', name: 'Dashboard' },
+      { id: 'patients', name: 'Patient Details' },
       { id: 'settings', name: 'Settings' },
+      { id: 'change-my-pin', name: 'Change My PIN' },
     ],
   },
 ];
