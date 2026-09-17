@@ -659,9 +659,13 @@ export default function PatientHistoryModal({
     return (dEmail && dEmail === currentUserEmail) || (dName && dName === currentUserEmail) || (dUsername && dUsername === currentUserEmail);
   }) || null;
 
-  const doctorSelectOptions = (matchedCurrentDoctor && !effectiveDoctors.some(d => String(d.id) === String(matchedCurrentDoctor.id)))
+  let doctorSelectOptions = (matchedCurrentDoctor && !effectiveDoctors.some(d => String(d.id) === String(matchedCurrentDoctor.id)))
     ? [...effectiveDoctors, matchedCurrentDoctor]
     : effectiveDoctors;
+
+  if (effectiveRole !== 'ADMIN' && matchedCurrentDoctor) {
+    doctorSelectOptions = [matchedCurrentDoctor];
+  }
 
   const patientId = String(patient.id ?? patient.patientId);
 
