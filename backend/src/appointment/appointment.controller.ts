@@ -30,6 +30,7 @@ export class AppointmentController {
   @ApiQuery({ name: 'doctorId', required: false, description: 'Filter by doctor ID' })
   @ApiQuery({ name: 'from', required: false, example: '2024-01-01', description: 'Start date of range' })
   @ApiQuery({ name: 'to', required: false, example: '2024-01-31', description: 'End date of range' })
+  @ApiQuery({ name: 'bookedBy', required: false, description: 'Filter by booked by user ID' })
   findAll(
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
@@ -39,6 +40,7 @@ export class AppointmentController {
     @Query('doctorId') doctorId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('bookedBy') bookedBy?: string,
   ) {
     return this.appointmentService.findAll(
       page ? parseInt(page, 10) : undefined,
@@ -50,6 +52,7 @@ export class AppointmentController {
         doctorId: doctorId ? parseInt(doctorId, 10) : undefined,
         from: from || undefined,
         to: to || undefined,
+        bookedByUserId: bookedBy ? parseInt(bookedBy, 10) : undefined,
       },
     );
   }

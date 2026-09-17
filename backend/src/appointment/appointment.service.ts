@@ -200,7 +200,7 @@ export class AppointmentService {
     return appointment;
   }
 
-  async findAll(page?: number, pageSize?: number, date?: string, options: { search?: string; appointmentType?: string; doctorId?: number; from?: string; to?: string } = {}) {
+  async findAll(page?: number, pageSize?: number, date?: string, options: { search?: string; appointmentType?: string; doctorId?: number; from?: string; to?: string; bookedByUserId?: number } = {}) {
     const wherePrisma: any = {};
 
     if (date) {
@@ -232,6 +232,10 @@ export class AppointmentService {
 
     if (options.doctorId) {
       wherePrisma.doctorId = Number(options.doctorId);
+    }
+
+    if (options.bookedByUserId) {
+      wherePrisma.bookedByUserId = Number(options.bookedByUserId);
     }
 
     if (options.appointmentType) {

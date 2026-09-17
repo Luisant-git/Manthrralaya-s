@@ -33,6 +33,7 @@ export default function AppointmentsView({
   const [searchTextDebounced, setSearchTextDebounced] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('');
+  const [bookedByFilter, setBookedByFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
@@ -58,7 +59,7 @@ export default function AppointmentsView({
   // Reset to first page whenever a filter changes
   useEffect(() => {
     setServerPage(1);
-  }, [searchTextDebounced, typeFilter, doctorFilter, fromDate, toDate]);
+  }, [searchTextDebounced, typeFilter, doctorFilter, bookedByFilter, fromDate, toDate]);
 
   useEffect(() => {
     let active = true;
@@ -69,6 +70,7 @@ export default function AppointmentsView({
       doctorId: doctorFilter || undefined,
       from: fromDate || undefined,
       to: toDate || undefined,
+      bookedBy: bookedByFilter || undefined,
     })
       .then(res => {
         if (!active) return;
@@ -86,7 +88,7 @@ export default function AppointmentsView({
       })
       .finally(() => { if (active) setLoadingAppointments(false); });
     return () => { active = false; };
-  }, [serverPage, serverPageSize, refreshKey, searchTextDebounced, typeFilter, doctorFilter, fromDate, toDate]);
+  }, [serverPage, serverPageSize, refreshKey, searchTextDebounced, typeFilter, doctorFilter, bookedByFilter, fromDate, toDate]);
 
   const goToPage = (page) => {
     if (page >= 1 && page <= totalSchedulePages) setServerPage(page);
@@ -96,6 +98,7 @@ export default function AppointmentsView({
     setSearchText('');
     setTypeFilter('');
     setDoctorFilter('');
+    setBookedByFilter('');
     setFromDate('');
     setToDate('');
   };
@@ -440,6 +443,20 @@ export default function AppointmentsView({
     return doctor;
   };
 
+  const uniqueBookedByUsers = React.useMemo(() => {
+    const usersMap = new Map();
+    appointments?.forEach(appt => {
+      const id = appt?.bookedByUserId;
+      if (id) {
+        const name = appt?.bookedByUser?.fullName || appt?.bookedByUser?.name || appt?.bookedByUser?.username || appt?.bookedByUserName || `User ${id}`;
+        if (!usersMap.has(id)) {
+          usersMap.set(id, name);
+        }
+      }
+    });
+    return Array.from(usersMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [appointments]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -623,6 +640,16 @@ export default function AppointmentsView({
               </div>
             )}
             
+            {!(activeRole === 'doctor' || activeRole === 'therapist') && (
+              <div className="w-full md:w-44">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Booked By</label>
+                <select value={bookedByFilter} onChange={(e) => setBookedByFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  <option value="">All Receptionists</option>
+                  {uniqueBookedByUsers.map(u => (<option key={u.id} value={u.id}>{u.name}</option>))}
+                </select>
+              </div>
+            )}
+            
             <div className="w-full md:w-36">
               <label className="block text-xs font-semibold text-slate-600 mb-1">From Date</label>
               <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
@@ -663,6 +690,7 @@ export default function AppointmentsView({
                   <th className="py-3 px-4">Appointment Type</th>
                   <th className="py-3 px-4">Assigned Doctor</th>
                   <th className="py-3 px-4">Notes</th>
+                  <th className="py-3 px-4">Booked By</th>
                   <th className="py-3 px-4">Status</th>
                  
                 </tr>
@@ -716,6 +744,11 @@ export default function AppointmentsView({
                       </td>
                       <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate" title={appt.notes}>
                         {appt.notes || (isFollowup ? 'Follow-up recommended' : '-')}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-slate-600 font-medium text-[13px]">
+                          {appt.bookedByUser?.fullName || appt.bookedByUser?.name || appt.bookedByUser?.username || appt.bookedByUserName || '—'}
+                        </span>
                       </td>
                       <td className="py-3 px-4">
                         {isFollowup ? (
