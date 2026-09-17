@@ -3,12 +3,12 @@ import { Calendar as CalendarIcon, Clock, CheckCircle, XCircle, Plus, CalendarPl
 import { toast } from 'react-toastify';
 import { getPagedAppointments } from '../api/appointmentApi';
 
-export default function AppointmentsView({ 
-  appointments, 
-  patients, 
-  doctors, 
-  onAddAppointment, 
-  onCheckIn, 
+export default function AppointmentsView({
+  appointments,
+  patients,
+  doctors,
+  onAddAppointment,
+  onCheckIn,
   onCancelAppointment,
   consultations = [],
   detoxSessions = [],
@@ -18,7 +18,7 @@ export default function AppointmentsView({
 }) {
   const [isBooking, setIsBooking] = useState(false);
   const [showFollowups, setShowFollowups] = useState(false);
-  
+
   // Server-side pagination for the schedule log (Patient Records UI style)
   const [serverPage, setServerPage] = useState(1);
   const serverPageSize = 8;
@@ -102,7 +102,7 @@ export default function AppointmentsView({
     setFromDate('');
     setToDate('');
   };
-  
+
   const [formData, setFormData] = useState({
     patient_id: '',
     doctor_id: '',
@@ -273,21 +273,21 @@ export default function AppointmentsView({
         displayType: 'booked'
       };
     });
-    
+
     const pendingFollowups = [];
-    
+
     // Only add follow-ups if showFollowups is true
     if (showFollowups) {
       patients.forEach(patient => {
         const nextFollowup = getNextFollowup(patient.id);
         if (nextFollowup && nextFollowup.isPending) {
           // Check if there's already a booked appointment for this follow-up date
-          const hasExistingAppointment = appointments.some(appt => 
+          const hasExistingAppointment = appointments.some(appt =>
             String(appt.patient_id || appt.patientId) === String(patient.id) &&
-            (appt.appointmentDate === nextFollowup.scheduled_date || 
-             appt.date === nextFollowup.scheduled_date)
+            (appt.appointmentDate === nextFollowup.scheduled_date ||
+              appt.date === nextFollowup.scheduled_date)
           );
-          
+
           if (!hasExistingAppointment) {
             pendingFollowups.push({
               id: `followup-${patient.id}-${nextFollowup.scheduled_date}`,
@@ -309,7 +309,7 @@ export default function AppointmentsView({
         }
       });
     }
-    
+
     // Combine and sort by date
     const all = [...bookedAppointments, ...pendingFollowups];
     return all.sort((a, b) => {
@@ -329,18 +329,18 @@ export default function AppointmentsView({
     if (String(appt.appointmentType).toLowerCase() !== 'detox') return appt.appointmentType || 'General';
     let displaySession = appt.session;
     if (!displaySession) {
-       const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(appt.patient_id || appt.patientId));
-       const matchingDetox = ptDetox.find(d => String(d.appointmentId || d.appointment_id) === String(appt.id));
-       if (matchingDetox) {
-         const sType = String(matchingDetox.sessionType || '').toLowerCase();
-         displaySession = sType === 'morning' ? 'FN' : sType === 'evening' ? 'AN' : 'FD';
-       } else {
-         const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
-         if (!completedTypes.includes('morning')) displaySession = 'FN';
-         else if (!completedTypes.includes('evening')) displaySession = 'AN';
-         else if (!completedTypes.includes('fullday')) displaySession = 'FD';
-         else displaySession = 'FN';
-       }
+      const ptDetox = detoxSessions.filter(d => String(d.patientId || d.patient_id) === String(appt.patient_id || appt.patientId));
+      const matchingDetox = ptDetox.find(d => String(d.appointmentId || d.appointment_id) === String(appt.id));
+      if (matchingDetox) {
+        const sType = String(matchingDetox.sessionType || '').toLowerCase();
+        displaySession = sType === 'morning' ? 'FN' : sType === 'evening' ? 'AN' : 'FD';
+      } else {
+        const completedTypes = ptDetox.map(d => String(d.sessionType || '').toLowerCase());
+        if (!completedTypes.includes('morning')) displaySession = 'FN';
+        else if (!completedTypes.includes('evening')) displaySession = 'AN';
+        else if (!completedTypes.includes('fullday')) displaySession = 'FD';
+        else displaySession = 'FN';
+      }
     }
     return `Detox (${displaySession})`;
   };
@@ -363,7 +363,7 @@ export default function AppointmentsView({
 
     const patientObj = patients.find(p => String(p.id) === String(formData.patient_id));
     const doctorObj = doctors.find(d => String(d.id) === String(formData.doctor_id));
-    
+
     const newAppt = {
       id: `A-${200 + appointments.length + 1}`,
       patient_id: formData.patient_id,
@@ -380,18 +380,18 @@ export default function AppointmentsView({
     onAddAppointment(newAppt, patientObj, doctorObj);
     setRefreshKey(k => k + 1);
     setIsBooking(false);
-    setFormData({ 
-      patient_id: '', 
-      doctor_id: '', 
-      appointmentType: 'New consultation', 
-      date: new Date().toISOString().split('T')[0], 
-      time: '10:00 AM', 
-      notes: '' 
+    setFormData({
+      patient_id: '',
+      doctor_id: '',
+      appointmentType: 'New consultation',
+      date: new Date().toISOString().split('T')[0],
+      time: '10:00 AM',
+      notes: ''
     });
   };
 
   const getStatusColor = (status) => {
-    switch(status) {
+    switch (status) {
       case 'Scheduled': return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'Arrived': return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'Checked-in': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
@@ -435,7 +435,7 @@ export default function AppointmentsView({
   const findDoctor = (appointment) => {
     const doctorId = appointment.doctorId || appointment.doctor_id;
     if (!doctorId) return null;
-    
+
     let doctor = doctors.find(d => d.id === doctorId);
     if (!doctor) {
       doctor = doctors.find(d => String(d.id) === String(doctorId));
@@ -462,7 +462,7 @@ export default function AppointmentsView({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">
-            Appointments & Queue
+            Appointment List & Queue
           </h1>
           <p className="text-slate-500 text-sm mt-1">
             Manage daily schedules, patient arrivals, and doctor queues.
@@ -471,11 +471,10 @@ export default function AppointmentsView({
         <div className="flex gap-3">
           <button
             onClick={() => setShowFollowups(!showFollowups)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${
-              showFollowups 
-                ? 'bg-emerald-600 text-white' 
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${showFollowups
+                ? 'bg-emerald-600 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
+              }`}
           >
             <Calendar className="w-4 h-4" />
             {showFollowups ? 'Hide Follow-ups' : 'Show Follow-ups'}
@@ -496,13 +495,13 @@ export default function AppointmentsView({
             <CalendarPlus className="w-5 h-5 text-emerald-600" />
             <h2 className="text-lg font-bold text-slate-800">Schedule New Appointment</h2>
           </div>
-          
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Select Patient</label>
-                <select 
-                  required 
+                <select
+                  required
                   value={formData.patient_id}
                   onChange={e => handlePatientSelect(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -515,8 +514,8 @@ export default function AppointmentsView({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Assign Doctor</label>
-                <select 
-                  required 
+                <select
+                  required
                   value={formData.doctor_id}
                   onChange={e => {
                     const selectedDocId = e.target.value;
@@ -541,7 +540,7 @@ export default function AppointmentsView({
                     return true;
                   }).map(d => (
                     <option key={d.id} value={d.id} disabled={d.status !== 'Available'}>
-                      {d.user?.fullName || d.name} ({d.specialization}) 
+                      {d.user?.fullName || d.name} ({d.specialization})
                       {d.status !== 'Available' ? ' - Not Available' : ''}
                     </option>
                   ))}
@@ -583,14 +582,14 @@ export default function AppointmentsView({
               </div>
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-1.5">Date</label>
-                <input required type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+                <input required type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
               </div>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reason / Intake Notes</label>
-              <textarea rows="2" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"></textarea>
+              <textarea rows="2" value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none"></textarea>
             </div>
-            
+
             <div className="bg-emerald-50 p-4 border border-emerald-100 rounded-lg text-sm text-emerald-800">
               <span className="font-bold block mb-1">Automated WhatsApp Trigger</span>
               Scheduling will instantly send a Meta Cloud API booking confirmation to the patient's phone.
@@ -605,225 +604,224 @@ export default function AppointmentsView({
         </div>
       ) : (
         <div className="space-y-4">
-        {/* Filter Bar */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
-          <div className="flex flex-col md:flex-row flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[220px]">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Search Patient</label>
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  placeholder="Search by patient name or mobile..."
-                  className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                />
-              </div>
-            </div>
-            
-            <div className="w-full md:w-40">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Appointment Type</label>
-              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                <option value="">All Types</option>
-                {appointmentTypeOptions.map(t => (<option key={t} value={t}>{t}</option>))}
-              </select>
-            </div>
-            
-            {!(activeRole === 'doctor' || activeRole === 'therapist') && (
-              <div className="w-full md:w-44">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Doctor</label>
-                <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                  <option value="">All Doctors</option>
-                  {doctors.map(d => (<option key={d.id} value={d.id}>{d.user?.fullName || d.name}</option>))}
-                </select>
-              </div>
-            )}
-            
-            {!(activeRole === 'doctor' || activeRole === 'therapist') && (
-              <div className="w-full md:w-44">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Booked By</label>
-                <select value={bookedByFilter} onChange={(e) => setBookedByFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
-                  <option value="">All Receptionists</option>
-                  {uniqueBookedByUsers.map(u => (<option key={u.id} value={u.id}>{u.name}</option>))}
-                </select>
-              </div>
-            )}
-            
-            <div className="w-full md:w-36">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">From Date</label>
-              <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-            </div>
-            
-            <div className="w-full md:w-36">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">To Date</label>
-              <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
-            </div>
-            
-            <div className="w-full md:w-auto">
-              <button
-                onClick={clearFilters}
-                className="w-full md:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 hover:text-rose-600 transition"
-                title="Clear all filters"
-              >
-                <FilterX className="w-4 h-4" /> Clear
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-emerald-600" />
-              <h3 className="font-bold text-slate-800">Master Schedule Log</h3>
-            </div>
-            <div className="text-xs text-slate-500">
-              {totalBooked} booked | {pendingFollowupCount} pending follow-ups
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-white border-b border-slate-200 text-slate-500 font-semibold uppercase text-xs tracking-wider">
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Patient Profile</th>
-                  <th className="py-3 px-4">Appointment Type</th>
-                  <th className="py-3 px-4">Assigned Doctor</th>
-                  <th className="py-3 px-4">Notes</th>
-                  <th className="py-3 px-4">Booked By</th>
-                  <th className="py-3 px-4">Status</th>
-                 
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {allItems.map(appt => {
-                  const pt = findPatient(appt);
-                  const doctor = findDoctor(appt);
-                  const doctorName = doctor?.user?.fullName || doctor?.name || appt.doctor_name || 'Not Assigned';
-                  const isFollowup = appt.isFollowup;
-                  const displayDate = formatDate(appt.date || appt.appointmentDate);
-                  
-                  return (
-                    <tr key={appt.id} className={`hover:bg-slate-50 transition-colors ${isFollowup ? 'bg-amber-50/30' : ''}`}>
-                      <td className="py-3 px-4">
-                        <span className={`${isFollowup ? 'font-semibold text-amber-700' : 'text-slate-500'}`}>
-                          {displayDate}
-                        </span>
-                        {isFollowup && (
-                          <div className="text-[10px] text-amber-600 font-semibold mt-0.5">
-                            Pending Follow-up {appt.followupSource === 'detox' ? '(from detox)' : '(recommended)'}
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-800 block">{pt.name || 'Unknown Patient'}</span>
-                        <div className="text-[11px] text-slate-500 mt-0.5 space-y-0.5 font-medium">
-                          <div>{pt.phone?.replace(/\D/g, '').slice(-10) || 'No mobile'}</div>
-                          <div>{pt.age ? `${pt.age} yrs` : 'Age N/A'} {pt.location ? `• ${pt.location}` : ''}</div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${
-                          String(appt.appointmentType || '').toLowerCase().includes('detox') ? 'border-teal-200 bg-teal-50 text-teal-700' : 
-                          String(appt.appointmentType || '').toLowerCase() === 'review' ? 'border-amber-200 bg-amber-50 text-amber-700' : 
-                          'border-purple-200 bg-purple-50 text-purple-700'
-                        }`}>
-                          {getDisplayAppointmentType(appt)}
-                          {isFollowup && appt.followupSource === 'detox' && (
-                            <span className="ml-1 text-[9px] font-normal">(from detox)</span>
-                          )}
-                          {isFollowup && appt.followupSource === 'consultation' && (
-                            <span className="ml-1 text-[9px] font-normal">(recommended)</span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="font-semibold text-slate-700 block">
-                          {doctorName || appt.doctor_name || 'Not Assigned'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate" title={appt.notes}>
-                        {appt.notes || (isFollowup ? 'Follow-up recommended' : '-')}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-slate-600 font-medium text-[13px]">
-                          {appt.bookedByUser?.fullName || appt.bookedByUser?.name || appt.bookedByUser?.username || appt.bookedByUserName || '—'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        {isFollowup ? (
-                          <span className="px-2.5 py-1 rounded-md text-xs font-bold border bg-amber-100 text-amber-700 border-amber-200">
-                            Pending
-                          </span>
-                        ) : (
-                          <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getStatusColor(appt.status)}`}>
-                            {appt.status}
-                          </span>
-                        )}
-                      </td>
-                     
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {loadingAppointments ? (
-              <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Loading schedule...
-              </div>
-            ) : allItems.length === 0 ? (
-              <div className="py-12 text-center text-slate-500">No appointments or pending follow-ups found</div>
-            ) : (
-              <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-5 px-4 pb-4">
-                <p className="text-sm text-slate-500">
-                  Showing <span className="font-semibold text-slate-800">{totalBooked === 0 ? 0 : scheduleStartIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(scheduleStartIndex + serverPageSize, totalBooked)}</span> of <span className="font-semibold text-slate-800">{totalBooked}</span> appointments
-                </p>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => goToPage(serverPage - 1)}
-                    disabled={serverPage === 1}
-                    className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                  >
-                    <ChevronLeft className="w-5 h-5" />
-                  </button>
-
-                  <div className="flex items-center">
-                    {Array.from({ length: Math.min(5, totalSchedulePages) }, (_, i) => {
-                      let pageNum;
-                      if (totalSchedulePages <= 5) {
-                        pageNum = i + 1;
-                      } else if (serverPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (serverPage >= totalSchedulePages - 2) {
-                        pageNum = totalSchedulePages - 4 + i;
-                      } else {
-                        pageNum = serverPage - 2 + i;
-                      }
-
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => goToPage(pageNum)}
-                          className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${serverPage === pageNum ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <button
-                    onClick={() => goToPage(serverPage + 1)}
-                    disabled={serverPage === totalSchedulePages}
-                    className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                  >
-                    <ChevronRight className="w-5 h-5" />
-                  </button>
+          {/* Filter Bar */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+            <div className="flex flex-col md:flex-row flex-wrap items-end gap-3">
+              <div className="flex-1 min-w-[220px]">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Search Patient</label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    placeholder="Search by patient name or mobile..."
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  />
                 </div>
               </div>
-            )}
+
+              <div className="w-full md:w-40">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Appointment Type</label>
+                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                  <option value="">All Types</option>
+                  {appointmentTypeOptions.map(t => (<option key={t} value={t}>{t}</option>))}
+                </select>
+              </div>
+
+              {!(activeRole === 'doctor' || activeRole === 'therapist') && (
+                <div className="w-full md:w-44">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Doctor</label>
+                  <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                    <option value="">All Doctors</option>
+                    {doctors.map(d => (<option key={d.id} value={d.id}>{d.user?.fullName || d.name}</option>))}
+                  </select>
+                </div>
+              )}
+
+              {!(activeRole === 'doctor' || activeRole === 'therapist') && (
+                <div className="w-full md:w-44">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Booked By</label>
+                  <select value={bookedByFilter} onChange={(e) => setBookedByFilter(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+                    <option value="">All Receptionists</option>
+                    {uniqueBookedByUsers.map(u => (<option key={u.id} value={u.id}>{u.name}</option>))}
+                  </select>
+                </div>
+              )}
+
+              <div className="w-full md:w-36">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">From Date</label>
+                <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+              </div>
+
+              <div className="w-full md:w-36">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">To Date</label>
+                <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+              </div>
+
+              <div className="w-full md:w-auto">
+                <button
+                  onClick={clearFilters}
+                  className="w-full md:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50 hover:text-rose-600 transition"
+                  title="Clear all filters"
+                >
+                  <FilterX className="w-4 h-4" /> Clear
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-bold text-slate-800">Master Schedule Log</h3>
+              </div>
+              <div className="text-xs text-slate-500">
+                {totalBooked} booked | {pendingFollowupCount} pending follow-ups
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-white border-b border-slate-200 text-slate-500 font-semibold uppercase text-xs tracking-wider">
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Patient Profile</th>
+                    <th className="py-3 px-4">Appointment Type</th>
+                    <th className="py-3 px-4">Assigned Doctor</th>
+                    <th className="py-3 px-4">Notes</th>
+                    <th className="py-3 px-4">Booked By</th>
+                    <th className="py-3 px-4">Status</th>
+
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {allItems.map(appt => {
+                    const pt = findPatient(appt);
+                    const doctor = findDoctor(appt);
+                    const doctorName = doctor?.user?.fullName || doctor?.name || appt.doctor_name || 'Not Assigned';
+                    const isFollowup = appt.isFollowup;
+                    const displayDate = formatDate(appt.date || appt.appointmentDate);
+
+                    return (
+                      <tr key={appt.id} className={`hover:bg-slate-50 transition-colors ${isFollowup ? 'bg-amber-50/30' : ''}`}>
+                        <td className="py-3 px-4">
+                          <span className={`${isFollowup ? 'font-semibold text-amber-700' : 'text-slate-500'}`}>
+                            {displayDate}
+                          </span>
+                          {isFollowup && (
+                            <div className="text-[10px] text-amber-600 font-semibold mt-0.5">
+                              Pending Follow-up {appt.followupSource === 'detox' ? '(from detox)' : '(recommended)'}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-slate-800 block">{pt.name || 'Unknown Patient'}</span>
+                          <div className="text-[11px] text-slate-500 mt-0.5 space-y-0.5 font-medium">
+                            <div>{pt.phone?.replace(/\D/g, '').slice(-10) || 'No mobile'}</div>
+                            <div>{pt.age ? `${pt.age} yrs` : 'Age N/A'} {pt.location ? `• ${pt.location}` : ''}</div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border ${String(appt.appointmentType || '').toLowerCase().includes('detox') ? 'border-teal-200 bg-teal-50 text-teal-700' :
+                              String(appt.appointmentType || '').toLowerCase() === 'review' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                                'border-purple-200 bg-purple-50 text-purple-700'
+                            }`}>
+                            {getDisplayAppointmentType(appt)}
+                            {isFollowup && appt.followupSource === 'detox' && (
+                              <span className="ml-1 text-[9px] font-normal">(from detox)</span>
+                            )}
+                            {isFollowup && appt.followupSource === 'consultation' && (
+                              <span className="ml-1 text-[9px] font-normal">(recommended)</span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-semibold text-slate-700 block">
+                            {doctorName || appt.doctor_name || 'Not Assigned'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 max-w-[200px] truncate" title={appt.notes}>
+                          {appt.notes || (isFollowup ? 'Follow-up recommended' : '-')}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-slate-600 font-medium text-[13px]">
+                            {appt.bookedByUser?.fullName || appt.bookedByUser?.name || appt.bookedByUser?.username || appt.bookedByUserName || '—'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {isFollowup ? (
+                            <span className="px-2.5 py-1 rounded-md text-xs font-bold border bg-amber-100 text-amber-700 border-amber-200">
+                              Pending
+                            </span>
+                          ) : (
+                            <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${getStatusColor(appt.status)}`}>
+                              {appt.status}
+                            </span>
+                          )}
+                        </td>
+
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {loadingAppointments ? (
+                <div className="py-12 text-center text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading schedule...
+                </div>
+              ) : allItems.length === 0 ? (
+                <div className="py-12 text-center text-slate-500">No appointments or pending follow-ups found</div>
+              ) : (
+                <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-slate-100 pt-5 px-4 pb-4">
+                  <p className="text-sm text-slate-500">
+                    Showing <span className="font-semibold text-slate-800">{totalBooked === 0 ? 0 : scheduleStartIndex + 1}</span> to <span className="font-semibold text-slate-800">{Math.min(scheduleStartIndex + serverPageSize, totalBooked)}</span> of <span className="font-semibold text-slate-800">{totalBooked}</span> appointments
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => goToPage(serverPage - 1)}
+                      disabled={serverPage === 1}
+                      className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+
+                    <div className="flex items-center">
+                      {Array.from({ length: Math.min(5, totalSchedulePages) }, (_, i) => {
+                        let pageNum;
+                        if (totalSchedulePages <= 5) {
+                          pageNum = i + 1;
+                        } else if (serverPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (serverPage >= totalSchedulePages - 2) {
+                          pageNum = totalSchedulePages - 4 + i;
+                        } else {
+                          pageNum = serverPage - 2 + i;
+                        }
+
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => goToPage(pageNum)}
+                            className={`w-10 h-10 rounded-xl text-sm font-semibold transition ${serverPage === pageNum ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      onClick={() => goToPage(serverPage + 1)}
+                      disabled={serverPage === totalSchedulePages}
+                      className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      <ChevronRight className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

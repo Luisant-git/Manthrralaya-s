@@ -147,10 +147,10 @@ export default function UnifiedPatientRecords({
       .map(c => String(c.patient_id || c.patientId))
   ]) : null;
 
-    // Add shared patients to the set so they appear in the doctor's patient list
-    if (scopeDoctorId && sharesForMe && sharesForMe.length > 0) {
-      sharesForMe.forEach(s => myPatientIds.add(String(s.patientId)));
-    }
+  // Add shared patients to the set so they appear in the doctor's patient list
+  if (scopeDoctorId && sharesForMe && sharesForMe.length > 0) {
+    sharesForMe.forEach(s => myPatientIds.add(String(s.patientId)));
+  }
 
   const todayStr = new Date().toLocaleDateString('en-CA');
   const activeDetoxCount = isDoctor ? appointments.filter(a => {
@@ -392,10 +392,10 @@ export default function UnifiedPatientRecords({
 
   const basePatients = scopeDoctorId
     ? allAvailablePatients.filter(p =>
-        myPatientIds.has(String(p.id)) ||
-        locallyAddedPatientIds.has(String(p.id)) ||
-        Number(p.createdByDoctorId) === Number(scopeDoctorId)
-      )
+      myPatientIds.has(String(p.id)) ||
+      locallyAddedPatientIds.has(String(p.id)) ||
+      Number(p.createdByDoctorId) === Number(scopeDoctorId)
+    )
     : allAvailablePatients;
 
   const filteredPatients = basePatients.filter(pt => {
@@ -457,17 +457,17 @@ export default function UnifiedPatientRecords({
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       const patientIdStr = String(patientToShare.id || patientToShare.patientId);
-      
+
       // Find the active appointment for today for this patient
       const activeAppt = appointments.find(a => {
-         const ptMatch = String(a.patient_id || a.patientId) === patientIdStr;
-         const d = new Date(a.date || a.appointmentDate || 0);
-         d.setHours(0, 0, 0, 0);
-         const isToday = d.getTime() === today.getTime();
-         const isActive = ['Scheduled', 'Arrived', 'Checked-in'].includes(a.status);
-         return ptMatch && isToday && isActive;
+        const ptMatch = String(a.patient_id || a.patientId) === patientIdStr;
+        const d = new Date(a.date || a.appointmentDate || 0);
+        d.setHours(0, 0, 0, 0);
+        const isToday = d.getTime() === today.getTime();
+        const isActive = ['Scheduled', 'Arrived', 'Checked-in'].includes(a.status);
+        return ptMatch && isToday && isActive;
       });
 
       if (!activeAppt) {
@@ -481,14 +481,14 @@ export default function UnifiedPatientRecords({
           }
           const payload = { patientId: resolvedPatientId, toDoctorId: parseInt(selectedShareDoctor), notes: 'Shared patient record' };
           console.debug('Creating share with payload', payload);
-          
+
           const { createShare } = await import('../api/shareApi');
           const newShare = await createShare(payload);
           toast.success('Patient record shared successfully!');
-          
+
           setSharesFromMe(prev => [newShare, ...prev]);
 
-          try { onRefresh && onRefresh(); } catch (e) {}
+          try { onRefresh && onRefresh(); } catch (e) { }
         } catch (err) {
           console.error('Share API error:', err);
           toast.error('Failed to share patient record');
@@ -510,7 +510,7 @@ export default function UnifiedPatientRecords({
       activeAppt.doctorId = parseInt(selectedShareDoctor);
       activeAppt.doctor_id = parseInt(selectedShareDoctor);
       toast.success('Patient appointment transferred to another doctor');
-      try { onRefresh && onRefresh(); } catch (e) {}
+      try { onRefresh && onRefresh(); } catch (e) { }
       closeShareModal();
     } catch (err) {
       console.error('Transfer Appointment error:', err);
@@ -544,7 +544,7 @@ export default function UnifiedPatientRecords({
   const handlePhoneChange = (e) => {
     const val = e.target.value.replace(/\D/g, '').slice(0, 10);
     const cleanVal = val;
-    
+
     let foundPatient = null;
     if (cleanVal.length === 10) {
       foundPatient = patients.find(p => (p.phone || '').replace(/\D/g, '').slice(-10) === cleanVal);
@@ -619,10 +619,10 @@ export default function UnifiedPatientRecords({
         medical_conditions: formData.medical_conditions || 'Registered via Intake form',
         email: 'n/a'
       });
-      
+
       if (onAddPatient) onAddPatient(newPatient);
       setLocallyAddedPatientIds(prev => new Set(prev).add(String(newPatient.id)));
-      
+
       setIsAdding(false);
       setFormData({
         name: '', age: '', gender: '', location: '', address: '', phone: '', phoneAsWhatsapp: true, whatsapp: '', medical_conditions: ''
@@ -708,7 +708,7 @@ export default function UnifiedPatientRecords({
         {/* Header - Directory Style */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Records</h1>
+            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight font-outfit m-0">Patient Reports</h1>
             <p className="text-slate-500 text-sm mt-1">Browse patients, view consultation history.</p>
           </div>
           <div className="flex gap-3 items-center">
@@ -986,7 +986,7 @@ export default function UnifiedPatientRecords({
                               <div>{formatDate(latestAppointment.date)}</div>
                               {latestAppointment.time && <div className="text-xs text-slate-500">{latestAppointment.time}</div>}
                               {latestAppointment.status === 'Started Detox' && (
-                                <div className="mt-1.5 inline-flex px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200 text-[10px] font-bold uppercase tracking-wider items-center gap-1 w-fit"><Droplets className="w-2.5 h-2.5"/>In Detox</div>
+                                <div className="mt-1.5 inline-flex px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200 text-[10px] font-bold uppercase tracking-wider items-center gap-1 w-fit"><Droplets className="w-2.5 h-2.5" />In Detox</div>
                               )}
                             </>
                           ) : (
@@ -1090,16 +1090,16 @@ export default function UnifiedPatientRecords({
         {/* Modal - Consultation History */}
         {isModalOpen && selectedPatient && (
           <PatientHistoryModal
-              patient={selectedPatient}
-              consultations={consultations}
-              detoxSessions={detoxSessions}
-              doctors={availableDoctors}
-              onClose={closeModal}
-              onShare={() => { try { onRefresh && onRefresh(); } catch(e){} }}
-              onRefresh={() => { try { onRefresh && onRefresh(); } catch(e){} }}
-              currentUser={currentUser}
-              activeRole={activeRole}
-            />
+            patient={selectedPatient}
+            consultations={consultations}
+            detoxSessions={detoxSessions}
+            doctors={availableDoctors}
+            onClose={closeModal}
+            onShare={() => { try { onRefresh && onRefresh(); } catch (e) { } }}
+            onRefresh={() => { try { onRefresh && onRefresh(); } catch (e) { } }}
+            currentUser={currentUser}
+            activeRole={activeRole}
+          />
         )}
       </div>
 
@@ -1136,7 +1136,7 @@ export default function UnifiedPatientRecords({
                     {isSharing ? 'Sharing...' : 'Share'}
                   </button>
                 </div>
-                
+
                 {(() => {
                   const activeSharesForSelectedPatient = sharesFromMe.filter(s => String(s.patientId) === String(patientToShare.id || patientToShare.patientId));
                   if (activeSharesForSelectedPatient.length > 0) {
@@ -1149,7 +1149,7 @@ export default function UnifiedPatientRecords({
                               <span className="text-sm font-semibold text-slate-700">
                                 {share.toDoctor?.user?.fullName || share.toDoctor?.name || `Doctor ${share.toDoctorId}`}
                               </span>
-                              <button 
+                              <button
                                 onClick={() => handleRevokeShare(share.id)}
                                 className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-1 rounded transition"
                               >
